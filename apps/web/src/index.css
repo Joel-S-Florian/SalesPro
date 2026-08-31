@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 font-sans antialiased;
+  }
+
+  .dark body {
+    @apply bg-slate-950 text-slate-100;
+  }
+}
+
+@layer components {
+  /* Glass Card */
+  .glass-card {
+    @apply bg-white/45 backdrop-blur-xl border border-white/40 shadow-[0_8px_32px_0_rgba(31,38,135,0.04)];
+  }
+
+  .dark .glass-card {
+    @apply bg-slate-950/55 border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.25)];
+  }
+
+  /* Sidebar Glass */
+  .glass-sidebar {
+    @apply bg-white/35 backdrop-blur-2xl border-r border-white/25;
+  }
+
+  .dark .glass-sidebar {
+    @apply bg-slate-950/40 border-r border-white/5;
+  }
+
+  /* Navigation items active glass effect */
+  .glass-nav-active {
+    @apply bg-white/60 border border-white/50 shadow-[0_4px_12px_0_rgba(31,38,135,0.05)];
+  }
+
+  .dark .glass-nav-active {
+    @apply bg-white/10 border-white/10 shadow-[0_4px_12px_0_rgba(0,0,0,0.2)];
+  }
+
+  /* Glass Inputs */
+  .glass-input {
+    @apply bg-white/50 border-slate-200/80 transition-all duration-200;
+  }
+
+  .dark .glass-input {
+    @apply bg-slate-950/30 border-slate-700/50;
+  }
+
+  .glass-input:focus {
+    @apply bg-white/80 border-indigo-500/80 shadow-[0_0_0_3px_rgba(99,102,241,0.1)];
+    outline: none;
+  }
+
+  .dark .glass-input:focus {
+    @apply bg-slate-950/60 border-indigo-500/80 shadow-[0_0_0_3px_rgba(99,102,241,0.15)];
+  }
+
+  /* Modal and Panels Backdrop */
+  .glass-backdrop {
+    @apply bg-slate-950/25 backdrop-blur-md;
+  }
+
+  .dark .glass-backdrop {
+    @apply bg-slate-950/45 backdrop-blur-md;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

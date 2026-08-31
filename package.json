@@ -1,0 +1,38 @@
+{
+  "name": "salespro-v2",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm run start --workspaces --if-present",
+    "clean": "rm -rf apps/web/dist dist",
+    "db:generate": "npx prisma generate",
+    "db:push": "npx prisma db push",
+    "db:migrate": "npx prisma migrate dev",
+    "db:studio": "npx prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "lint": "eslint apps --ext .js,.jsx",
+    "format": "prettier --write \"apps/**/*.{js,jsx,css,md}\" \"packages/**/*.{js,jsx,css,md}\"",
+    "test": "vitest run",
+    "test:ui": "vitest --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0",
+    "autoprefixer": "^10.5.4",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "playwright": "^1.45.0",
+    "postcss": "^8.5.26",
+    "prettier": "^3.3.0",
+    "prisma": "^6.19.3",
+    "supertest": "^7.0.0",
+    "tailwindcss": "^3.4.0",
+    "vitest": "^2.0.0"
+  }
+}

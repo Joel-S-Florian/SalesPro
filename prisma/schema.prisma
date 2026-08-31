@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMINISTRADOR
+  VENDEDOR
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+}
+
+enum InventoryType {
+  ENTRADA
+  SALIDA
+  AJUSTE
+  DEVOLUCION
+}
+
+enum NCFType {
+  B01
+  B02
+  B03
+  B04
+  B05
+  B06
+  B07
+  B08
+  B09
+  B10
+  B11
+  B12
+  B13
+  B14
+  B15
+  B16
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  role         UserRole @default(VENDEDOR)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     Session[]
+  sales        Sale[]   @relation("SaleUser")
+  inventoryLogs InventoryLog[]
+  auditLogs    AuditLog[]
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  @@map("sessions")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+  @@map("categories")
+}
+
+model Product {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?
+  categoryId  String
+  category    Category     @relation(fields: [categoryId], references: [id])
+  costPrice   Float
+  salePrice   Float
+  stock       Int          @default(0)
+  minStock    Int          @default(0)
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  saleDetails SaleDetail[]
+  inventoryLogs InventoryLog[]
+  @@map("products")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  documentId String  @unique
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  rnc       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+  @@map("customers")
+}
+
+model Sale {
+  id            String       @id @default(cuid())
+  invoiceNumber String       @unique
+  ncfType       NCFType      @default(B01)
+  customerId    String
+  customer      Customer     @relation(fields: [customerId], references: [id])
+  customerName  String
+  userId        String
+  user          User         @relation("SaleUser", fields: [userId], references: [id])
+  userName      String
+  subtotal      Float
+  tax           Float
+  discount      Float        @default(0)
+  total         Float
+  paymentMethod PaymentMethod
+  notes         String?
+  createdAt     DateTime     @default(now())
+  details       SaleDetail[]
+  @@map("sales")
+}
+
+model SaleDetail {
+  id          String  @id @default(cuid())
+  saleId      String
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  quantity    Int
+  unitPrice   Float
+  discount    Float   @default(0)
+  subtotal    Float
+  @@map("sale_details")
+}
+
+model InventoryLog {
+  id          String        @id @default(cuid())
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  productName String
+  type        InventoryType
+  quantity    Int
+  reason      String
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  userName    String
+  createdAt   DateTime      @default(now())
+  @@map("inventory_logs")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  oldData   Json?
+  newData   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  @@map("audit_logs")
+}
+
+model NCFSequence {
+  id        String   @id @default(cuid())
+  ncfType   NCFType  @unique
+  prefix    String
+  current   Int      @default(0)
+  max       Int      @default(99999999)
+  updatedAt DateTime @updatedAt
+  @@map("ncf_sequences")
+}
