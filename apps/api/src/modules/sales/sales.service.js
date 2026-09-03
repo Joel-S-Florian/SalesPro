@@ -3,12 +3,12 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { buildPaginationQuery, getPaginationMeta, round2 } from '../../shared/utils/helpers.js';
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
-import { TAX_RATE } from '@salespro/shared/constants.js';
+import { TAX_RATE } from '../../../../../packages/shared/constants.js';
 
 /**
  * Get all sales with pagination and filters
  */
-export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', customerId, userId, startDate, endDate, paymentMethod }) {
+export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', customerId, userId, search, startDate, endDate, paymentMethod }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
   const where = {};
@@ -16,6 +16,14 @@ export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sor
   if (customerId) where.customerId = customerId;
   if (userId) where.userId = userId;
   if (paymentMethod) where.paymentMethod = paymentMethod;
+
+  if (search) {
+    where.OR = [
+      { invoiceNumber: { contains: search, mode: 'insensitive' } },
+      { customerName: { contains: search, mode: 'insensitive' } },
+      { customer: { documentId: { contains: search, mode: 'insensitive' } } },
+    ];
+  }
 
   if (startDate || endDate) {
     where.createdAt = {};
@@ -51,7 +59,7 @@ export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sor
 /**
  * Get sale by ID
  */
-export async function getSaleById(id) {
+export async function getSaleById(id, requester) {
   const sale = await prisma.sale.findUnique({
     where: { id },
     include: {
@@ -69,7 +77,141 @@ export async function getSaleById(id) {
     throw AppError.notFound('Venta no encontrada');
   }
 
+  // RBAC: VENDEDOR can only view their own sales
+  if (requester && requester.role === 'VENDEDOR' && sale.userId !== requester.userId) {
+    throw AppError.forbidden('No tiene permisos para ver esta venta');
+  }
+
   return sale;
+}
+
+/**
+ * Get sales for current user (vendedor)
+ */
+export async function getMySales(userId, { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', customerId, search, startDate, endDate, paymentMethod } = {}) {
+  const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
+
+  const where = {
+    userId,
+  };
+
+  if (customerId) where.customerId = customerId;
+  if (paymentMethod) where.paymentMethod = paymentMethod;
+
+  if (search) {
+    where.AND = [
+      {
+        OR: [
+          { invoiceNumber: { contains: search, mode: 'insensitive' } },
+          { customerName: { contains: search, mode: 'insensitive' } },
+          { customer: { documentId: { contains: search, mode: 'insensitive' } } },
+        ],
+      },
+    ];
+  }
+
+  if (startDate || endDate) {
+    where.createdAt = {};
+    if (startDate) where.createdAt.gte = new Date(startDate);
+    if (endDate) where.createdAt.lte = new Date(endDate);
+  }
+
+  const [sales, total] = await Promise.all([
+    prisma.sale.findMany({
+      where,
+      skip,
+      take,
+      orderBy,
+      include: {
+        customer: { select: { id: true, name: true, documentId: true } },
+        user: { select: { id: true, username: true, fullName: true } },
+        details: {
+          include: {
+            product: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    }),
+    prisma.sale.count({ where }),
+  ]);
+
+  return {
+    data: sales,
+    pagination: getPaginationMeta(page, limit, total),
+  };
+}
+
+/**
+ * Get vendor statistics (today, month, top products, recent sales)
+ */
+export async function getVendorStats(userId) {
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  const sales = await prisma.sale.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      customerName: true,
+      total: true,
+      paymentMethod: true,
+      createdAt: true,
+      details: { select: { productName: true, quantity: true, subtotal: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  let todayTotal = 0, todayCount = 0;
+  let monthTotal = 0, monthCount = 0;
+
+  const productMap = new Map();
+
+  sales.forEach(s => {
+    const saleDate = s.createdAt instanceof Date ? s.createdAt : new Date(s.createdAt);
+    const saleDateStr = saleDate.toISOString().split('T')[0];
+
+    if (saleDateStr === todayStr) {
+      todayCount += 1;
+      todayTotal += Number(s.total);
+    }
+
+    if (saleDate.getMonth() === currentMonth && saleDate.getFullYear() === currentYear) {
+      monthCount += 1;
+      monthTotal += Number(s.total);
+    }
+
+    (s.details || []).forEach(d => {
+      const entry = productMap.get(d.productName) || { name: d.productName, quantity: 0, total: 0 };
+      entry.quantity += d.quantity;
+      entry.total += Number(d.subtotal);
+      productMap.set(d.productName, entry);
+    });
+  });
+
+  const topProducts = Array.from(productMap.values())
+    .map(p => ({ ...p, total: round2(p.total) }))
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
+
+  const recentSales = sales.slice(0, 5).map(s => ({
+    id: s.id,
+    invoiceNumber: s.invoiceNumber,
+    customerName: s.customerName,
+    total: Number(s.total),
+    paymentMethod: s.paymentMethod,
+    createdAt: s.createdAt,
+  }));
+
+  return {
+    today: { total: round2(todayTotal), count: todayCount },
+    month: { total: round2(monthTotal), count: monthCount },
+    averageTicket: todayCount > 0 ? round2(todayTotal / todayCount) : 0,
+    topProducts,
+    recentSales,
+  };
 }
 
 /**

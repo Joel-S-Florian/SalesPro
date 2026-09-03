@@ -117,14 +117,58 @@ export async function adjustStock(data, userId, userName) {
     const log = await tx.inventoryLog.create({
       data: {
         productId,
+        productName: product.name,
         type,
         quantity,
         reason: `Ajuste: ${reason}`,
         userId,
+        userName,
       },
     });
 
     return { success: true, updatedStock: newStock, log };
+  });
+}
+
+/**
+ * Register purchase from supplier (entry with cost)
+ */
+export async function registerPurchase(data, userId, userName) {
+  const { productId, quantity, unitCost, supplier, invoiceNumber } = data;
+
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) {
+    throw AppError.notFound('Producto no encontrado');
+  }
+
+  const totalCost = Math.round(quantity * Number(unitCost) * 100) / 100;
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.product.update({
+      where: { id: productId },
+      data: {
+        stock: { increment: quantity },
+        costPrice: Number(unitCost),
+      },
+    });
+
+    const log = await tx.inventoryLog.create({
+      data: {
+        productId,
+        productName: product.name,
+        type: 'ENTRADA',
+        quantity,
+        reason: `Compra a proveedor: ${supplier}${invoiceNumber ? ` (Factura ${invoiceNumber})` : ''}`,
+        userId,
+        userName,
+        unitCost: Number(unitCost),
+        totalCost,
+        supplier,
+        invoiceNumber: invoiceNumber || null,
+      },
+    });
+
+    return { success: true, updatedStock: updated.stock, totalCost, log };
   });
 }
 
@@ -135,13 +179,12 @@ export async function getInventorySummary() {
   const [
     totalProducts,
     activeProducts,
-    lowStockProducts,
     outOfStockProducts,
     totalValue,
+    activeList,
   ] = await Promise.all([
     prisma.product.count(),
     prisma.product.count({ where: { active: true } }),
-    prisma.product.count({ where: { active: true, stock: { lte: prisma.product.fields.minStock } } }),
     prisma.product.count({ where: { active: true, stock: 0 } }),
     prisma.product.aggregate({
       where: { active: true },
@@ -149,7 +192,13 @@ export async function getInventorySummary() {
         stock: true,
       },
     }),
+    prisma.product.findMany({
+      where: { active: true },
+      select: { stock: true, minStock: true },
+    }),
   ]);
+
+  const lowStockProducts = activeList.filter(p => p.stock <= p.minStock).length;
 
   // Calculate total inventory value (stock * costPrice)
   const products = await prisma.product.findMany({

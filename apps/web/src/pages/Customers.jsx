@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Trash2, History, Calendar, FileText, ShoppingBag } from 'lucide-react';
 import Modal from '../components/Modal';
+import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -15,7 +16,9 @@ export default function Customers() {
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [docType, setDocType] = useState(DocumentType.CEDULA);
   const [documentId, setDocumentId] = useState('');
+  const [docError, setDocError] = useState('');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -49,7 +52,9 @@ export default function Customers() {
 
   const openCreateModal = () => {
     setEditingId(null);
+    setDocType(DocumentType.CEDULA);
     setDocumentId('');
+    setDocError('');
     setName('');
     setEmail('');
     setPhone('');
@@ -59,7 +64,10 @@ export default function Customers() {
 
   const openEditModal = (c) => {
     setEditingId(c.id);
+    const digits = (c.documentId || '').replace(/\D/g, '');
+    setDocType(digits.length === 9 ? DocumentType.RNC : DocumentType.CEDULA);
     setDocumentId(c.documentId || '');
+    setDocError('');
     setName(c.name || '');
     setEmail(c.email || '');
     setPhone(c.phone || '');
@@ -70,6 +78,13 @@ export default function Customers() {
   const handleSaveCustomer = async (e) => {
     e.preventDefault();
     if (!documentId.trim() || !name.trim()) return;
+    if (!validateDocument(docType, documentId.trim())) {
+      setDocError(docType === DocumentType.CEDULA
+        ? 'Cédula inválida. Formato esperado: XXX-XXXXXXX-X'
+        : 'RNC inválido. Formato esperado: XXX-XXXXX-X');
+      return;
+    }
+    setDocError('');
 
     try {
       setSaving(true);
@@ -239,18 +254,45 @@ export default function Customers() {
         <form onSubmit={handleSaveCustomer} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
+              <label htmlFor="form-doctype" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Tipo de Documento *
+              </label>
+              <select
+                id="form-doctype"
+                value={docType}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setDocType(next);
+                  setDocumentId(formatDocument(next, documentId));
+                  setDocError('');
+                }}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              >
+                <option value={DocumentType.CEDULA} className="dark:bg-slate-950">Cédula</option>
+                <option value={DocumentType.RNC} className="dark:bg-slate-950">RNC (Empresa)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
               <label htmlFor="form-doc" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Documento de Identificación (DNI/RUC) *
+                Número de Documento *
               </label>
               <input
                 id="form-doc"
                 type="text"
                 required
-                placeholder="Ej. 45829103"
+                placeholder={docType === DocumentType.CEDULA ? 'XXX-XXXXXXX-X' : 'XXX-XXXXX-X'}
+                maxLength={docType === DocumentType.CEDULA ? 13 : 11}
                 value={documentId}
-                onChange={(e) => setDocumentId(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+                onChange={(e) => {
+                  setDocumentId(formatDocument(docType, e.target.value));
+                  setDocError('');
+                }}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
+              {docError && (
+                <p className="text-[10px] text-rose-500">{docError}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">

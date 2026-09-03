@@ -1,5 +1,5 @@
 import { prisma } from '../../config/db.js';
-import { NCF_PREFIXES } from '@salespro/shared/constants.js';
+import { NCF_PREFIXES } from '../../../../../packages/shared/constants.js';
 
 /**
  * Get next NCF sequence number for a given type

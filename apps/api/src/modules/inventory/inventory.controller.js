@@ -32,6 +32,11 @@ export const adjustStock = asyncHandler(async (req, res) => {
   res.json(result);
 });
 
+export const registerPurchase = asyncHandler(async (req, res) => {
+  const result = await inventoryService.registerPurchase(req.body, req.user.userId, req.user.fullName);
+  res.status(201).json(result);
+});
+
 export const getInventorySummary = asyncHandler(async (req, res) => {
   const summary = await inventoryService.getInventorySummary();
   res.json(summary);

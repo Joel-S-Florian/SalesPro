@@ -22,3 +22,13 @@ export const adjustStockSchema = z.object({
     reason: z.string().min(1, 'Motivo requerido').max(500),
   }),
 });
+
+export const purchaseSchema = z.object({
+  body: z.object({
+    productId: z.string().cuid(),
+    quantity: z.number().int().positive('Cantidad debe ser positiva'),
+    unitCost: z.number().positive('Costo unitario debe ser positivo'),
+    supplier: z.string().min(1, 'Proveedor requerido').max(200),
+    invoiceNumber: z.string().max(50).optional(),
+  }),
+});

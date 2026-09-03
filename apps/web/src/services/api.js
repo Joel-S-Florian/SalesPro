@@ -36,6 +36,8 @@ async function handleResponse(res) {
  * Convierte cualquier respuesta de "lista" a un arreglo real,
  * sin importar si el backend la envuelve en paginacion o no.
  * Evita el crash "n.filter is not a function" en las paginas.
+ * NOTA: No se aplica a sales.list ni sales.mySales porque estos 
+ * requieren el objeto completo { data: [...], pagination: {...} }
  */
 function normalizeList(result) {
   if (Array.isArray(result)) return result;
@@ -190,11 +192,22 @@ export const api = {
   },
 
   sales: {
-    list: async (params = {}) =>
-      normalizeList(await request(`/sales?${new URLSearchParams(params).toString()}`)),
+    // Se elimina normalizeList para preservar la estructura { data: [...], pagination: {...} }
+    list: (params = {}) =>
+      request(`/sales?${new URLSearchParams(params).toString()}`),
+
     get: (id) => request(`/sales/${id}`),
+
     create: (payload) => request('/sales', { method: 'POST', body: JSON.stringify(payload) }),
-    createCreditNote: (id, payload) => request(`/sales/${id}/credit-note`, { method: 'POST', body: JSON.stringify(payload) }),
+
+    createCreditNote: (id, payload) =>
+      request(`/sales/${id}/credit-note`, { method: 'POST', body: JSON.stringify(payload) }),
+
+    // Se elimina normalizeList para preservar la estructura { data: [...], pagination: {...} }
+    mySales: (params = {}) =>
+      request(`/sales/my-sales?${new URLSearchParams(params).toString()}`),
+
+    vendorStats: () => request('/sales/vendor-stats'),
   },
 
   inventory: {
@@ -202,6 +215,7 @@ export const api = {
       normalizeList(await request(`/inventory/logs?${new URLSearchParams(params).toString()}`)),
     getKardex: (productId, params = {}) => request(`/inventory/kardex/${productId}?${new URLSearchParams(params).toString()}`),
     adjust: (payload) => request('/inventory/adjust', { method: 'POST', body: JSON.stringify(payload) }),
+    purchase: (payload) => request('/inventory/purchase', { method: 'POST', body: JSON.stringify(payload) }),
     getSummary: () => request('/inventory/summary'),
   },
 
@@ -211,5 +225,10 @@ export const api = {
     products: (params = {}) => request(`/reports/products?${new URLSearchParams(params).toString()}`),
     customers: (params = {}) => request(`/reports/customers?${new URLSearchParams(params).toString()}`),
     tax: (params = {}) => request(`/reports/tax?${new URLSearchParams(params).toString()}`),
+    lowStock: () => request('/reports/low-stock'),
+  },
+
+  finance: {
+    cashflow: (params = {}) => request(`/finance/cashflow?${new URLSearchParams(params).toString()}`),
   },
 };

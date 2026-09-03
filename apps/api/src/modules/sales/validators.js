@@ -31,6 +31,7 @@ export const saleQuerySchema = z.object({
   query: z.object({
     customerId: z.string().cuid().optional(),
     userId: z.string().cuid().optional(),
+    search: z.string().max(100).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
     // Filtro de consulta también limitado a los métodos válidos

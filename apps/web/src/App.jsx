@@ -10,6 +10,10 @@ import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
 import UsersPage from './pages/Users';
 import Reports from './pages/Reports';
+import SalesHistory from './pages/SalesHistory';
+import VendorDashboard from './pages/VendorDashboard';
+import Finance from './pages/Finance';
+import Unauthorized from './pages/Unauthorized';
 import ErrorBoundary from './components/ErrorBoundary';
 
 import {
@@ -26,7 +30,9 @@ import {
   X,
   Shield,
   Loader2,
-  LockKeyhole
+  LockKeyhole,
+  Receipt,
+  Wallet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -58,6 +64,14 @@ export default function App() {
     }
   }, [authError, logout]);
 
+  // Redirect VENDEDOR from DASHBOARD to vendor dashboard
+  useEffect(() => {
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'VENDEDOR' && activeTab === 'DASHBOARD') {
+      setActiveTab('VENDOR_DASHBOARD');
+    }
+  }, [user?.role, activeTab, setActiveTab]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!username.trim() || !password.trim()) return;
@@ -67,7 +81,7 @@ export default function App() {
       setSessionMessage(null);
       const data = await api.auth.login(username, password);
       login(data.user, data.accessToken, data.refreshToken);
-      setActiveTab('DASHBOARD');
+      setActiveTab((data.user?.role || '').toUpperCase() === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD');
     } catch (err) {
       setLoginError(err.message || 'Error de autenticacion');
     } finally {
@@ -84,7 +98,7 @@ export default function App() {
       setSessionMessage(null);
       const data = await api.auth.login(usr, pass);
       login(data.user, data.accessToken, data.refreshToken);
-      setActiveTab('DASHBOARD');
+      setActiveTab((data.user?.role || '').toUpperCase() === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD');
     } catch (err) {
       setLoginError(err.message || 'Error de autenticacion');
     } finally {
@@ -228,19 +242,26 @@ export default function App() {
 
   // NAVIGATION ITEM HELPER
   const navItems = [
-    { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
+    { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMINISTRADOR'] },
+    { id: 'VENDOR_DASHBOARD', label: 'Mi Dashboard', icon: LayoutDashboard, roles: ['VENDEDOR'] },
     { id: 'POS', label: 'Nueva Venta (POS)', icon: ShoppingCart, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
-    { id: 'PRODUCTS', label: 'Productos', icon: Package, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
-    { id: 'CATEGORIES', label: 'Categorías', icon: Tag, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
-    { id: 'CUSTOMERS', label: 'Clientes', icon: Users, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
-    { id: 'INVENTORY', label: 'Inventario / Kárdex', icon: Archive, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
+    { id: 'SALES_HISTORY', label: 'Mis Ventas', icon: Receipt, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
+    { id: 'PRODUCTS', label: 'Productos', icon: Package, roles: ['ADMINISTRADOR'] },
+    { id: 'CATEGORIES', label: 'Categorías', icon: Tag, roles: ['ADMINISTRADOR'] },
+    { id: 'CUSTOMERS', label: 'Clientes', icon: Users, roles: ['ADMINISTRADOR'] },
+    { id: 'INVENTORY', label: 'Inventario / Kárdex', icon: Archive, roles: ['ADMINISTRADOR'] },
     { id: 'USERS', label: 'Personal / Roles', icon: UserCheck, roles: ['ADMINISTRADOR'] },
-    { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR', 'VENDEDOR'] }
+    { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR'] },
+    { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] }
   ];
 
   // TAB RENDERING ROUTER
   const renderTabContent = () => {
-    if (activeTab === 'USERS' && userRole !== 'ADMINISTRADOR') {
+    // Check if the current tab is allowed for the user's role
+    const currentNavItem = navItems.find(item => item.id === activeTab);
+    const isTabAllowed = currentNavItem?.roles?.includes(userRole) ?? false;
+
+    if (!isTabAllowed && userRole !== 'ADMINISTRADOR') {
       return (
         <div className="flex flex-col items-center justify-center h-96 text-center space-y-4 max-w-md mx-auto">
           <div className="bg-rose-50/80 dark:bg-rose-950/20 p-4 rounded-full text-rose-500 border border-rose-100 dark:border-rose-900/40">
@@ -248,7 +269,7 @@ export default function App() {
           </div>
           <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 font-display">Acceso Restringido</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            Esta sección contiene configuraciones de personal y roles de seguridad; solo está disponible para usuarios con privilegios de <strong>Administrador</strong>.
+            No tienes permisos para acceder a esta sección. Tu rol actual (<strong>{userRole}</strong>) no tiene autorización para esta funcionalidad.
           </p>
         </div>
       );
@@ -257,8 +278,12 @@ export default function App() {
     switch (activeTab) {
       case 'DASHBOARD':
         return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} />;
+      case 'VENDOR_DASHBOARD':
+        return <VendorDashboard onNavigateToPOS={() => setActiveTab('POS')} />;
       case 'POS':
         return <SalesPOS />;
+      case 'SALES_HISTORY':
+        return <SalesHistory />;
       case 'PRODUCTS':
         return <Products />;
       case 'CATEGORIES':
@@ -271,6 +296,10 @@ export default function App() {
         return <UsersPage />;
       case 'REPORTS':
         return <Reports />;
+      case 'FINANCE':
+        return <Finance />;
+      case 'UNAUTHORIZED':
+        return <Unauthorized />;
       default:
         return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} />;
     }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, ArrowUpRight, ArrowDownLeft, FileText, AlertTriangle, ListFilter } from 'lucide-react';
+import { Loader2, Plus, Search, ArrowUpRight, ArrowDownLeft, FileText, AlertTriangle, ListFilter, ShoppingCart } from 'lucide-react';
 import Modal from '../components/Modal';
 
 export default function Inventory() {
@@ -21,6 +21,15 @@ export default function Inventory() {
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustReason, setAdjustReason] = useState('');
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
+
+  // Purchase Modal states
+  const [isPurchaseOpen, setIsPurchaseOpen] = useState(false);
+  const [purchaseProdId, setPurchaseProdId] = useState('');
+  const [purchaseQty, setPurchaseQty] = useState(1);
+  const [purchaseUnitCost, setPurchaseUnitCost] = useState(0);
+  const [purchaseSupplier, setPurchaseSupplier] = useState('');
+  const [purchaseInvoice, setPurchaseInvoice] = useState('');
+  const [submittingPurchase, setSubmittingPurchase] = useState(false);
 
   const loadData = async () => {
     try {
@@ -57,6 +66,43 @@ export default function Inventory() {
     setAdjustQty(1);
     setAdjustReason('');
     setIsAdjustOpen(true);
+  };
+
+  const openPurchaseModal = () => {
+    const activeProds = (Array.isArray(products) ? products : []).filter(p => p.active);
+    if (activeProds.length > 0) {
+      setPurchaseProdId(activeProds[0].id);
+    }
+    setPurchaseQty(1);
+    setPurchaseUnitCost(0);
+    setPurchaseSupplier('');
+    setPurchaseInvoice('');
+    setIsPurchaseOpen(true);
+  };
+
+  const handleRegisterPurchase = async (e) => {
+    e.preventDefault();
+    if (!purchaseProdId || purchaseQty <= 0 || purchaseUnitCost <= 0 || !purchaseSupplier.trim()) {
+      alert('Por favor complete proveedor, producto, cantidad y costo correctamente');
+      return;
+    }
+
+    try {
+      setSubmittingPurchase(true);
+      await api.inventory.purchase({
+        productId: purchaseProdId,
+        quantity: Number(purchaseQty),
+        unitCost: Number(purchaseUnitCost),
+        supplier: purchaseSupplier.trim(),
+        invoiceNumber: purchaseInvoice.trim() || undefined,
+      });
+      setIsPurchaseOpen(false);
+      loadData();
+    } catch (err) {
+      alert(err.message || 'Error al registrar compra');
+    } finally {
+      setSubmittingPurchase(false);
+    }
   };
 
   const handleAdjustStock = async (e) => {
@@ -130,12 +176,20 @@ export default function Inventory() {
             Control de almacén, entradas, salidas y logs de auditoría comercial.
           </p>
         </div>
-        <button
-          onClick={openAdjustmentModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Ajustar Stock Manual
-        </button>
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <button
+            onClick={openPurchaseModal}
+            className="flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all w-full sm:w-auto justify-center cursor-pointer"
+          >
+            <ShoppingCart className="w-4 h-4" /> Registrar Compra
+          </button>
+          <button
+            onClick={openAdjustmentModal}
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Ajustar Stock Manual
+          </button>
+        </div>
       </div>
 
       {/* Tabs selector */}
@@ -398,6 +452,126 @@ export default function Inventory() {
                 </>
               ) : (
                 'Registrar Movimiento'
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Purchase Modal */}
+      <Modal
+        isOpen={isPurchaseOpen}
+        onClose={() => setIsPurchaseOpen(false)}
+        title="Registrar Compra a Proveedor"
+        maxWidth="md"
+      >
+        <form onSubmit={handleRegisterPurchase} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5 col-span-1 md:col-span-2">
+              <label htmlFor="purchase-supplier" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Proveedor *
+              </label>
+              <input
+                id="purchase-supplier"
+                type="text"
+                required
+                placeholder="Ej. Distribuidora Nacional SRL"
+                value={purchaseSupplier}
+                onChange={(e) => setPurchaseSupplier(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5 col-span-1 md:col-span-2">
+              <label htmlFor="purchase-prod" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Producto *
+              </label>
+              <select
+                id="purchase-prod"
+                value={purchaseProdId}
+                onChange={(e) => setPurchaseProdId(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              >
+                {products.filter(p => p.active).map(p => (
+                  <option key={p.id} value={p.id} className="dark:bg-slate-950">
+                    {p.name} (Stock: {p.stock})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="purchase-qty" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Cantidad *
+              </label>
+              <input
+                id="purchase-qty"
+                type="number"
+                min="1"
+                required
+                value={purchaseQty}
+                onChange={(e) => setPurchaseQty(Math.max(1, parseInt(e.target.value) || 0))}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="purchase-cost" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Costo Unitario (USD) *
+              </label>
+              <input
+                id="purchase-cost"
+                type="number"
+                min="0.01"
+                step="0.01"
+                required
+                value={purchaseUnitCost}
+                onChange={(e) => setPurchaseUnitCost(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5 col-span-1 md:col-span-2">
+              <label htmlFor="purchase-invoice" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                N° Factura Proveedor
+              </label>
+              <input
+                id="purchase-invoice"
+                type="text"
+                placeholder="Ej. FAC-009283"
+                value={purchaseInvoice}
+                onChange={(e) => setPurchaseInvoice(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-lg px-4 py-3 flex items-center justify-between text-sm">
+            <span className="text-slate-500 dark:text-slate-400 font-medium">Total a Pagar:</span>
+            <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+              ${(Number(purchaseQty || 0) * Number(purchaseUnitCost || 0)).toFixed(2)}
+            </span>
+          </div>
+
+          <div className="flex gap-3 pt-1 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsPurchaseOpen(false)}
+              className="px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={submittingPurchase}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-medium px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              {submittingPurchase ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
+                </>
+              ) : (
+                'Registrar Compra y Actualizar Stock'
               )}
             </button>
           </div>

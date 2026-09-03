@@ -7,7 +7,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:web": "npm run dev --workspace @salespro/web",
+    "dev:api": "npm run dev --workspace @salespro/api",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspaces --if-present",
     "clean": "rm -rf apps/web/dist dist",
@@ -24,6 +26,7 @@
   "devDependencies": {
     "@playwright/test": "^1.45.0",
     "autoprefixer": "^10.5.4",
+    "concurrently": "^10.0.5",
     "eslint": "^8.57.0",
     "eslint-plugin-react": "^7.34.0",
     "eslint-plugin-react-hooks": "^4.6.0",

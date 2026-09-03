@@ -29,3 +29,8 @@ export const getTaxReport = asyncHandler(async (req, res) => {
   const report = await reportsService.getTaxReport({ startDate, endDate });
   res.json(report);
 });
+
+export const getLowStockAlert = asyncHandler(async (req, res) => {
+  const report = await reportsService.getLowStockAlert();
+  res.json(report);
+});

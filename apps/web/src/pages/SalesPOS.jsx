@@ -2,10 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, ShoppingCart, Trash2, UserPlus, Printer, CheckCircle, FileText, Download } from 'lucide-react';
 import Modal from '../components/Modal';
+import { useAuthorization } from '../hooks/useAuthorization';
+import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function SalesPOS() {
+  const { isVendedor } = useAuthorization();
+  const canApplyDiscount = !isVendedor;
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,7 +17,7 @@ export default function SalesPOS() {
 
   // Cart states
   const [cart, setCart] = useState([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('EFECTIVO');
 
@@ -22,6 +26,7 @@ export default function SalesPOS() {
 
   // Creation shortcuts modals
   const [isNewCustOpen, setIsNewCustOpen] = useState(false);
+  const [newCustDocType, setNewCustDocType] = useState(DocumentType.CEDULA);
   const [newCustDoc, setNewCustDoc] = useState('');
   const [newCustName, setNewCustName] = useState('');
   const [newCustEmail, setNewCustEmail] = useState('');
@@ -124,6 +129,12 @@ export default function SalesPOS() {
   const handleCreateCustomer = async (e) => {
     e.preventDefault();
     if (!newCustDoc || !newCustName) return;
+    if (!validateDocument(newCustDocType, newCustDoc)) {
+      alert(newCustDocType === DocumentType.CEDULA
+        ? 'Cédula inválida. Formato esperado: XXX-XXXXXXX-X'
+        : 'RNC inválido. Formato esperado: XXX-XXXXX-X');
+      return;
+    }
 
     try {
       setCreatingCust(true);
@@ -540,7 +551,10 @@ export default function SalesPOS() {
           <div className="flex items-center justify-between">
             <label htmlFor="customer-select" className="text-xs font-bold text-slate-700 dark:text-slate-300">Cliente de la Factura</label>
             <button
-              onClick={() => setIsNewCustOpen(true)}
+              onClick={() => {
+                setNewCustDocType(DocumentType.CEDULA);
+                setIsNewCustOpen(true);
+              }}
               className="text-xs text-indigo-500 hover:text-indigo-600 font-medium flex items-center gap-1 transition-colors cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" /> Nuevo Cliente
@@ -596,9 +610,11 @@ export default function SalesPOS() {
                           min="0"
                           step="0.1"
                           placeholder="0.00"
+                          disabled={!canApplyDiscount}
+                          title={!canApplyDiscount ? 'Descuentos solo disponibles para administradores' : undefined}
                           value={item.discount || ''}
                           onChange={(e) => handleUpdateItemDiscount(item.product.id, parseFloat(e.target.value) || 0)}
-                          className="w-16 text-center p-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent"
+                          className="w-16 text-center p-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                         />
                       </div>
                     </div>
@@ -652,9 +668,11 @@ export default function SalesPOS() {
                   type="number"
                   min="0"
                   step="0.5"
+                  disabled={!canApplyDiscount}
+                  title={!canApplyDiscount ? 'Descuentos solo disponibles para administradores' : undefined}
                   value={globalDiscount || ''}
                   onChange={(e) => setGlobalDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                  className="w-20 text-right px-1.5 py-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent"
+                  className="w-20 text-right px-1.5 py-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
                 />
               </div>
 
@@ -716,17 +734,37 @@ export default function SalesPOS() {
         <form onSubmit={handleCreateCustomer} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
+              <label htmlFor="client-doctype" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Tipo de Documento *
+              </label>
+              <select
+                id="client-doctype"
+                value={newCustDocType}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setNewCustDocType(next);
+                  setNewCustDoc(formatDocument(next, newCustDoc));
+                }}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              >
+                <option value={DocumentType.CEDULA} className="dark:bg-slate-950">Cédula</option>
+                <option value={DocumentType.RNC} className="dark:bg-slate-950">RNC (Empresa)</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
               <label htmlFor="client-doc" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Nro. Documento (RNC/Cédula) *
+                Nro. Documento *
               </label>
               <input
                 id="client-doc"
                 type="text"
                 required
-                placeholder="Ej. 131889421 / 40223456789"
+                placeholder={newCustDocType === DocumentType.CEDULA ? 'XXX-XXXXXXX-X' : 'XXX-XXXXX-X'}
+                maxLength={newCustDocType === DocumentType.CEDULA ? 13 : 11}
                 value={newCustDoc}
-                onChange={(e) => setNewCustDoc(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+                onChange={(e) => setNewCustDoc(formatDocument(newCustDocType, e.target.value))}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
             </div>
 

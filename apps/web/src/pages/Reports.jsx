@@ -6,6 +6,8 @@ export default function Reports() {
   const [sales, setSales] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [profitReport, setProfitReport] = useState([]);
+  const [lowStockAlert, setLowStockAlert] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -16,14 +18,18 @@ export default function Reports() {
     try {
       setLoading(true);
       setError(null);
-      const [sList, pList, cList] = await Promise.all([
+      const [sList, pList, cList, profitList, lowStockList] = await Promise.all([
         api.sales.list(),
         api.products.list(),
-        api.customers.list()
+        api.customers.list(),
+        api.reports.products().catch(() => []),
+        api.reports.lowStock().catch(() => []),
       ]);
       setSales(Array.isArray(sList) ? sList : (sList?.data || []));
       setProducts(Array.isArray(pList) ? pList : (pList?.data || []));
       setCustomers(Array.isArray(cList) ? cList : (cList?.data || []));
+      setProfitReport(Array.isArray(profitList) ? profitList : []);
+      setLowStockAlert(Array.isArray(lowStockList) ? lowStockList : []);
     } catch (err) {
       setError(err.message || 'Error al cargar reportes');
     } finally {
@@ -276,6 +282,95 @@ export default function Reports() {
                 {rotations.length === 0 && (
                   <tr>
                     <td colSpan={4} className="text-center py-8 text-slate-400">Sin datos de productos registrados</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Grid: Profit & Low Stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-emerald-500" />
+              Ganancia Bruta por Producto
+            </h3>
+            <button
+              onClick={() => handleExport('EXCEL', 'Ganancia por Producto')}
+              className="text-[10px] font-semibold text-slate-400 hover:text-indigo-500 flex items-center gap-1 cursor-pointer"
+            >
+              <Download className="w-3 h-3" /> Excel
+            </button>
+          </div>
+
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-slate-400 font-mono py-2 border-b border-slate-100 dark:border-slate-800">
+                  <th className="pb-2 font-normal">Producto</th>
+                  <th className="pb-2 text-center font-normal">Cant.</th>
+                  <th className="pb-2 text-right font-normal">Ganancia</th>
+                  <th className="pb-2 text-right font-normal">Margen</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+                {profitReport.slice(0, 5).map((pr, idx) => (
+                  <tr key={pr.product?.id || idx} className="text-slate-600 dark:text-slate-400 hover:bg-slate-50/50">
+                    <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[140px]">{pr.product?.name || 'Producto'}</td>
+                    <td className="py-2.5 text-center font-mono">{pr.quantity} uds.</td>
+                    <td className="py-2.5 text-right font-bold font-mono text-emerald-600 dark:text-emerald-400">${Number(pr.profit || 0).toFixed(2)}</td>
+                    <td className="py-2.5 text-right font-mono">{Number(pr.margin || 0).toFixed(1)}%</td>
+                  </tr>
+                ))}
+                {profitReport.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-slate-400">Sin datos de ganancia</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm space-y-4 flex flex-col justify-between">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-50 dark:border-slate-800">
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <TrendingDown className="w-4 h-4 text-rose-500" />
+              Alerta de Stock Bajo
+            </h3>
+            <span className="text-[10px] font-bold font-mono bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded">
+              {lowStockAlert.length} críticos
+            </span>
+          </div>
+
+          <div className="overflow-x-auto flex-1 max-h-[260px] overflow-y-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="text-slate-400 font-mono py-2 border-b border-slate-100 dark:border-slate-800">
+                  <th className="pb-2 font-normal">Producto</th>
+                  <th className="pb-2 text-center font-normal">Stock</th>
+                  <th className="pb-2 text-center font-normal">Mínimo</th>
+                  <th className="pb-2 text-center font-normal">Déficit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
+                {lowStockAlert.slice(0, 8).map((p) => (
+                  <tr key={p.id} className="text-slate-600 dark:text-slate-400 hover:bg-slate-50/50">
+                    <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[140px]">
+                      {p.name}
+                      <span className="block text-[10px] text-slate-400 font-mono">{p.category?.name || ''}</span>
+                    </td>
+                    <td className="py-2.5 text-center font-mono font-bold text-rose-600">{p.stock}</td>
+                    <td className="py-2.5 text-center font-mono">{p.minStock}</td>
+                    <td className="py-2.5 text-center font-mono text-amber-600">-{p.deficit}</td>
+                  </tr>
+                ))}
+                {lowStockAlert.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="text-center py-8 text-slate-400">Sin alertas. Todo el stock está en niveles normales.</td>
                   </tr>
                 )}
               </tbody>

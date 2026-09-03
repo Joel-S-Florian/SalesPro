@@ -239,7 +239,174 @@ async function main() {
 
   console.log('✅ NCF sequences initialized');
 
-  console.log('🎉 Seeding completed!');
+  // Create sample sales for both users
+  const [sellerUser] = [seller];
+  
+  // Get customer IDs
+  const consumidorFinal = await prisma.customer.findUnique({ where: { documentId: '000000000' } });
+  const customer1 = await prisma.customer.findUnique({ where: { documentId: '45829103' } });
+  const customer2 = await prisma.customer.findUnique({ where: { documentId: '20459382' } });
+  const customer3 = await prisma.customer.findUnique({ where: { documentId: '20608594231' } });
+  
+  // Get product IDs
+  const laptop = await prisma.product.findUnique({ where: { code: 'PROD-001' } });
+  const smartphone = await prisma.product.findUnique({ where: { code: 'PROD-002' } });
+  const headphones = await prisma.product.findUnique({ where: { code: 'PROD-003' } });
+  const shirt = await prisma.product.findUnique({ where: { code: 'PROD-004' } });
+  const shoes = await prisma.product.findUnique({ where: { code: 'PROD-005' } });
+  const coffeeMaker = await prisma.product.findUnique({ where: { code: 'PROD-006' } });
+  const rice = await prisma.product.findUnique({ where: { code: 'PROD-007' } });
+
+  // Sales for vendedor (seller)
+  const sellerSales = await Promise.all([
+    // Sale 1 - Cash
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0200000001' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0200000001',
+        ncfType: 'B02',
+        customerId: consumidorFinal.id,
+        customerName: consumidorFinal.name,
+        userId: sellerUser.id,
+        userName: sellerUser.fullName,
+        subtotal: 1249.99,
+        tax: 225.00,
+        discount: 0,
+        total: 1474.99,
+        paymentMethod: 'EFECTIVO',
+        details: {
+          create: [
+            { productId: laptop.id, productName: laptop.name, quantity: 1, unitPrice: laptop.salePrice, discount: 0, subtotal: 1249.99 }
+          ]
+        }
+      }
+    }),
+    // Sale 2 - Card
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0200000002' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0200000002',
+        ncfType: 'B02',
+        customerId: customer1.id,
+        customerName: customer1.name,
+        userId: sellerUser.id,
+        userName: sellerUser.fullName,
+        subtotal: 799.99,
+        tax: 144.00,
+        discount: 0,
+        total: 943.99,
+        paymentMethod: 'TARJETA',
+        details: {
+          create: [
+            { productId: smartphone.id, productName: smartphone.name, quantity: 1, unitPrice: smartphone.salePrice, discount: 0, subtotal: 799.99 }
+          ]
+        }
+      }
+    }),
+    // Sale 3 - Cash with discount
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0100000001' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0100000001',
+        ncfType: 'B01',
+        customerId: customer2.id,
+        customerName: customer2.name,
+        userId: sellerUser.id,
+        userName: sellerUser.fullName,
+        subtotal: 299.99,
+        tax: 54.00,
+        discount: 50.00,
+        total: 303.99,
+        paymentMethod: 'EFECTIVO',
+        details: {
+          create: [
+            { productId: headphones.id, productName: headphones.name, quantity: 1, unitPrice: headphones.salePrice, discount: 50.00, subtotal: 249.99 }
+          ]
+        }
+      }
+    }),
+  ]);
+
+  // Sales for admin (admin user)
+  const adminSales = await Promise.all([
+    // Sale 4 - Cash
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0200000003' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0200000003',
+        ncfType: 'B02',
+        customerId: consumidorFinal.id,
+        customerName: consumidorFinal.name,
+        userId: admin.id,
+        userName: admin.fullName,
+        subtotal: 35.00,
+        tax: 6.30,
+        discount: 0,
+        total: 41.30,
+        paymentMethod: 'EFECTIVO',
+        details: {
+          create: [
+            { productId: shirt.id, productName: shirt.name, quantity: 1, unitPrice: shirt.salePrice, discount: 0, subtotal: 35.00 }
+          ]
+        }
+      }
+    }),
+    // Sale 5 - Card
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0200000004' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0200000004',
+        ncfType: 'B02',
+        customerId: customer1.id,
+        customerName: customer1.name,
+        userId: admin.id,
+        userName: admin.fullName,
+        subtotal: 79.90,
+        tax: 14.38,
+        discount: 0,
+        total: 94.28,
+        paymentMethod: 'TARJETA',
+        details: {
+          create: [
+            { productId: shoes.id, productName: shoes.name, quantity: 1, unitPrice: shoes.salePrice, discount: 0, subtotal: 79.90 }
+          ]
+        }
+      }
+    }),
+    // Sale 6 - Cash with multiple items
+    prisma.sale.upsert({
+      where: { invoiceNumber: 'B0100000002' },
+      update: {},
+      create: {
+        invoiceNumber: 'B0100000002',
+        ncfType: 'B01',
+        customerId: customer3.id,
+        customerName: customer3.name,
+        userId: admin.id,
+        userName: admin.fullName,
+        subtotal: 58.80,
+        tax: 10.58,
+        discount: 5.00,
+        total: 64.38,
+        paymentMethod: 'EFECTIVO',
+        details: {
+          create: [
+            { productId: coffeeMaker.id, productName: coffeeMaker.name, quantity: 1, unitPrice: coffeeMaker.salePrice, discount: 0, subtotal: 49.90 },
+            { productId: rice.id, productName: rice.name, quantity: 1, unitPrice: rice.salePrice, discount: 5.00, subtotal: 3.90 }
+          ]
+        }
+      }
+    }),
+  ]);
+
+  console.log('✅ Sales created:', { seller: sellerSales.length, admin: adminSales.length });
+
+  console.log('✅ NCF sequences initialized');
 }
 
 main()

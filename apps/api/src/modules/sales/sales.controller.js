@@ -2,7 +2,7 @@ import * as salesService from './sales.service.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 
 export const getSales = asyncHandler(async (req, res) => {
-  const { page, limit, sortBy, sortOrder, customerId, userId, startDate, endDate, paymentMethod } = req.query;
+  const { page, limit, sortBy, sortOrder, customerId, userId, search, startDate, endDate, paymentMethod } = req.query;
   const result = await salesService.getSales({
     page: parseInt(page) || 1,
     limit: parseInt(limit) || 20,
@@ -10,6 +10,7 @@ export const getSales = asyncHandler(async (req, res) => {
     sortOrder,
     customerId,
     userId,
+    search,
     startDate,
     endDate,
     paymentMethod,
@@ -19,8 +20,29 @@ export const getSales = asyncHandler(async (req, res) => {
 
 export const getSale = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const sale = await salesService.getSaleById(id);
+  const sale = await salesService.getSaleById(id, req.user);
   res.json(sale);
+});
+
+export const getMySales = asyncHandler(async (req, res) => {
+  const { page, limit, sortBy, sortOrder, customerId, search, startDate, endDate, paymentMethod } = req.query;
+  const result = await salesService.getMySales(req.user.userId, {
+    page: parseInt(page) || 1,
+    limit: parseInt(limit) || 20,
+    sortBy,
+    sortOrder,
+    customerId,
+    search,
+    startDate,
+    endDate,
+    paymentMethod,
+  });
+  res.json(result);
+});
+
+export const getVendorStats = asyncHandler(async (req, res) => {
+  const stats = await salesService.getVendorStats(req.user.userId);
+  res.json(stats);
 });
 
 export const createSale = asyncHandler(async (req, res) => {

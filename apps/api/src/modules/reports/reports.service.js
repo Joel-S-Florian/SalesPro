@@ -1,6 +1,6 @@
 import { prisma } from '../../config/db.js';
 import { round2 } from '../../shared/utils/helpers.js';
-import { TAX_RATE } from '@salespro/shared/constants.js';
+import { TAX_RATE } from '../../../../../packages/shared/constants.js';
 
 /**
  * Get dashboard statistics
@@ -13,7 +13,7 @@ export async function getDashboardStats() {
 
   const [allSales, allProducts, allCustomers] = await Promise.all([
     prisma.sale.findMany({
-      select: { total: true, createdAt: true, details: { select: { productId: true, productName: true, quantity: true, subtotal: true } } },
+      select: { id: true, invoiceNumber: true, customerName: true, total: true, paymentMethod: true, createdAt: true, details: { select: { productId: true, productName: true, quantity: true, subtotal: true } } },
     }),
     prisma.product.findMany({
       where: { active: true },
@@ -69,6 +69,7 @@ export async function getDashboardStats() {
       invoiceNumber: s.invoiceNumber,
       customerName: s.customerName,
       total: Number(s.total),
+      paymentMethod: s.paymentMethod,
       createdAt: s.createdAt,
     }));
 
@@ -267,6 +268,31 @@ export async function getCustomerSalesReport({ startDate, endDate, limit = 20 })
     }))
     .sort((a, b) => b.totalSpent - a.totalSpent)
     .slice(0, limit);
+}
+
+/**
+ * Get low stock alert
+ */
+export async function getLowStockAlert() {
+  const products = await prisma.product.findMany({
+    where: { active: true },
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      stock: true,
+      minStock: true,
+      category: { select: { name: true } },
+    },
+    orderBy: { stock: 'asc' },
+  });
+
+  return products
+    .filter(p => p.stock <= p.minStock)
+    .map(p => ({
+      ...p,
+      deficit: p.minStock - p.stock,
+    }));
 }
 
 /**

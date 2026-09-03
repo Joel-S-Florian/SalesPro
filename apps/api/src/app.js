@@ -16,6 +16,7 @@ import customersRoutes from './modules/customers/customers.routes.js';
 import salesRoutes from './modules/sales/sales.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import reportsRoutes from './modules/reports/reports.routes.js';
+import financeRoutes from './modules/finance/finance.routes.js';
 
 const app = express();
 
@@ -67,6 +68,7 @@ app.use('/customers', customersRoutes);
 app.use('/sales', salesRoutes);
 app.use('/inventory', inventoryRoutes);
 app.use('/reports', reportsRoutes);
+app.use('/finance', financeRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

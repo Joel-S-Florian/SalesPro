@@ -19,13 +19,11 @@ export const updateProductSchema = z.object({
     id: z.string().cuid(),
   }),
   body: z.object({
-    code: z.string().min(1).max(50).regex(/^[A-Z0-9_-]+$/i).optional(),
     name: z.string().min(1).max(200).optional(),
     description: z.string().max(1000).optional(),
     categoryId: z.string().cuid().optional(),
     costPrice: z.number().positive().optional(),
     salePrice: z.number().positive().optional(),
-    stock: z.number().int().min(0).optional(),
     minStock: z.number().int().min(0).optional(),
     active: z.boolean().optional(),
   }).refine(data => Object.keys(data).length > 0, 'Al menos un campo es requerido'),

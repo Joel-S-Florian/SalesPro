@@ -124,10 +124,12 @@ export async function createProduct(data, userId, userName) {
     await prisma.inventoryLog.create({
       data: {
         productId: product.id,
+        productName: product.name,
         type: 'ENTRADA',
         quantity: stock,
         reason: 'Inventario Inicial',
         userId,
+        userName,
       },
     });
   }
@@ -144,21 +146,11 @@ export async function createProduct(data, userId, userName) {
  * Update product
  */
 export async function updateProduct(id, data, userId, userName) {
-  const { code, name, description, categoryId, costPrice, salePrice, stock, minStock, active } = data;
+  const { name, description, categoryId, costPrice, salePrice, minStock, active } = data;
 
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) {
     throw AppError.notFound('Producto no encontrado');
-  }
-
-  // Check code uniqueness
-  if (code && code.toLowerCase() !== product.code.toLowerCase()) {
-    const existing = await prisma.product.findFirst({
-      where: { code: { equals: code, mode: 'insensitive' }, NOT: { id } },
-    });
-    if (existing) {
-      throw AppError.conflict('El código de producto ya se encuentra en uso', ERROR_CODES.DUPLICATE_ENTRY);
-    }
   }
 
   // Check category if changing
@@ -170,7 +162,6 @@ export async function updateProduct(id, data, userId, userName) {
   }
 
   const updateData = {};
-  if (code) updateData.code = code.toUpperCase();
   if (name) updateData.name = name;
   if (description !== undefined) updateData.description = description;
   if (categoryId) updateData.categoryId = categoryId;
@@ -179,34 +170,10 @@ export async function updateProduct(id, data, userId, userName) {
   if (minStock !== undefined) updateData.minStock = minStock;
   if (active !== undefined) updateData.active = active;
 
-  // Handle stock adjustment
-  let stockDiff = 0;
-  if (stock !== undefined && stock !== product.stock) {
-    stockDiff = stock - product.stock;
-    updateData.stock = stock;
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const updatedProduct = await tx.product.update({
-      where: { id },
-      data: updateData,
-      include: { category: { select: { id: true, name: true } } },
-    });
-
-    // Create inventory log for stock change
-    if (stockDiff !== 0) {
-      await tx.inventoryLog.create({
-        data: {
-          productId: id,
-          type: stockDiff > 0 ? 'ENTRADA' : 'SALIDA',
-          quantity: Math.abs(stockDiff),
-          reason: 'Ajuste Stock Manual',
-          userId,
-        },
-      });
-    }
-
-    return updatedProduct;
+  const updated = await prisma.product.update({
+    where: { id },
+    data: updateData,
+    include: { category: { select: { id: true, name: true } } },
   });
 
   return {
@@ -272,10 +239,12 @@ export async function adjustStock(data, userId, userName) {
     const log = await tx.inventoryLog.create({
       data: {
         productId,
+        productName: product.name,
         type,
         quantity,
         reason: `Ajuste: ${reason}`,
         userId,
+        userName,
       },
     });
 
@@ -288,15 +257,14 @@ export async function adjustStock(data, userId, userName) {
  */
 export async function getLowStockProducts() {
   const products = await prisma.product.findMany({
-    where: {
-      active: true,
-      stock: { lte: prisma.product.fields.minStock },
-    },
+    where: { active: true },
     include: { category: { select: { id: true, name: true } } },
     orderBy: { stock: 'asc' },
   });
 
-  return products.map(p => ({
+  return products
+    .filter(p => p.stock <= p.minStock)
+    .map(p => ({
     ...p,
     margin: p.costPrice > 0 ? round2(((Number(p.salePrice) - Number(p.costPrice)) / Number(p.salePrice)) * 100) : 0,
     isLowStock: true,

@@ -13,7 +13,14 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
   const [adjustmentQty, setAdjustmentQty] = useState(10);
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
 
+  const isVendor = useAuthStore(state => state.user?.role === 'VENDEDOR');
+
   const fetchDashboardStats = async () => {
+    if (isVendor) {
+      setLoading(false);
+      setStats(null);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -31,7 +38,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
 
   useEffect(() => {
     fetchDashboardStats();
-  }, []);
+  }, [isVendor]);
 
   const handleFastReorder = async (e) => {
     e.preventDefault();
