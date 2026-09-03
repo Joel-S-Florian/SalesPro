@@ -1,7 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange, cleanFilterString, cleanPaymentMethod } from '../../shared/utils/helpers.js';
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
 import { TAX_RATE } from '../../../../../packages/shared/constants.js';
 
@@ -17,15 +17,19 @@ export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sor
 
   const where = {};
 
-  if (customerId) where.customerId = customerId;
-  if (userId) where.userId = userId;
-  if (paymentMethod) where.paymentMethod = paymentMethod;
+  const cleanCustomer = cleanFilterString(customerId);
+  if (cleanCustomer) where.customerId = cleanCustomer;
+  const cleanUser = cleanFilterString(userId);
+  if (cleanUser) where.userId = cleanUser;
+  const cleanPayment = cleanPaymentMethod(paymentMethod);
+  if (cleanPayment) where.paymentMethod = cleanPayment;
 
-  if (search) {
+  const cleanSearch = cleanFilterString(search);
+  if (cleanSearch) {
     where.OR = [
-      { invoiceNumber: { contains: search, mode: 'insensitive' } },
-      { customerName: { contains: search, mode: 'insensitive' } },
-      { customer: { documentId: { contains: search, mode: 'insensitive' } } },
+      { invoiceNumber: { contains: cleanSearch, mode: 'insensitive' } },
+      { customerName: { contains: cleanSearch, mode: 'insensitive' } },
+      { customer: { documentId: { contains: cleanSearch, mode: 'insensitive' } } },
     ];
   }
 
@@ -95,16 +99,19 @@ export async function getMySales(userId, { page = 1, limit = 20, sortBy = 'creat
     userId,
   };
 
-  if (customerId) where.customerId = customerId;
-  if (paymentMethod) where.paymentMethod = paymentMethod;
+  const cleanCustomer = cleanFilterString(customerId);
+  if (cleanCustomer) where.customerId = cleanCustomer;
+  const cleanPayment = cleanPaymentMethod(paymentMethod);
+  if (cleanPayment) where.paymentMethod = cleanPayment;
 
-  if (search) {
+  const cleanSearch = cleanFilterString(search);
+  if (cleanSearch) {
     where.AND = [
       {
         OR: [
-          { invoiceNumber: { contains: search, mode: 'insensitive' } },
-          { customerName: { contains: search, mode: 'insensitive' } },
-          { customer: { documentId: { contains: search, mode: 'insensitive' } } },
+          { invoiceNumber: { contains: cleanSearch, mode: 'insensitive' } },
+          { customerName: { contains: cleanSearch, mode: 'insensitive' } },
+          { customer: { documentId: { contains: cleanSearch, mode: 'insensitive' } } },
         ],
       },
     ];

@@ -169,6 +169,31 @@ export function applyCreatedAtRange(where, startDate, endDate) {
 }
 
 /**
+ * Sanitiza un filtro string opcional: descarta undefined, null,
+ * strings vacíos y las cadenas literales "undefined"/"null".
+ * @param {*} value - Valor del filtro
+ * @returns {string|null} Valor limpio o null
+ */
+export function cleanFilterString(value) {
+  if (value === undefined || value === null) return null;
+  const str = String(value).trim();
+  if (str === '' || str === 'undefined' || str === 'null') return null;
+  return str;
+}
+
+/**
+ * Sanitiza un método de pago contra el enum PaymentMethod de Prisma.
+ * @param {*} value - Valor del filtro
+ * @returns {string|null} Método válido (EFECTIVO|TARJETA) o null
+ */
+export function cleanPaymentMethod(value) {
+  const str = cleanFilterString(value);
+  if (!str) return null;
+  const upper = str.toUpperCase();
+  return upper === 'EFECTIVO' || upper === 'TARJETA' ? upper : null;
+}
+
+/**
  * Sleep utility
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}

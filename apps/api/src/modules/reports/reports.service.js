@@ -2,6 +2,34 @@ import { prisma } from '../../config/db.js';
 import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 import { TAX_RATE } from '../../../../../packages/shared/constants.js';
 
+const VALID_PAYMENT_METHODS = ['EFECTIVO', 'TARJETA'];
+const VALID_DOC_TYPES = ['CEDULA', 'RNC'];
+
+/**
+ * Sanitiza un filtro string opcional: descarta undefined, null,
+ * strings vacíos y las cadenas literales "undefined"/"null".
+ * @param {*} value - Valor del filtro
+ * @returns {string|null} Valor limpio o null
+ */
+function cleanString(value) {
+  if (value === undefined || value === null) return null;
+  const str = String(value).trim();
+  if (str === '' || str === 'undefined' || str === 'null') return null;
+  return str;
+}
+
+/**
+ * Sanitiza un método de pago contra el enum de Prisma.
+ * @param {*} value - Valor del filtro
+ * @returns {string|null} Método válido o null
+ */
+function cleanPaymentMethod(value) {
+  const str = cleanString(value);
+  if (!str) return null;
+  const upper = str.toUpperCase();
+  return VALID_PAYMENT_METHODS.includes(upper) ? upper : null;
+}
+
 /**
  * Get dashboard statistics
  */
@@ -324,8 +352,9 @@ function buildSaleDetailWhere({ from, to, categoryId }) {
   if (saleRange.createdAt) {
     where.sale = { createdAt: saleRange.createdAt };
   }
-  if (categoryId) {
-    where.product = { categoryId };
+  const cleanCategory = cleanString(categoryId);
+  if (cleanCategory) {
+    where.product = { categoryId: cleanCategory };
   }
   return where;
 }
@@ -431,14 +460,22 @@ export async function getProductsByCategory({ from, to }) {
 function buildSaleWhere({ from, to, userId, paymentMethod }) {
   const where = {};
   applyCreatedAtRange(where, from, to);
-  if (userId) where.userId = userId;
-  if (paymentMethod) where.paymentMethod = paymentMethod;
+  const cleanUser = cleanString(userId);
+  if (cleanUser) where.userId = cleanUser;
+  const cleanPayment = cleanPaymentMethod(paymentMethod);
+  if (cleanPayment) where.paymentMethod = cleanPayment;
   return where;
 }
 
 async function getCustomerAggregates({ from, to, docType, search }) {
   const where = {};
   applyCreatedAtRange(where, from, to);
+
+  const cleanDocType = cleanString(docType);
+  const validDocType = cleanDocType && VALID_DOC_TYPES.includes(cleanDocType.toUpperCase())
+    ? cleanDocType.toUpperCase()
+    : null;
+  const cleanSearch = cleanString(search);
 
   const sales = await prisma.sale.findMany({
     where,
@@ -454,9 +491,9 @@ async function getCustomerAggregates({ from, to, docType, search }) {
     const doc = s.customer?.documentId || '';
     const digits = doc.replace(/\D/g, '');
     const type = digits.length === 9 ? 'RNC' : digits.length === 11 ? 'CEDULA' : 'OTRO';
-    if (docType && type !== docType) return;
-    if (search) {
-      const q = search.toLowerCase();
+    if (validDocType && type !== validDocType) return;
+    if (cleanSearch) {
+      const q = cleanSearch.toLowerCase();
       const hay = `${s.customer?.name || ''} ${doc}`.toLowerCase();
       if (!hay.includes(q)) return;
     }

@@ -1,7 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta, round2 } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, round2, cleanFilterString } from '../../shared/utils/helpers.js';
 
 /**
  * Get all products with pagination, search, and filters
@@ -11,34 +11,31 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
 
   const where = {};
 
-  if (q) {
+  const cleanQ = cleanFilterString(q);
+  if (cleanQ) {
     where.OR = [
-      { name: { contains: q, mode: 'insensitive' } },
-      { code: { contains: q, mode: 'insensitive' } },
-      { description: { contains: q, mode: 'insensitive' } },
+      { name: { contains: cleanQ, mode: 'insensitive' } },
+      { code: { contains: cleanQ, mode: 'insensitive' } },
+      { description: { contains: cleanQ, mode: 'insensitive' } },
     ];
   }
 
-  if (categoryId) {
-    where.categoryId = categoryId;
+  const cleanCategory = cleanFilterString(categoryId);
+  if (cleanCategory) {
+    where.categoryId = cleanCategory;
   }
 
   if (active !== undefined) {
     where.active = active;
   }
 
-  if (lowStock) {
-    where.AND = [
-      { active: true },
-      { stock: { lte: prisma.product.fields.minStock } },
-    ];
-  }
+  const onlyLowStock = lowStock === true || lowStock === 'true';
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      skip,
-      take,
+      skip: onlyLowStock ? undefined : skip,
+      take: onlyLowStock ? undefined : take,
       orderBy,
       include: {
         category: { select: { id: true, name: true } },
@@ -47,8 +44,12 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
     prisma.product.count({ where }),
   ]);
 
+  const filtered = onlyLowStock ? products.filter(p => p.stock <= p.minStock) : products;
+  const paginated = onlyLowStock ? filtered.slice(skip, skip + take) : filtered;
+  const finalTotal = onlyLowStock ? filtered.length : total;
+
   // Calculate margin for each product
-  const productsWithMargin = products.map(p => ({
+  const productsWithMargin = paginated.map(p => ({
     ...p,
     margin: p.costPrice > 0 ? round2(((Number(p.salePrice) - Number(p.costPrice)) / Number(p.salePrice)) * 100) : 0,
     marginAmount: round2(Number(p.salePrice) - Number(p.costPrice)),
@@ -57,7 +58,7 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
 
   return {
     data: productsWithMargin,
-    pagination: getPaginationMeta(page, limit, total),
+    pagination: getPaginationMeta(page, limit, finalTotal),
   };
 }
 

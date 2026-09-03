@@ -33,6 +33,22 @@ async function handleResponse(res) {
 }
 
 /**
+ * Construye un query string sanitizado: omite valores undefined, null,
+ * strings vacíos y las cadenas literales "undefined"/"null".
+ * Evita que Prisma reciba filtros inválidos como userId="undefined".
+ */
+function toQuery(params = {}) {
+  const clean = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null) continue;
+    const str = String(value);
+    if (str === '' || str === 'undefined' || str === 'null') continue;
+    clean[key] = value;
+  }
+  return new URLSearchParams(clean).toString();
+}
+
+/**
  * Convierte cualquier respuesta de "lista" a un arreglo real,
  * sin importar si el backend la envuelve en paginacion o no.
  * Evita el crash "n.filter is not a function" en las paginas.
@@ -153,7 +169,7 @@ export const api = {
 
     getMe: () => request('/auth/me'),
     getUsers: async (params = {}) =>
-      normalizeList(await request(`/auth/users?${new URLSearchParams(params).toString()}`)),
+      normalizeList(await request(`/auth/users?${toQuery(params)}`)),
     createUser: (payload) => request('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
     updateUser: (id, payload) => request(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
@@ -163,7 +179,7 @@ export const api = {
 
   categories: {
     list: async (params = {}) =>
-      normalizeList(await request(`/categories?${new URLSearchParams(params).toString()}`)),
+      normalizeList(await request(`/categories?${toQuery(params)}`)),
     get: (id) => request(`/categories/${id}`),
     create: (name, description) => request('/categories', { method: 'POST', body: JSON.stringify({ name, description }) }),
     update: (id, name, description) => request(`/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name, description }) }),
@@ -172,7 +188,7 @@ export const api = {
 
   products: {
     list: async (params = {}) =>
-      normalizeList(await request(`/products?${new URLSearchParams(params).toString()}`)),
+      normalizeList(await request(`/products?${toQuery(params)}`)),
     get: (id) => request(`/products/${id}`),
     create: (payload) => request('/products', { method: 'POST', body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
@@ -183,7 +199,7 @@ export const api = {
 
   customers: {
     list: async (params = {}) =>
-      normalizeList(await request(`/customers?${new URLSearchParams(params).toString()}`)),
+      normalizeList(await request(`/customers?${toQuery(params)}`)),
     getForPOS: async () => normalizeList(await request('/customers/pos')),
     get: (id) => request(`/customers/${id}`),
     create: (payload) => request('/customers', { method: 'POST', body: JSON.stringify(payload) }),
@@ -194,7 +210,7 @@ export const api = {
   sales: {
     // Se elimina normalizeList para preservar la estructura { data: [...], pagination: {...} }
     list: (params = {}) =>
-      request(`/sales?${new URLSearchParams(params).toString()}`),
+      request(`/sales?${toQuery(params)}`),
 
     get: (id) => request(`/sales/${id}`),
 
@@ -205,15 +221,15 @@ export const api = {
 
     // Se elimina normalizeList para preservar la estructura { data: [...], pagination: {...} }
     mySales: (params = {}) =>
-      request(`/sales/my-sales?${new URLSearchParams(params).toString()}`),
+      request(`/sales/my-sales?${toQuery(params)}`),
 
     vendorStats: () => request('/sales/vendor-stats'),
   },
 
   inventory: {
     logs: async (params = {}) =>
-      normalizeList(await request(`/inventory/logs?${new URLSearchParams(params).toString()}`)),
-    getKardex: (productId, params = {}) => request(`/inventory/kardex/${productId}?${new URLSearchParams(params).toString()}`),
+      normalizeList(await request(`/inventory/logs?${toQuery(params)}`)),
+    getKardex: (productId, params = {}) => request(`/inventory/kardex/${productId}?${toQuery(params)}`),
     adjust: (payload) => request('/inventory/adjust', { method: 'POST', body: JSON.stringify(payload) }),
     purchase: (payload) => request('/inventory/purchase', { method: 'POST', body: JSON.stringify(payload) }),
     getSummary: () => request('/inventory/summary'),
@@ -221,23 +237,23 @@ export const api = {
 
   reports: {
     dashboard: () => request('/reports/dashboard'),
-    sales: (params = {}) => request(`/reports/sales?${new URLSearchParams(params).toString()}`),
-    products: (params = {}) => request(`/reports/products?${new URLSearchParams(params).toString()}`),
-    customers: (params = {}) => request(`/reports/customers?${new URLSearchParams(params).toString()}`),
-    tax: (params = {}) => request(`/reports/tax?${new URLSearchParams(params).toString()}`),
+    sales: (params = {}) => request(`/reports/sales?${toQuery(params)}`),
+    products: (params = {}) => request(`/reports/products?${toQuery(params)}`),
+    customers: (params = {}) => request(`/reports/customers?${toQuery(params)}`),
+    tax: (params = {}) => request(`/reports/tax?${toQuery(params)}`),
     lowStock: () => request('/reports/low-stock'),
-    topSoldProducts: (params = {}) => request(`/reports/products/top-sold?${new URLSearchParams(params).toString()}`),
-    mostProfitableProducts: (params = {}) => request(`/reports/products/most-profitable?${new URLSearchParams(params).toString()}`),
-    lowMarginProducts: (params = {}) => request(`/reports/products/low-margin?${new URLSearchParams(params).toString()}`),
-    productsByCategory: (params = {}) => request(`/reports/products/by-category?${new URLSearchParams(params).toString()}`),
-    topCustomersByAmount: (params = {}) => request(`/reports/customers/top-by-amount?${new URLSearchParams(params).toString()}`),
-    topCustomersByFrequency: (params = {}) => request(`/reports/customers/top-by-frequency?${new URLSearchParams(params).toString()}`),
-    customerHistory: (id, params = {}) => request(`/reports/customers/${id}/history?${new URLSearchParams(params).toString()}`),
-    staffPerformance: (params = {}) => request(`/reports/staff/performance?${new URLSearchParams(params).toString()}`),
-    staffPaymentMethods: (params = {}) => request(`/reports/staff/payment-methods?${new URLSearchParams(params).toString()}`),
+    topSoldProducts: (params = {}) => request(`/reports/products/top-sold?${toQuery(params)}`),
+    mostProfitableProducts: (params = {}) => request(`/reports/products/most-profitable?${toQuery(params)}`),
+    lowMarginProducts: (params = {}) => request(`/reports/products/low-margin?${toQuery(params)}`),
+    productsByCategory: (params = {}) => request(`/reports/products/by-category?${toQuery(params)}`),
+    topCustomersByAmount: (params = {}) => request(`/reports/customers/top-by-amount?${toQuery(params)}`),
+    topCustomersByFrequency: (params = {}) => request(`/reports/customers/top-by-frequency?${toQuery(params)}`),
+    customerHistory: (id, params = {}) => request(`/reports/customers/${id}/history?${toQuery(params)}`),
+    staffPerformance: (params = {}) => request(`/reports/staff/performance?${toQuery(params)}`),
+    staffPaymentMethods: (params = {}) => request(`/reports/staff/payment-methods?${toQuery(params)}`),
   },
 
   finance: {
-    cashflow: (params = {}) => request(`/finance/cashflow?${new URLSearchParams(params).toString()}`),
+    cashflow: (params = {}) => request(`/finance/cashflow?${toQuery(params)}`),
   },
 };

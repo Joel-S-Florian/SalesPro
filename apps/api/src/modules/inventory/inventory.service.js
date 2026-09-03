@@ -1,7 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilterString } from '../../shared/utils/helpers.js';
 
 /**
  * Get inventory logs with pagination and filters
@@ -11,9 +11,11 @@ export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'created
 
   const where = {};
 
-  if (productId) where.productId = productId;
+  const cleanProduct = cleanFilterString(productId);
+  if (cleanProduct) where.productId = cleanProduct;
   if (type) where.type = type;
-  if (userId) where.userId = userId;
+  const cleanUser = cleanFilterString(userId);
+  if (cleanUser) where.userId = cleanUser;
 
   applyCreatedAtRange(where, startDate, endDate);
 

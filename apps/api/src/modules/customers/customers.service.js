@@ -1,7 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, cleanFilterString } from '../../shared/utils/helpers.js';
 import { getDocumentType, formatRNC, formatCedula } from '../../shared/utils/dgii.js';
 
 /**
@@ -10,13 +10,14 @@ import { getDocumentType, formatRNC, formatCedula } from '../../shared/utils/dgi
 export async function getCustomers({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
-  const where = q ? {
+  const cleanQ = cleanFilterString(q);
+  const where = cleanQ ? {
     OR: [
-      { name: { contains: q, mode: 'insensitive' } },
-      { documentId: { contains: q, mode: 'insensitive' } },
-      { email: { contains: q, mode: 'insensitive' } },
-      { phone: { contains: q, mode: 'insensitive' } },
-      { rnc: { contains: q, mode: 'insensitive' } },
+      { name: { contains: cleanQ, mode: 'insensitive' } },
+      { documentId: { contains: cleanQ, mode: 'insensitive' } },
+      { email: { contains: cleanQ, mode: 'insensitive' } },
+      { phone: { contains: cleanQ, mode: 'insensitive' } },
+      { rnc: { contains: cleanQ, mode: 'insensitive' } },
     ],
   } : {};
 
