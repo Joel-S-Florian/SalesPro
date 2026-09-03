@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../services/api';
 import {
-  Loader2, TrendingUp, TrendingDown, Users, Calendar,
-  BarChart2, Package, UserCheck, FileJson, FileSpreadsheet, FileText, FileCode,
+  Loader2, TrendingUp, Users, Calendar,
+  BarChart2, Package, UserCheck, Layers, FileJson, FileSpreadsheet, FileText, FileCode,
 } from 'lucide-react';
 import { generateFilename, exportToCSV, exportToJSON, exportToXML, exportToPDF } from '../utils/export';
 
