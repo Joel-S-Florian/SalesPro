@@ -1,18 +1,9 @@
 import { prisma } from '../../config/db.js';
-import { round2 } from '../../shared/utils/helpers.js';
+import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 
 export async function getCashflow({ from, to } = {}) {
   const where = {};
-
-  if (from || to) {
-    where.createdAt = {};
-    if (from) where.createdAt.gte = new Date(from);
-    if (to) {
-      const end = new Date(to);
-      end.setHours(23, 59, 59, 999);
-      where.createdAt.lte = end;
-    }
-  }
+  applyCreatedAtRange(where, from, to);
 
   const [sales, purchases] = await Promise.all([
     prisma.sale.findMany({
@@ -24,7 +15,7 @@ export async function getCashflow({ from, to } = {}) {
       where: {
         ...where,
         type: 'ENTRADA',
-        totalCost: { not: null },
+        totalCost: { not: null, gt: 0 },
       },
       select: { id: true, supplier: true, totalCost: true, invoiceNumber: true, createdAt: true },
       orderBy: { createdAt: 'desc' },

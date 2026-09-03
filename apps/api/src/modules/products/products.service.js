@@ -146,25 +146,16 @@ export async function createProduct(data, userId, userName) {
  * Update product
  */
 export async function updateProduct(id, data, userId, userName) {
-  const { name, description, categoryId, costPrice, salePrice, minStock, active } = data;
+  const { name, description, costPrice, salePrice, minStock, active } = data;
 
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) {
     throw AppError.notFound('Producto no encontrado');
   }
 
-  // Check category if changing
-  if (categoryId) {
-    const category = await prisma.category.findUnique({ where: { id: categoryId } });
-    if (!category) {
-      throw AppError.notFound('Categoría no encontrada');
-    }
-  }
-
   const updateData = {};
   if (name) updateData.name = name;
   if (description !== undefined) updateData.description = description;
-  if (categoryId) updateData.categoryId = categoryId;
   if (costPrice !== undefined) updateData.costPrice = costPrice;
   if (salePrice !== undefined) updateData.salePrice = salePrice;
   if (minStock !== undefined) updateData.minStock = minStock;

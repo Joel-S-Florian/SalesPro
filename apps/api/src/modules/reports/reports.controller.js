@@ -34,3 +34,58 @@ export const getLowStockAlert = asyncHandler(async (req, res) => {
   const report = await reportsService.getLowStockAlert();
   res.json(report);
 });
+
+export const getTopSoldProducts = asyncHandler(async (req, res) => {
+  const { from, to, categoryId, limit } = req.query;
+  const report = await reportsService.getTopSoldProducts({ from, to, categoryId, limit: parseInt(limit) || 10 });
+  res.json(report);
+});
+
+export const getMostProfitableProducts = asyncHandler(async (req, res) => {
+  const { from, to, categoryId, limit } = req.query;
+  const report = await reportsService.getMostProfitableProducts({ from, to, categoryId, limit: parseInt(limit) || 10 });
+  res.json(report);
+});
+
+export const getLowMarginProducts = asyncHandler(async (req, res) => {
+  const { from, to, minMargin } = req.query;
+  const report = await reportsService.getLowMarginProducts({ from, to, minMargin: parseFloat(minMargin) || 20 });
+  res.json(report);
+});
+
+export const getProductsByCategory = asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const report = await reportsService.getProductsByCategory({ from, to });
+  res.json(report);
+});
+
+export const getTopCustomersByAmount = asyncHandler(async (req, res) => {
+  const { from, to, docType, search, limit } = req.query;
+  const report = await reportsService.getTopCustomersByAmount({ from, to, docType, search, limit: parseInt(limit) || 10 });
+  res.json(report);
+});
+
+export const getTopCustomersByFrequency = asyncHandler(async (req, res) => {
+  const { from, to, docType, search, limit } = req.query;
+  const report = await reportsService.getTopCustomersByFrequency({ from, to, docType, search, limit: parseInt(limit) || 10 });
+  res.json(report);
+});
+
+export const getCustomerHistory = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { from, to } = req.query;
+  const report = await reportsService.getCustomerHistory(id, { from, to });
+  res.json(report);
+});
+
+export const getStaffPerformance = asyncHandler(async (req, res) => {
+  const { from, to, userId, paymentMethod } = req.query;
+  const report = await reportsService.getStaffPerformance({ from, to, userId, paymentMethod });
+  res.json(report);
+});
+
+export const getStaffPaymentMethods = asyncHandler(async (req, res) => {
+  const { from, to, userId } = req.query;
+  const report = await reportsService.getStaffPaymentMethods({ from, to, userId });
+  res.json(report);
+});

@@ -24,6 +24,8 @@ export default function Products() {
   const [categoryId, setCategoryId] = useState('');
   const [costPrice, setCostPrice] = useState(0);
   const [salePrice, setSalePrice] = useState(0);
+  const [originalSalePrice, setOriginalSalePrice] = useState(null);
+  const [confirmationText, setConfirmationText] = useState('');
   const [stock, setStock] = useState(0);
   const [minStock, setMinStock] = useState(5);
   const [active, setActive] = useState(true);
@@ -62,6 +64,8 @@ export default function Products() {
     setCategoryId(categories[0]?.id || '');
     setCostPrice(0);
     setSalePrice(0);
+    setOriginalSalePrice(null);
+    setConfirmationText('');
     setStock(0);
     setMinStock(5);
     setActive(true);
@@ -76,18 +80,18 @@ export default function Products() {
     setCategoryId(p.categoryId || categories[0]?.id || '');
     setCostPrice(Number(p.costPrice || 0));
     setSalePrice(Number(p.salePrice || 0));
+    setOriginalSalePrice(Number(p.salePrice || 0));
+    setConfirmationText('');
     setStock(Number(p.stock || 0));
     setMinStock(Number(p.minStock || 5));
     setActive(p.active !== false);
     setIsFormOpen(true);
   };
 
-  const categoryChanged = editingId && categories.length > 0
-    ? (() => {
-        const current = products.find(p => p.id === editingId);
-        return current && current.categoryId !== categoryId;
-      })()
-    : false;
+  const priceChanged = editingId !== null
+    && originalSalePrice !== null
+    && Number(salePrice) !== Number(originalSalePrice);
+  const isConfirmationValid = !priceChanged || confirmationText === 'editarProducto';
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
@@ -106,7 +110,6 @@ export default function Products() {
         ? {
             name,
             description,
-            categoryId,
             costPrice: Number(costPrice),
             salePrice: Number(salePrice),
             minStock: Number(minStock),
@@ -414,18 +417,30 @@ export default function Products() {
               <label htmlFor="prod-cat" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Categoría *
               </label>
-              <select
-                id="prod-cat"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
-              >
-                {categories.map(c => (
-                  <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
-                ))}
-              </select>
-              {categoryChanged && (
-                <p className="text-[10px] text-amber-600 dark:text-amber-400">Cambiar la categoría afectará reportes históricos.</p>
+              {editingId ? (
+                <>
+                  <input
+                    id="prod-cat"
+                    type="text"
+                    disabled
+                    readOnly
+                    value={categories.find(c => c.id === categoryId)?.name || 'Sin categoría'}
+                    title="La categoría no se puede modificar después de crear el producto"
+                    className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-slate-100 dark:bg-slate-800/40 outline-none text-xs cursor-not-allowed"
+                  />
+                  <p className="text-[10px] text-slate-400">La categoría no se puede modificar después de crear el producto.</p>
+                </>
+              ) : (
+                <select
+                  id="prod-cat"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+                >
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
+                  ))}
+                </select>
               )}
             </div>
 
@@ -474,6 +489,20 @@ export default function Products() {
                 onChange={(e) => setSalePrice(Math.max(0, parseFloat(e.target.value) || 0))}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
+              {priceChanged && (
+                <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-3 space-y-2">
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                    Estás modificando el precio de venta. Para confirmar, escribe "editarProducto":
+                  </p>
+                  <input
+                    type="text"
+                    value={confirmationText}
+                    onChange={(e) => setConfirmationText(e.target.value)}
+                    placeholder="editarProducto"
+                    className="w-full px-3 py-1.5 border border-amber-200 dark:border-amber-900/50 rounded-lg text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-900 outline-none text-xs font-mono"
+                  />
+                </div>
+              )}
             </div>
 
             {!editingId && (
@@ -522,7 +551,7 @@ export default function Products() {
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !isConfirmationValid}
               className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-xs font-medium px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               {saving ? (

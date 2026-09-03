@@ -125,6 +125,50 @@ export function round2(num) {
 }
 
 /**
+ * Parse a date-only string (YYYY-MM-DD) as local midnight.
+ * Plain `new Date('YYYY-MM-DD')` parses as UTC midnight, which in
+ * America/Santo_Domingo (UTC-4) shifts filters to the previous evening.
+ * Returns null for missing or invalid values.
+ * @param {string} value - Date string
+ * @returns {Date|null} Local midnight or null
+ */
+export function parseStartOfDay(value) {
+  if (!value || typeof value !== 'string') return null;
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * Parse a date value as local end-of-day (23:59:59.999).
+ * Returns null for missing or invalid values.
+ * @param {string} value - Date string
+ * @returns {Date|null} Local end of day or null
+ */
+export function parseEndOfDay(value) {
+  const d = parseStartOfDay(value);
+  if (!d) return null;
+  d.setHours(23, 59, 59, 999);
+  return d;
+}
+
+/**
+ * Apply an optional createdAt range to a Prisma where object.
+ * Invalid or missing dates are ignored (never produce Invalid Date).
+ * @param {Object} where - Prisma where object (mutated)
+ * @param {string} startDate - Start date string
+ * @param {string} endDate - End date string (inclusive, whole day)
+ */
+export function applyCreatedAtRange(where, startDate, endDate) {
+  const gte = parseStartOfDay(startDate);
+  const lte = parseEndOfDay(endDate);
+  if (gte || lte) {
+    where.createdAt = {};
+    if (gte) where.createdAt.gte = gte;
+    if (lte) where.createdAt.lte = lte;
+  }
+}
+
+/**
  * Sleep utility
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise<void>}

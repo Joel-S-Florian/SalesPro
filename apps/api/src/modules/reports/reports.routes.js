@@ -47,4 +47,67 @@ router.get('/tax', authenticate, authorize('ADMINISTRADOR'), reportsController.g
  */
 router.get('/low-stock', authenticate, authorize('ADMINISTRADOR'), reportsController.getLowStockAlert);
 
+/**
+ * @route GET /api/reports/products/top-sold
+ * @description Top selling products by quantity
+ * @access Private (Admin)
+ */
+router.get('/products/top-sold', authenticate, authorize('ADMINISTRADOR'), reportsController.getTopSoldProducts);
+
+/**
+ * @route GET /api/reports/products/most-profitable
+ * @description Most profitable products by gross profit
+ * @access Private (Admin)
+ */
+router.get('/products/most-profitable', authenticate, authorize('ADMINISTRADOR'), reportsController.getMostProfitableProducts);
+
+/**
+ * @route GET /api/reports/products/low-margin
+ * @description Products below margin threshold
+ * @access Private (Admin)
+ */
+router.get('/products/low-margin', authenticate, authorize('ADMINISTRADOR'), reportsController.getLowMarginProducts);
+
+/**
+ * @route GET /api/reports/products/by-category
+ * @description Product performance grouped by category
+ * @access Private (Admin)
+ */
+router.get('/products/by-category', authenticate, authorize('ADMINISTRADOR'), reportsController.getProductsByCategory);
+
+/**
+ * @route GET /api/reports/customers/top-by-amount
+ * @description Top customers by total spent
+ * @access Private (Admin)
+ */
+router.get('/customers/top-by-amount', authenticate, authorize('ADMINISTRADOR'), reportsController.getTopCustomersByAmount);
+
+/**
+ * @route GET /api/reports/customers/top-by-frequency
+ * @description Top customers by purchase frequency
+ * @access Private (Admin)
+ */
+router.get('/customers/top-by-frequency', authenticate, authorize('ADMINISTRADOR'), reportsController.getTopCustomersByFrequency);
+
+/**
+ * @route GET /api/reports/customers/:id/history
+ * @description Purchase history for a specific customer
+ * @access Private (Admin)
+ */
+router.get('/customers/:id/history', authenticate, authorize('ADMINISTRADOR'), reportsController.getCustomerHistory);
+
+/**
+ * @route GET /api/reports/staff/performance
+ * @description Sales performance by cashier/user
+ * @access Private (Admin)
+ */
+router.get('/staff/performance', authenticate, authorize('ADMINISTRADOR'), reportsController.getStaffPerformance);
+
+/**
+ * @route GET /api/reports/staff/payment-methods
+ * @description Payment method breakdown by cashier plus peak hours
+ * @access Private (Admin)
+ */
+router.get('/staff/payment-methods', authenticate, authorize('ADMINISTRADOR'), reportsController.getStaffPaymentMethods);
+
 export default router;

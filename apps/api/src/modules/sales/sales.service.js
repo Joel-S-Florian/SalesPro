@@ -1,9 +1,13 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta, round2 } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
 import { TAX_RATE } from '../../../../../packages/shared/constants.js';
+
+function applyDateRange(where, startDate, endDate) {
+  applyCreatedAtRange(where, startDate, endDate);
+}
 
 /**
  * Get all sales with pagination and filters
@@ -25,11 +29,7 @@ export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sor
     ];
   }
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyDateRange(where, startDate, endDate);
 
   const [sales, total] = await Promise.all([
     prisma.sale.findMany({
@@ -110,11 +110,7 @@ export async function getMySales(userId, { page = 1, limit = 20, sortBy = 'creat
     ];
   }
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyDateRange(where, startDate, endDate);
 
   const [sales, total] = await Promise.all([
     prisma.sale.findMany({
@@ -253,6 +249,7 @@ export async function createSale(data, userId, userName) {
       productName: product.name,
       quantity: item.quantity,
       unitPrice: Number(product.salePrice),
+      unitCost: Number(product.costPrice),
       discount: item.discount || 0,
       subtotal: Math.max(0, round2(itemSubtotal)),
     });
@@ -297,6 +294,7 @@ export async function createSale(data, userId, userName) {
             productName: d.productName,
             quantity: d.quantity,
             unitPrice: d.unitPrice,
+            unitCost: d.unitCost,
             discount: d.discount,
             subtotal: d.subtotal,
           })),

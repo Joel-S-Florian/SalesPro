@@ -1,7 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
-import { buildPaginationQuery, getPaginationMeta } from '../../shared/utils/helpers.js';
+import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 
 /**
  * Get inventory logs with pagination and filters
@@ -15,11 +15,7 @@ export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'created
   if (type) where.type = type;
   if (userId) where.userId = userId;
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyCreatedAtRange(where, startDate, endDate);
 
   const [logs, total] = await Promise.all([
     prisma.inventoryLog.findMany({
@@ -143,12 +139,20 @@ export async function registerPurchase(data, userId, userName) {
 
   const totalCost = Math.round(quantity * Number(unitCost) * 100) / 100;
 
+  // Weighted average cost: ((current stock x current cost) + (qty x new unit cost)) / new stock
+  const currentStock = product.stock || 0;
+  const currentCost = Number(product.costPrice) || 0;
+  const newStock = currentStock + quantity;
+  const weightedAverageCost = newStock > 0
+    ? Math.round(((currentStock * currentCost + quantity * Number(unitCost)) / newStock) * 100) / 100
+    : Number(unitCost);
+
   return prisma.$transaction(async (tx) => {
     const updated = await tx.product.update({
       where: { id: productId },
       data: {
-        stock: { increment: quantity },
-        costPrice: Number(unitCost),
+        stock: newStock,
+        costPrice: weightedAverageCost,
       },
     });
 
@@ -168,7 +172,7 @@ export async function registerPurchase(data, userId, userName) {
       },
     });
 
-    return { success: true, updatedStock: updated.stock, totalCost, log };
+    return { success: true, updatedStock: updated.stock, totalCost, newPurchasePrice: weightedAverageCost, log };
   });
 }
 

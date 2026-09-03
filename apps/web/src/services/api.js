@@ -226,6 +226,15 @@ export const api = {
     customers: (params = {}) => request(`/reports/customers?${new URLSearchParams(params).toString()}`),
     tax: (params = {}) => request(`/reports/tax?${new URLSearchParams(params).toString()}`),
     lowStock: () => request('/reports/low-stock'),
+    topSoldProducts: (params = {}) => request(`/reports/products/top-sold?${new URLSearchParams(params).toString()}`),
+    mostProfitableProducts: (params = {}) => request(`/reports/products/most-profitable?${new URLSearchParams(params).toString()}`),
+    lowMarginProducts: (params = {}) => request(`/reports/products/low-margin?${new URLSearchParams(params).toString()}`),
+    productsByCategory: (params = {}) => request(`/reports/products/by-category?${new URLSearchParams(params).toString()}`),
+    topCustomersByAmount: (params = {}) => request(`/reports/customers/top-by-amount?${new URLSearchParams(params).toString()}`),
+    topCustomersByFrequency: (params = {}) => request(`/reports/customers/top-by-frequency?${new URLSearchParams(params).toString()}`),
+    customerHistory: (id, params = {}) => request(`/reports/customers/${id}/history?${new URLSearchParams(params).toString()}`),
+    staffPerformance: (params = {}) => request(`/reports/staff/performance?${new URLSearchParams(params).toString()}`),
+    staffPaymentMethods: (params = {}) => request(`/reports/staff/payment-methods?${new URLSearchParams(params).toString()}`),
   },
 
   finance: {

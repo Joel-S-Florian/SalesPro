@@ -1,5 +1,5 @@
 import { prisma } from '../../config/db.js';
-import { round2 } from '../../shared/utils/helpers.js';
+import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 import { TAX_RATE } from '../../../../../packages/shared/constants.js';
 
 /**
@@ -121,11 +121,7 @@ export async function getDashboardStats() {
 export async function getSalesReport({ startDate, endDate, customerId, userId, paymentMethod, groupBy = 'day' }) {
   const where = {};
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyCreatedAtRange(where, startDate, endDate);
   if (customerId) where.customerId = customerId;
   if (userId) where.userId = userId;
   if (paymentMethod) where.paymentMethod = paymentMethod;
@@ -180,10 +176,10 @@ export async function getSalesReport({ startDate, endDate, customerId, userId, p
 export async function getProductSalesReport({ startDate, endDate, categoryId, limit = 20 }) {
   const where = {};
 
-  if (startDate || endDate) {
-    where.sale = {};
-    if (startDate) where.sale.createdAt = { ...where.sale.createdAt, gte: new Date(startDate) };
-    if (endDate) where.sale.createdAt = { ...where.sale.createdAt, lte: new Date(endDate) };
+  const saleDateRange = {};
+  applyCreatedAtRange(saleDateRange, startDate, endDate);
+  if (saleDateRange.createdAt) {
+    where.sale = { createdAt: saleDateRange.createdAt };
   }
 
   if (categoryId) {
@@ -209,7 +205,7 @@ export async function getProductSalesReport({ startDate, endDate, categoryId, li
     };
     entry.quantity += d.quantity;
     entry.revenue += Number(d.subtotal);
-    entry.cost += Number(d.product.costPrice) * d.quantity;
+    entry.cost += Number(d.unitCost ?? d.product.costPrice) * d.quantity;
     productMap.set(key, entry);
   });
 
@@ -231,11 +227,7 @@ export async function getProductSalesReport({ startDate, endDate, categoryId, li
 export async function getCustomerSalesReport({ startDate, endDate, limit = 20 }) {
   const where = {};
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyCreatedAtRange(where, startDate, endDate);
 
   const sales = await prisma.sale.findMany({
     where,
@@ -301,11 +293,7 @@ export async function getLowStockAlert() {
 export async function getTaxReport({ startDate, endDate }) {
   const where = {};
 
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  applyCreatedAtRange(where, startDate, endDate);
 
   const sales = await prisma.sale.findMany({
     where,
@@ -326,5 +314,331 @@ export async function getTaxReport({ startDate, endDate }) {
     totalTax: round2(totalTax),
     taxRate: TAX_RATE * 100,
     salesCount: sales.length,
+  };
+}
+
+function buildSaleDetailWhere({ from, to, categoryId }) {
+  const where = {};
+  const saleRange = {};
+  applyCreatedAtRange(saleRange, from, to);
+  if (saleRange.createdAt) {
+    where.sale = { createdAt: saleRange.createdAt };
+  }
+  if (categoryId) {
+    where.product = { categoryId };
+  }
+  return where;
+}
+
+async function getProductAggregates({ from, to, categoryId }) {
+  const details = await prisma.saleDetail.findMany({
+    where: buildSaleDetailWhere({ from, to, categoryId }),
+    include: {
+      product: { select: { id: true, code: true, name: true, costPrice: true, category: { select: { id: true, name: true } } } },
+      sale: { select: { createdAt: true } },
+    },
+  });
+
+  const map = new Map();
+  details.forEach(d => {
+    const entry = map.get(d.productId) || {
+      productId: d.productId,
+      code: d.product?.code || '-',
+      name: d.productName || d.product?.name || 'Producto',
+      category: d.product?.category?.name || '-',
+      quantity: 0,
+      revenue: 0,
+      cost: 0,
+    };
+    entry.quantity += d.quantity;
+    entry.revenue += Number(d.subtotal);
+    entry.cost += Number(d.unitCost ?? d.product?.costPrice ?? 0) * d.quantity;
+    map.set(d.productId, entry);
+  });
+
+  return Array.from(map.values()).map(p => ({
+    ...p,
+    revenue: round2(p.revenue),
+    cost: round2(p.cost),
+    profit: round2(p.revenue - p.cost),
+    margin: p.revenue > 0 ? round2(((p.revenue - p.cost) / p.revenue) * 100) : 0,
+  }));
+}
+
+/**
+ * Top selling products by quantity
+ */
+export async function getTopSoldProducts({ from, to, categoryId, limit = 10 }) {
+  const rows = await getProductAggregates({ from, to, categoryId });
+  const sorted = rows.sort((a, b) => b.quantity - a.quantity).slice(0, limit);
+  return {
+    totalSold: rows.reduce((sum, r) => sum + r.quantity, 0),
+    topProduct: sorted[0] || null,
+    data: sorted,
+  };
+}
+
+/**
+ * Most profitable products by gross profit
+ */
+export async function getMostProfitableProducts({ from, to, categoryId, limit = 10 }) {
+  const rows = await getProductAggregates({ from, to, categoryId });
+  const sorted = rows.sort((a, b) => b.profit - a.profit).slice(0, limit);
+  const avgMargin = rows.length > 0
+    ? round2(rows.reduce((sum, r) => sum + r.margin, 0) / rows.length)
+    : 0;
+  return {
+    mostProfitable: sorted[0] || null,
+    averageMargin: avgMargin,
+    data: sorted,
+  };
+}
+
+/**
+ * Products with lowest margin (below threshold)
+ */
+export async function getLowMarginProducts({ from, to, minMargin = 20 }) {
+  const rows = await getProductAggregates({ from, to });
+  return rows
+    .filter(r => r.margin < Number(minMargin))
+    .sort((a, b) => a.margin - b.margin);
+}
+
+/**
+ * Product performance grouped by category
+ */
+export async function getProductsByCategory({ from, to }) {
+  const rows = await getProductAggregates({ from, to });
+  const map = new Map();
+  rows.forEach(r => {
+    const entry = map.get(r.category) || { category: r.category, quantity: 0, revenue: 0, profit: 0, products: 0 };
+    entry.quantity += r.quantity;
+    entry.revenue += r.revenue;
+    entry.profit += r.profit;
+    entry.products += 1;
+    map.set(r.category, entry);
+  });
+  return Array.from(map.values())
+    .map(c => ({
+      ...c,
+      revenue: round2(c.revenue),
+      profit: round2(c.profit),
+      margin: c.revenue > 0 ? round2((c.profit / c.revenue) * 100) : 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue);
+}
+
+function buildSaleWhere({ from, to, userId, paymentMethod }) {
+  const where = {};
+  applyCreatedAtRange(where, from, to);
+  if (userId) where.userId = userId;
+  if (paymentMethod) where.paymentMethod = paymentMethod;
+  return where;
+}
+
+async function getCustomerAggregates({ from, to, docType, search }) {
+  const where = {};
+  applyCreatedAtRange(where, from, to);
+
+  const sales = await prisma.sale.findMany({
+    where,
+    include: {
+      customer: { select: { id: true, name: true, documentId: true, createdAt: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const map = new Map();
+  sales.forEach(s => {
+    if (!s.customerId) return;
+    const doc = s.customer?.documentId || '';
+    const digits = doc.replace(/\D/g, '');
+    const type = digits.length === 9 ? 'RNC' : digits.length === 11 ? 'CEDULA' : 'OTRO';
+    if (docType && type !== docType) return;
+    if (search) {
+      const q = search.toLowerCase();
+      const hay = `${s.customer?.name || ''} ${doc}`.toLowerCase();
+      if (!hay.includes(q)) return;
+    }
+    const entry = map.get(s.customerId) || {
+      customerId: s.customerId,
+      name: s.customer?.name || 'Cliente Desconocido',
+      documentId: doc || '-',
+      documentType: type,
+      orders: 0,
+      totalSpent: 0,
+      lastPurchase: null,
+      firstPurchase: null,
+    };
+    entry.orders += 1;
+    entry.totalSpent += Number(s.total);
+    if (!entry.lastPurchase || new Date(s.createdAt) > new Date(entry.lastPurchase)) {
+      entry.lastPurchase = s.createdAt;
+    }
+    if (!entry.firstPurchase || new Date(s.createdAt) < new Date(entry.firstPurchase)) {
+      entry.firstPurchase = s.createdAt;
+    }
+    map.set(s.customerId, entry);
+  });
+
+  return Array.from(map.values()).map(c => ({
+    ...c,
+    totalSpent: round2(c.totalSpent),
+    averageTicket: c.orders > 0 ? round2(c.totalSpent / c.orders) : 0,
+  }));
+}
+
+/**
+ * Top customers by total amount
+ */
+export async function getTopCustomersByAmount({ from, to, docType, search, limit = 10 }) {
+  const rows = await getCustomerAggregates({ from, to, docType, search });
+  const sorted = rows.sort((a, b) => b.totalSpent - a.totalSpent).slice(0, limit);
+  return {
+    uniqueCustomers: rows.length,
+    topCustomer: sorted[0] || null,
+    averageTicket: rows.length > 0
+      ? round2(rows.reduce((sum, r) => sum + r.totalSpent, 0) / rows.reduce((sum, r) => sum + r.orders, 0))
+      : 0,
+    data: sorted,
+  };
+}
+
+/**
+ * Top customers by purchase frequency
+ */
+export async function getTopCustomersByFrequency({ from, to, docType, search, limit = 10 }) {
+  const rows = await getCustomerAggregates({ from, to, docType, search });
+  return rows.sort((a, b) => b.orders - a.orders).slice(0, limit);
+}
+
+/**
+ * Purchase history for a specific customer
+ */
+export async function getCustomerHistory(customerId, { from, to } = {}) {
+  const where = { customerId };
+  applyCreatedAtRange(where, from, to);
+
+  const [customer, sales] = await Promise.all([
+    prisma.customer.findUnique({ where: { id: customerId } }),
+    prisma.sale.findMany({
+      where,
+      include: {
+        user: { select: { fullName: true } },
+        details: { include: { product: { select: { name: true } } } },
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  if (!customer) {
+    const { AppError } = await import('../../shared/exceptions/AppError.js');
+    throw AppError.notFound('Cliente no encontrado');
+  }
+
+  return {
+    customer,
+    totalSpent: round2(sales.reduce((sum, s) => sum + Number(s.total), 0)),
+    orders: sales.length,
+    sales: sales.map(s => ({
+      id: s.id,
+      invoiceNumber: s.invoiceNumber,
+      total: Number(s.total),
+      paymentMethod: s.paymentMethod,
+      sellerName: s.user?.fullName || s.userName,
+      createdAt: s.createdAt,
+      items: s.details.length,
+    })),
+  };
+}
+
+/**
+ * Staff performance (sales by user/cashier)
+ */
+export async function getStaffPerformance({ from, to, userId, paymentMethod }) {
+  const sales = await prisma.sale.findMany({
+    where: buildSaleWhere({ from, to, userId, paymentMethod }),
+    include: { user: { select: { id: true, username: true, fullName: true } } },
+  });
+
+  const map = new Map();
+  sales.forEach(s => {
+    const key = s.userId;
+    const entry = map.get(key) || {
+      userId: s.userId,
+      username: s.user?.username || '-',
+      fullName: s.user?.fullName || s.userName,
+      transactions: 0,
+      total: 0,
+    };
+    entry.transactions += 1;
+    entry.total += Number(s.total);
+    map.set(key, entry);
+  });
+
+  const rows = Array.from(map.values()).map(r => ({
+    ...r,
+    total: round2(r.total),
+    averageTicket: r.transactions > 0 ? round2(r.total / r.transactions) : 0,
+  })).sort((a, b) => b.total - a.total);
+
+  return {
+    bestPerformer: rows[0] || null,
+    totalTransactions: sales.length,
+    data: rows,
+  };
+}
+
+/**
+ * Payment methods breakdown by staff
+ */
+export async function getStaffPaymentMethods({ from, to, userId }) {
+  const sales = await prisma.sale.findMany({
+    where: buildSaleWhere({ from, to, userId }),
+    select: { userId: true, paymentMethod: true, total: true, createdAt: true },
+  });
+
+  const byUser = new Map();
+  sales.forEach(s => {
+    const entry = byUser.get(s.userId) || { userId: s.userId, EFECTIVO: 0, TARJETA: 0, cashCount: 0, cardCount: 0 };
+    if (s.paymentMethod === 'EFECTIVO') {
+      entry.EFECTIVO += Number(s.total);
+      entry.cashCount += 1;
+    } else {
+      entry.TARJETA += Number(s.total);
+      entry.cardCount += 1;
+    }
+    byUser.set(s.userId, entry);
+  });
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: Array.from(byUser.keys()) } },
+    select: { id: true, username: true, fullName: true },
+  });
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const byHour = {};
+  sales.forEach(s => {
+    const hour = new Date(s.createdAt).getHours();
+    const key = `${String(hour).padStart(2, '0')}:00`;
+    byHour[key] = (byHour[key] || 0) + 1;
+  });
+  const peakHours = Object.entries(byHour)
+    .map(([hour, count]) => ({ hour, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+
+  return {
+    byUser: Array.from(byUser.entries()).map(([userId, stats]) => ({
+      userId,
+      username: userMap.get(userId)?.username || '-',
+      fullName: userMap.get(userId)?.fullName || '-',
+      cashTotal: round2(stats.EFECTIVO),
+      cardTotal: round2(stats.TARJETA),
+      cashCount: stats.cashCount,
+      cardCount: stats.cardCount,
+      total: round2(stats.EFECTIVO + stats.TARJETA),
+    })),
+    peakHours,
   };
 }

@@ -21,7 +21,7 @@ router.get('/', authenticate, authorize('ADMINISTRADOR'), validate(saleQuerySche
  * @description Get sales for current user (vendedor)
  * @access Private (Admin, Vendedor)
  */
-router.get('/my-sales', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), salesController.getMySales);
+router.get('/my-sales', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), validate(saleQuerySchema), salesController.getMySales);
 
 /**
  * @route GET /api/sales/vendor-stats

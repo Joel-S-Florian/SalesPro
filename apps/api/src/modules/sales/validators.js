@@ -32,8 +32,8 @@ export const saleQuerySchema = z.object({
     customerId: z.string().cuid().optional(),
     userId: z.string().cuid().optional(),
     search: z.string().max(100).optional(),
-    startDate: z.string().datetime().optional(),
-    endDate: z.string().datetime().optional(),
+    startDate: z.string().min(1).max(30).optional(),
+    endDate: z.string().min(1).max(30).optional(),
     // Filtro de consulta también limitado a los métodos válidos
     paymentMethod: z.preprocess(
       (val) => typeof val === 'string' ? val.toUpperCase() : val, 

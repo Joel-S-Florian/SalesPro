@@ -29,7 +29,10 @@ export default function SalesHistory() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['sales', 'history', page, debouncedSearch, dateFrom, dateTo],
     queryFn: () => {
-      const params = { page, limit, search: debouncedSearch, startDate: dateFrom || undefined, endDate: dateTo || undefined };
+      const params = { page, limit };
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (dateFrom) params.startDate = dateFrom;
+      if (dateTo) params.endDate = dateTo;
       return isAdministrator ? api.sales.list(params) : api.sales.mySales(params);
     },
   });
