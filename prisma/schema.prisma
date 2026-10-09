@@ -8,18 +8,22 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(cuid())
-  username      String         @unique
-  passwordHash  String
-  fullName      String
-  role          UserRole       @default(VENDEDOR)
-  active        Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  auditLogs     AuditLog[]
-  inventoryLogs InventoryLog[]
-  sales         Sale[]         @relation("SaleUser")
-  sessions      Session[]
+  id                String         @id @default(cuid())
+  username          String         @unique
+  passwordHash      String
+  fullName          String
+  role              UserRole       @default(VENDEDOR)
+  active            Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  auditLogs         AuditLog[]
+  inventoryLogs     InventoryLog[]
+  sales             Sale[]         @relation("SaleUser")
+  sessions          Session[]
+  terminals         Terminal[]     @relation("TerminalUsers")
+  defaultTerminalId String?
+  defaultTerminal   Terminal?      @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
+  cashierCloses     CashierClose[] @relation("CloseCashier")
 
   @@map("users")
 }
@@ -82,23 +86,27 @@ model Customer {
 }
 
 model Sale {
-  id            String        @id @default(cuid())
-  invoiceNumber String        @unique
-  ncfType       NCFType       @default(B01)
-  customerId    String
-  customerName  String
-  userId        String
-  userName      String
-  subtotal      Float
-  tax           Float
-  discount      Float         @default(0)
-  total         Float
-  paymentMethod PaymentMethod
-  notes         String?
-  createdAt     DateTime      @default(now())
-  details       SaleDetail[]
-  customer      Customer      @relation(fields: [customerId], references: [id])
-  user          User          @relation("SaleUser", fields: [userId], references: [id])
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  ncfType        NCFType       @default(B01)
+  customerId     String
+  customerName   String
+  userId         String
+  userName       String
+  subtotal       Float
+  tax            Float
+  discount       Float         @default(0)
+  total          Float
+  paymentMethod  PaymentMethod
+  notes          String?
+  createdAt      DateTime      @default(now())
+  terminalId     String?
+  cashierCloseId String?
+  details        SaleDetail[]
+  terminal       Terminal?     @relation(fields: [terminalId], references: [id])
+  cashierClose   CashierClose? @relation(fields: [cashierCloseId], references: [id])
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  user           User          @relation("SaleUser", fields: [userId], references: [id])
 
   @@map("sales")
 }
@@ -120,23 +128,136 @@ model SaleDetail {
 }
 
 model InventoryLog {
-  id          String        @id @default(cuid())
-  productId   String
-  productName String
-  type        InventoryType
-  quantity    Int
-  reason      String
-  userId      String
-  userName    String
-  unitCost    Float?
-  totalCost   Float?
-  supplier    String?
+  id            String        @id @default(cuid())
+  productId     String
+  productName   String
+  type          InventoryType
+  quantity      Int
+  reason        String
+  userId        String
+  userName      String
+  unitCost      Float?
+  totalCost     Float?
+  supplier      String?
+  supplierId    String?
   invoiceNumber String?
-  createdAt   DateTime      @default(now())
-  product     Product       @relation(fields: [productId], references: [id])
-  user        User          @relation(fields: [userId], references: [id])
+  createdAt     DateTime      @default(now())
+  product       Product       @relation(fields: [productId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+  supplierRef   Supplier?     @relation(fields: [supplierId], references: [id])
 
   @@map("inventory_logs")
+}
+
+model Supplier {
+  id           String         @id @default(cuid())
+  name         String
+  rnc          String?        @unique
+  contactName  String?
+  email        String?
+  phone        String?
+  address      String?
+  paymentTerms String?
+  active       Boolean        @default(true)
+  companyId    String? // reservado para multi-cliente
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  purchases    InventoryLog[]
+
+  @@map("suppliers")
+}
+
+model SystemConfig {
+  key       String   @id
+  value     Json
+  companyId String? // reservado para multi-cliente
+  updatedAt DateTime @updatedAt
+
+  @@map("system_config")
+}
+
+model Terminal {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  active        Boolean        @default(true)
+  companyId     String? // reservado para multi-cliente
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         User[]         @relation("TerminalUsers")
+  defaultFor    User[]         @relation("DefaultTerminal")
+  sales         Sale[]
+  cashierCloses CashierClose[]
+
+  @@map("terminals")
+}
+
+model CashierClose {
+  id             String      @id @default(cuid())
+  terminalId     String
+  userId         String
+  openedAt       DateTime    @default(now())
+  closedAt       DateTime?
+  openingBalance Float       @default(0)
+  expectedCash   Float?
+  declaredCash   Float?
+  difference     Float?
+  status         CloseStatus @default(OPEN)
+  notes          String?
+  summary        Json?
+  terminal       Terminal    @relation(fields: [terminalId], references: [id])
+  user           User        @relation("CloseCashier", fields: [userId], references: [id])
+  sales          Sale[]
+
+  @@map("cashier_closes")
+}
+
+enum CloseStatus {
+  OPEN
+  CLOSED
+}
+
+model InventoryImport {
+  id         String               @id @default(cuid())
+  fileName   String
+  status     ImportStatus         @default(STAGED)
+  userId     String
+  userName   String
+  supplierId String?
+  mapping    Json?
+  options    Json?
+  summary    Json?
+  companyId  String? // reservado para multi-cliente
+  createdAt  DateTime             @default(now())
+  appliedAt  DateTime?
+  rows       InventoryImportRow[]
+
+  @@map("inventory_imports")
+}
+
+model InventoryImportRow {
+  id        String           @id @default(cuid())
+  importId  String
+  rowNumber Int
+  raw       Json // fila original sin modificar (auditoría)
+  data      Json? // fila sanitizada y normalizada
+  action    ImportRowAction?
+  errors    Json?
+  import    InventoryImport  @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId])
+  @@map("inventory_import_rows")
+}
+
+enum ImportStatus {
+  STAGED
+  APPLIED
+  CANCELED
+}
+
+enum ImportRowAction {
+  CREATE
+  UPDATE
+  INVALID
 }
 
 model AuditLog {

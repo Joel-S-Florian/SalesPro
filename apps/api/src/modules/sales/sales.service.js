@@ -3,7 +3,10 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange, cleanFilterString, cleanPaymentMethod } from '../../shared/utils/helpers.js';
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
-import { TAX_RATE } from '../../../../../packages/shared/constants.js';
+import { comparePassword } from '../../shared/utils/crypto.js';
+import { createAuditLog } from '../../shared/middleware/audit.js';
+import { getConfig } from '../config/config.service.js';
+import { resolveShiftForSale } from '../cashier/cashier.service.js';
 
 function applyDateRange(where, startDate, endDate) {
   applyCreatedAtRange(where, startDate, endDate);
@@ -220,8 +223,16 @@ export async function getVendorStats(userId) {
 /**
  * Create new sale (POS)
  */
-export async function createSale(data, userId, userName) {
-  const { customerId, details, discount, paymentMethod, notes } = data;
+export async function createSale(data, userId, userName, requester = { userId, role: 'VENDEDOR' }) {
+  const { customerId, details, discount, paymentMethod, notes, terminalId } = data;
+  const config = await getConfig();
+
+  if (requester.role === 'VENDEDOR' && !config.vendedorCanDiscount) {
+    const hasDiscount = Number(discount || 0) > 0 || details.some(d => Number(d.discount || 0) > 0);
+    if (hasDiscount) throw AppError.forbidden('Los vendedores no pueden aplicar descuentos');
+  }
+
+  const shift = await resolveShiftForSale(requester, terminalId, config);
 
   // Verify customer exists
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
@@ -266,13 +277,14 @@ export async function createSale(data, userId, userName) {
 
   const finalDiscount = Number(discount || 0);
   const taxableAmount = Math.max(0, subtotal - finalDiscount);
-  const tax = round2(taxableAmount * TAX_RATE);
+  const tax = round2(taxableAmount * config.taxRate);
   const total = round2(taxableAmount + tax);
 
-  // Normalize payment method to uppercase enum (Solo Efectivo y Tarjeta)
-  const validMethods = ['EFECTIVO', 'TARJETA'];
-  const rawMethod = (paymentMethod || 'EFECTIVO').toUpperCase();
-  const normalizedPaymentMethod = validMethods.includes(rawMethod) ? rawMethod : 'EFECTIVO';
+  // Método de pago: debe estar habilitado en la configuración
+  const normalizedPaymentMethod = (paymentMethod || 'EFECTIVO').toUpperCase();
+  if (!config.paymentMethods.includes(normalizedPaymentMethod)) {
+    throw AppError.badRequest('Método de pago no habilitado');
+  }
 
   // Determine NCF type
   const ncfType = determineNCFType(customer, total);
@@ -295,6 +307,8 @@ export async function createSale(data, userId, userName) {
         total,
         paymentMethod: normalizedPaymentMethod,
         notes: notes || null,
+        terminalId: shift.terminalId,
+        cashierCloseId: shift.cashierCloseId,
         details: {
           create: saleDetails.map(d => ({
             productId: d.productId,
@@ -498,4 +512,44 @@ export async function getSalesByDay() {
       count: stat.count,
     };
   });
+}
+
+/**
+ * Registra en AuditLog la eliminación de un item del carrito.
+ * Un ADMINISTRADOR se autoriza solo; un VENDEDOR requiere credenciales de un administrador activo.
+ */
+export async function logCartRemoval(data, requester, meta = {}) {
+  const { productId, quantity, reason, adminUsername, adminPassword } = data;
+
+  let authorizer = { id: requester.userId, username: requester.username };
+
+  if (requester.role !== 'ADMINISTRADOR') {
+    const invalid = () => AppError.forbidden('Credenciales de administrador inválidas');
+    if (!adminUsername || !adminPassword) throw invalid();
+
+    const admin = await prisma.user.findUnique({ where: { username: adminUsername.toLowerCase() } });
+    if (!admin || !admin.active || admin.role !== 'ADMINISTRADOR') throw invalid();
+    if (!(await comparePassword(adminPassword, admin.passwordHash))) throw invalid();
+
+    authorizer = { id: admin.id, username: admin.username };
+  }
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true, code: true, name: true },
+  });
+  if (!product) throw AppError.notFound('Producto no encontrado');
+
+  await createAuditLog({
+    userId: requester.userId,
+    action: 'CART_ITEM_REMOVED',
+    entity: 'cart',
+    entityId: product.id,
+    oldData: { productCode: product.code, productName: product.name, quantity },
+    newData: { reason: reason || null, authorizedBy: authorizer, removedBy: requester.username },
+    ipAddress: meta.ip,
+    userAgent: meta.userAgent,
+  });
+
+  return { ok: true, authorizedBy: authorizer.username };
 }

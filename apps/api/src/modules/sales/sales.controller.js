@@ -46,7 +46,7 @@ export const getVendorStats = asyncHandler(async (req, res) => {
 });
 
 export const createSale = asyncHandler(async (req, res) => {
-  const sale = await salesService.createSale(req.body, req.user.userId, req.user.fullName);
+  const sale = await salesService.createSale(req.body, req.user.userId, req.user.fullName, req.user);
   res.status(201).json(sale);
 });
 
@@ -55,4 +55,11 @@ export const createCreditNote = asyncHandler(async (req, res) => {
   const { details, reason } = req.body;
   const creditNote = await salesService.createCreditNote(id, { details, reason }, req.user.userId, req.user.fullName);
   res.status(201).json(creditNote);
+});
+export const logCartRemoval = asyncHandler(async (req, res) => {
+  const result = await salesService.logCartRemoval(req.body, req.user, {
+    ip: req.ip,
+    userAgent: req.headers['user-agent'],
+  });
+  res.json(result);
 });

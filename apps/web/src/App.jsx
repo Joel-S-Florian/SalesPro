@@ -2,12 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { api } from './services/api';
 import { useAuthStore } from './stores/authStore';
 import { useAuthMe } from './hooks/queries';
+import { useConfigStore } from './stores/configStore';
 import Dashboard from './pages/Dashboard';
 import SalesPOS from './pages/SalesPOS';
 import Products from './pages/Products';
 import Categories from './pages/Categories';
 import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
+import Suppliers from './pages/Suppliers';
+import Settings from './pages/Settings';
+import ImportInventory from './pages/ImportInventory';
+import BarcodeLabels from './pages/BarcodeLabels';
+import CashierCloses from './pages/CashierCloses';
 import UsersPage from './pages/Users';
 import Reports from './pages/Reports';
 import SalesHistory from './pages/SalesHistory';
@@ -32,13 +38,22 @@ import {
   Loader2,
   LockKeyhole,
   Receipt,
-  Wallet
+  Wallet,
+  Truck,
+  Settings as SettingsIcon,
+  Calculator,
+  FileUp,
+  Barcode
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const { user, isAuthenticated, accessToken, refreshToken, login, logout, setUser } = useAuthStore();
   const { data: authData, isLoading: authLoading, error: authError } = useAuthMe();
+  const loadConfig = useConfigStore(state => state.load);
+  useEffect(() => {
+    if (isAuthenticated) loadConfig();
+  }, [isAuthenticated, loadConfig]);
   const [loginError, setLoginError] = useState(null);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -121,7 +136,7 @@ export default function App() {
         </div>
         <div className="relative z-10 flex flex-col items-center space-y-4">
           <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
-          <p className="text-sm font-mono text-slate-500 dark:text-slate-400">Iniciando sistema SalesPro v2...</p>
+          <p className="text-sm font-mono text-slate-500 dark:text-slate-400">Iniciando sistema Factos...</p>
         </div>
       </div>
     );
@@ -148,7 +163,7 @@ export default function App() {
           {/* Logo Heading */}
           <div className="text-center space-y-1.5">
             <span className="text-xs bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-extrabold px-3 py-1 rounded-full font-mono uppercase tracking-wider">
-              SalesPro v2
+              Factos
             </span>
             <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight font-display">
               Sistema de Ventas
@@ -249,10 +264,15 @@ export default function App() {
     { id: 'PRODUCTS', label: 'Productos', icon: Package, roles: ['ADMINISTRADOR'] },
     { id: 'CATEGORIES', label: 'Categorías', icon: Tag, roles: ['ADMINISTRADOR'] },
     { id: 'CUSTOMERS', label: 'Clientes', icon: Users, roles: ['ADMINISTRADOR'] },
+    { id: 'IMPORT_INVENTORY', label: 'Importar Inventario', icon: FileUp, roles: ['ADMINISTRADOR'] },
+    { id: 'BARCODE_LABELS', label: 'Etiquetas / Códigos', icon: Barcode, roles: ['ADMINISTRADOR'] },
+    { id: 'SUPPLIERS', label: 'Proveedores', icon: Truck, roles: ['ADMINISTRADOR'] },
     { id: 'INVENTORY', label: 'Inventario / Kárdex', icon: Archive, roles: ['ADMINISTRADOR'] },
     { id: 'USERS', label: 'Personal / Roles', icon: UserCheck, roles: ['ADMINISTRADOR'] },
     { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR'] },
-    { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] }
+    { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] },
+    { id: 'CASHIER_CLOSES', label: 'Cierres de Caja', icon: Calculator, roles: ['ADMINISTRADOR'] },
+    { id: 'SETTINGS', label: 'Configuración', icon: SettingsIcon, roles: ['ADMINISTRADOR'] }
   ];
 
   // TAB RENDERING ROUTER
@@ -290,6 +310,12 @@ export default function App() {
         return <Categories />;
       case 'CUSTOMERS':
         return <Customers />;
+      case 'IMPORT_INVENTORY':
+        return <ImportInventory />;
+      case 'BARCODE_LABELS':
+        return <BarcodeLabels />;
+      case 'SUPPLIERS':
+        return <Suppliers />;
       case 'INVENTORY':
         return <Inventory />;
       case 'USERS':
@@ -298,6 +324,10 @@ export default function App() {
         return <Reports />;
       case 'FINANCE':
         return <Finance />;
+      case 'CASHIER_CLOSES':
+        return <CashierCloses />;
+      case 'SETTINGS':
+        return <Settings />;
       case 'UNAUTHORIZED':
         return <Unauthorized />;
       default:
@@ -306,7 +336,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="salespro-app">
+    <div className="min-h-screen relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="factos-app">
       {/* Mesh Background */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#f4f6fa] dark:bg-[#090d16]">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-200/35 dark:bg-indigo-950/20 blur-[120px]"></div>
@@ -319,7 +349,7 @@ export default function App() {
         {/* Sidebar Header */}
         <div className="p-6 border-b border-white/20 dark:border-slate-800/40 flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-wider font-display">SALESPRO v2</h1>
+            <h1 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-wider font-display">FACTOS</h1>
             <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 px-2.5 py-0.5 rounded-full font-bold font-mono">
               SISTEMA COMERCIAL
             </span>
@@ -395,7 +425,7 @@ export default function App() {
             >
               <div className="p-6 border-b border-white/20 dark:border-slate-800/40 flex items-center justify-between">
                 <div className="space-y-1">
-                  <h1 className="text-md font-extrabold text-slate-900 dark:text-white tracking-wider font-display">SALESPRO v2</h1>
+                  <h1 className="text-md font-extrabold text-slate-900 dark:text-white tracking-wider font-display">FACTOS</h1>
                   <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold font-mono">
                     SISTEMA COMERCIAL
                   </span>
@@ -476,7 +506,7 @@ export default function App() {
               <Menu className="w-5.5 h-5.5" />
             </button>
             <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider font-sans">
-              SalesPro v2
+              Factos
             </span>
           </div>
 

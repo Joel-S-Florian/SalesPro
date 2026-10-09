@@ -1,6 +1,9 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { X, FileText, User, Printer } from 'lucide-react';
+import { printReceipt } from '../utils/receiptPdf';
+import ReceiptFormatSelect from './ReceiptFormatSelect';
+import { formatTaxPercent } from '../stores/configStore';
 import { api } from '../services/api';
 
 export default function SaleDetailModal({ isOpen, onClose, saleId }) {
@@ -31,6 +34,8 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
   const subtotal = Number(sale?.subtotal || 0);
   const discount = Number(sale?.discount || 0);
   const tax = Number(sale?.tax || 0);
+  const taxBase = subtotal - discount;
+  const taxPercent = formatTaxPercent(taxBase > 0 ? tax / taxBase : 0);
   const total = Number(sale?.total || 0);
   const taxableAmount = Math.max(0, subtotal - discount);
 
@@ -297,7 +302,7 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-500 dark:text-slate-400">ITBIS (18%)</span>
+                    <span className="text-slate-500 dark:text-slate-400">ITBIS ({taxPercent}%)</span>
                     <span className="font-mono font-medium text-slate-900 dark:text-slate-100">
                       {formatCurrency(tax)}
                     </span>
@@ -313,6 +318,14 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
 
               {/* Footer Actions */}
               <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/50 rounded-b-2xl">
+                <ReceiptFormatSelect />
+                <button
+                  onClick={() => printReceipt(sale)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-sm font-medium flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Reimprimir / Descargar PDF
+                </button>
                 <button
                   onClick={onClose}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-sm font-medium"

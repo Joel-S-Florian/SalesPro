@@ -24,7 +24,12 @@ async function parseJsonSafe(res) {
 async function handleResponse(res) {
   if (!res.ok) {
     const data = await parseJsonSafe(res);
-    const error = new Error(data?.error || 'Ha ocurrido un error inesperado');
+    const detail = Array.isArray(data?.details)
+      ? data.details.map(d => (d.field ? `${d.field}: ${d.message}` : d.message)).join('; ')
+      : '';
+    const error = new Error(
+      (data?.error || 'Ha ocurrido un error inesperado') + (detail ? ` (${detail})` : '')
+    );
     error.status = res.status;
     error.code = data?.error;
     throw error;
@@ -207,6 +212,44 @@ export const api = {
     delete: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
   },
 
+  inventoryImport: {
+    stage: (payload) => request('/inventory-import', { method: 'POST', body: JSON.stringify(payload) }),
+    preview: (id, payload) =>
+      request(`/inventory-import/${id}/preview`, { method: 'POST', body: JSON.stringify(payload) }),
+    apply: (id) => request(`/inventory-import/${id}/apply`, { method: 'POST' }),
+    cancel: (id) => request(`/inventory-import/${id}`, { method: 'DELETE' }),
+  },
+
+  config: {
+    get: () => request('/config'),
+    update: (payload) => request('/config', { method: 'PUT', body: JSON.stringify(payload) }),
+  },
+
+  terminals: {
+    list: () => request('/terminals'),
+    mine: () => request('/terminals/my'),
+    create: (payload) => request('/terminals', { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/terminals/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    setDefault: (terminalId) =>
+      request('/terminals/my/default', { method: 'PUT', body: JSON.stringify({ terminalId }) }),
+  },
+
+  cashier: {
+    current: (terminalId) => request(`/cashier/current?terminalId=${terminalId}`),
+    open: (payload) => request('/cashier/open', { method: 'POST', body: JSON.stringify(payload) }),
+    close: (id, payload) => request(`/cashier/${id}/close`, { method: 'POST', body: JSON.stringify(payload) }),
+    list: (params = {}) => request(`/cashier?${toQuery(params)}`),
+    get: (id) => request(`/cashier/${id}`),
+  },
+
+  suppliers: {
+    list: (params = {}) => request(`/suppliers?${toQuery(params)}`),
+    get: (id) => request(`/suppliers/${id}`),
+    create: (payload) => request('/suppliers', { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    purchases: (id, params = {}) => request(`/suppliers/${id}/purchases?${toQuery(params)}`),
+  },
+
   sales: {
     // Se elimina normalizeList para preservar la estructura { data: [...], pagination: {...} }
     list: (params = {}) =>
@@ -224,6 +267,9 @@ export const api = {
       request(`/sales/my-sales?${toQuery(params)}`),
 
     vendorStats: () => request('/sales/vendor-stats'),
+
+    logCartRemoval: (payload) =>
+      request('/sales/cart-removal', { method: 'POST', body: JSON.stringify(payload) }),
   },
 
   inventory: {

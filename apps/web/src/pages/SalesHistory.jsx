@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { api } from '../services/api';
-import { Eye, Search } from 'lucide-react';
+import { Eye, Printer, Search } from 'lucide-react';
+import { reprintSaleById } from '../utils/receiptPdf';
 import { motion } from 'motion/react';
 import SaleDetailModal from '../components/SaleDetailModal';
 
@@ -186,6 +187,13 @@ export default function SalesHistory() {
                         title="Ver detalle"
                       >
                         <Eye className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => reprintSaleById(sale.id)}
+                        className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="Reimprimir / Descargar PDF"
+                      >
+                        <Printer className="w-4 h-4" />
                       </button>
                     </td>
                   </motion.tr>

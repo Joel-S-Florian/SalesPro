@@ -14,32 +14,32 @@ server.use('/api', app);
 async function startServer() {
   try {
     await initializeNCFSequences();
-    console.log('[SalesPro] NCF sequences initialized');
+    console.log('[Factos] NCF sequences initialized');
   } catch (error) {
-    console.warn('[SalesPro] Failed to initialize NCF sequences:', error.message);
+    console.warn('[Factos] Failed to initialize NCF sequences:', error.message);
   }
 
   try {
     await prisma.$queryRaw`SELECT 1`;
-    console.log('[SalesPro] Database connected');
+    console.log('[Factos] Database connected');
   } catch (error) {
-    console.error('[SalesPro] Database connection failed:', error.message);
+    console.error('[Factos] Database connection failed:', error.message);
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SalesPro v2] Servidor ejecutándose en http://0.0.0.0:${PORT}`);
-    console.log(`[SalesPro v2] Environment: ${env.NODE_ENV}`);
+    console.log(`[Factos] Servidor ejecutándose en http://0.0.0.0:${PORT}`);
+    console.log(`[Factos] Environment: ${env.NODE_ENV}`);
   });
 }
 
 process.on('SIGTERM', async () => {
-  console.log('[SalesPro] SIGTERM received, shutting down gracefully...');
+  console.log('[Factos] SIGTERM received, shutting down gracefully...');
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('[SalesPro] SIGINT received, shutting down gracefully...');
+  console.log('[Factos] SIGINT received, shutting down gracefully...');
   await prisma.$disconnect();
   process.exit(0);
 });

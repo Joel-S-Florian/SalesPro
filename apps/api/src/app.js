@@ -16,6 +16,11 @@ import customersRoutes from './modules/customers/customers.routes.js';
 import salesRoutes from './modules/sales/sales.routes.js';
 import inventoryRoutes from './modules/inventory/inventory.routes.js';
 import reportsRoutes from './modules/reports/reports.routes.js';
+import suppliersRoutes from './modules/suppliers/suppliers.routes.js';
+import configRoutes from './modules/config/config.routes.js';
+import terminalsRoutes from './modules/terminals/terminals.routes.js';
+import cashierRoutes from './modules/cashier/cashier.routes.js';
+import inventoryImportRoutes from './modules/inventory-import/inventory-import.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
 
 const app = express();
@@ -69,6 +74,11 @@ app.use('/sales', salesRoutes);
 app.use('/inventory', inventoryRoutes);
 app.use('/reports', reportsRoutes);
 app.use('/finance', financeRoutes);
+app.use('/suppliers', suppliersRoutes);
+app.use('/config', configRoutes);
+app.use('/terminals', terminalsRoutes);
+app.use('/cashier', cashierRoutes);
+app.use('/inventory-import', inventoryImportRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

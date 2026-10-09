@@ -132,7 +132,16 @@ export async function adjustStock(data, userId, userName) {
  * Register purchase from supplier (entry with cost)
  */
 export async function registerPurchase(data, userId, userName) {
-  const { productId, quantity, unitCost, supplier, invoiceNumber } = data;
+  const { productId, quantity, unitCost, supplierId, invoiceNumber } = data;
+  let supplier = data.supplier;
+
+  if (supplierId) {
+    const supplierRecord = await prisma.supplier.findUnique({ where: { id: supplierId } });
+    if (!supplierRecord || !supplierRecord.active) {
+      throw AppError.notFound('Proveedor no encontrado o inactivo');
+    }
+    supplier = supplierRecord.name;
+  }
 
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) {
@@ -170,6 +179,7 @@ export async function registerPurchase(data, userId, userName) {
         unitCost: Number(unitCost),
         totalCost,
         supplier,
+        supplierId: supplierId || null,
         invoiceNumber: invoiceNumber || null,
       },
     });

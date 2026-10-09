@@ -1,5 +1,5 @@
 {
-  "name": "salespro-v2",
+  "name": "factos",
   "private": true,
   "version": "1.0.0",
   "workspaces": [
@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
-    "dev:web": "npm run dev --workspace @salespro/web",
-    "dev:api": "npm run dev --workspace @salespro/api",
+    "dev:web": "npm run dev --workspace @factos/web",
+    "dev:api": "npm run dev --workspace @factos/api",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspaces --if-present",
     "clean": "rm -rf apps/web/dist dist",

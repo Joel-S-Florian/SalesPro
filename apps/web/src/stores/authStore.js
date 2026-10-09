@@ -126,7 +126,7 @@ export const useAuthStore = create(
       },
     }),
     {
-      name: 'salespro-auth',
+      name: 'factos-auth',
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,

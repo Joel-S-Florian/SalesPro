@@ -1,15 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, ShoppingCart, Trash2, UserPlus, Printer, CheckCircle, FileText, Download } from 'lucide-react';
+import { Camera, Plug, Monitor, Maximize2, Minimize2, Expand, Loader2, Plus, Search, ShoppingCart, Trash2, UserPlus, Printer, CheckCircle, FileText, Download } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { printReceipt } from '../utils/receiptPdf';
+import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
+import { useShift } from '../hooks/useShift';
+import CameraScannerModal from '../components/CameraScannerModal';
+import { useSerialScanner } from '../hooks/useSerialScanner';
+import { CUSTOMER_DISPLAY_CHANNEL, openCustomerDisplay } from '../utils/customerDisplay';
+import ShiftBar from '../components/ShiftBar';
+import { useConfigStore, formatTaxPercent } from '../stores/configStore';
+import ReceiptFormatSelect from '../components/ReceiptFormatSelect';
 
 export default function SalesPOS() {
   const { isVendedor } = useAuthorization();
-  const canApplyDiscount = !isVendedor;
+  const config = useConfigStore(state => state.config);
+  const shiftState = useShift();
+  const canApplyDiscount = !isVendedor || config.vendedorCanDiscount;
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +29,7 @@ export default function SalesPOS() {
   const [selectedCustomerId, setSelectedCustomerId] = useState('');
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('EFECTIVO');
+  const activePaymentMethod = config.paymentMethods.includes(paymentMethod) ? paymentMethod : config.paymentMethods[0];
 
   // Search states
   const [prodSearch, setProdSearch] = useState('');
@@ -37,6 +47,21 @@ export default function SalesPOS() {
   // Success invoice bill modal
   const [recentSale, setRecentSale] = useState(null);
   const [submittingSale, setSubmittingSale] = useState(false);
+
+  // Cart item removal confirmation
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cashierMode, setCashierMode] = useState(() => {
+    try {
+      return localStorage.getItem('factos-pos-large') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [removeTarget, setRemoveTarget] = useState(null);
+  const [removeAdminUser, setRemoveAdminUser] = useState('');
+  const [removeAdminPass, setRemoveAdminPass] = useState('');
+  const [removeError, setRemoveError] = useState('');
+  const [removing, setRemoving] = useState(false);
 
   const loadData = async () => {
     try {
@@ -115,7 +140,36 @@ export default function SalesPOS() {
   };
 
   const handleRemoveItem = (prodId) => {
-    setCart(cart.filter(x => x.product.id !== prodId));
+    const item = cart.find(x => x.product.id === prodId);
+    if (!item) return;
+    setRemoveAdminUser('');
+    setRemoveAdminPass('');
+    setRemoveError('');
+    setRemoveTarget(item);
+  };
+
+  const closeRemoveModal = () => {
+    if (!removing) setRemoveTarget(null);
+  };
+
+  const confirmRemoveItem = async (e) => {
+    e.preventDefault();
+    if (!removeTarget) return;
+    try {
+      setRemoving(true);
+      setRemoveError('');
+      await api.sales.logCartRemoval({
+        productId: removeTarget.product.id,
+        quantity: removeTarget.quantity,
+        ...(isVendedor ? { adminUsername: removeAdminUser.trim(), adminPassword: removeAdminPass } : {}),
+      });
+      setCart(prev => prev.filter(x => x.product.id !== removeTarget.product.id));
+      setRemoveTarget(null);
+    } catch (err) {
+      setRemoveError(err.message || 'No se pudo autorizar la eliminación');
+    } finally {
+      setRemoving(false);
+    }
   };
 
   // Calculations
@@ -123,7 +177,8 @@ export default function SalesPOS() {
   const cartItemDiscounts = cart.reduce((acc, item) => acc + Number(item.discount || 0), 0);
   const totalDiscount = cartItemDiscounts + (Number(globalDiscount) || 0);
   const taxableAmount = Math.max(0, cartSubtotal - totalDiscount);
-  const cartTax = taxableAmount * 0.18; // 18% ITBIS
+  const cartTax = taxableAmount * config.taxRate;
+  const taxPercent = formatTaxPercent(config.taxRate);
   const cartTotal = taxableAmount + cartTax;
 
   const handleCreateCustomer = async (e) => {
@@ -182,9 +237,10 @@ export default function SalesPOS() {
 
       const payload = {
         customerId: selectedCustomerId,
+        ...(shiftState.terminalId ? { terminalId: shiftState.terminalId } : {}),
         details,
         discount: Number(globalDiscount || 0),
-        paymentMethod: (paymentMethod || 'EFECTIVO').toUpperCase()
+        paymentMethod: activePaymentMethod
       };
 
       const saleReceipt = await api.sales.create(payload);
@@ -192,8 +248,9 @@ export default function SalesPOS() {
       setCart([]);
       setGlobalDiscount(0);
       setPaymentMethod('EFECTIVO');
-      // Reload stocks
+      // Reload stocks and shift totals
       loadData();
+      shiftState.refreshShift();
     } catch (err) {
       alert(err.message || 'Error al procesar venta');
     } finally {
@@ -207,265 +264,89 @@ export default function SalesPOS() {
     (p.code || '').toLowerCase().includes((prodSearch || '').toLowerCase())
   );
 
-  /**
-   * Genera comprobante fiscal / factura oficial en formato PDF profesional usando jsPDF y jspdf-autotable.
-   */
-  const handlePrint = () => {
-    if (!recentSale) return;
-
+  const toggleCashierMode = () => {
+    const next = !cashierMode;
+    setCashierMode(next);
     try {
-      const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const pageWidth = doc.internal.pageSize.getWidth();
-
-      // Top decorative bar
-      doc.setFillColor(79, 70, 229); // Indigo 600
-      doc.rect(0, 0, pageWidth, 5, 'F');
-
-      // Header: Business Information
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(18);
-      doc.setTextColor(30, 41, 59); // Slate 800
-      doc.text('SALESPRO v2', 14, 18);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(100, 116, 139); // Slate 500
-      doc.text('Sistema de Facturación & Control de Inventarios', 14, 23);
-      doc.text('RNC: 1-31-88942-1 | Registro Mercantil: 104299', 14, 27.5);
-      doc.text('Av. 27 de Febrero #100, Santo Domingo, Rep. Dom.', 14, 32);
-      doc.text('Tel: (809) 555-0199 | Email: ventas@salespro.com', 14, 36.5);
-
-      // NCF / Invoice Badge Box (Right side)
-      const badgeX = pageWidth - 80;
-      const badgeY = 12;
-      const badgeWidth = 66;
-      const badgeHeight = 27;
-
-      doc.setFillColor(248, 250, 252); // Slate 50
-      doc.setDrawColor(199, 210, 254); // Indigo 200
-      doc.roundedRect(badgeX, badgeY, badgeWidth, badgeHeight, 2, 2, 'FD');
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
-      doc.setTextColor(79, 70, 229); // Indigo 600
-      doc.text('FACTURA / COMPROBANTE FISCAL', badgeX + badgeWidth / 2, badgeY + 6, { align: 'center' });
-
-      doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42); // Slate 900
-      doc.text(recentSale.invoiceNumber || 'B0200000001', badgeX + badgeWidth / 2, badgeY + 13.5, { align: 'center' });
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(100, 116, 139);
-      const ncfLabel = recentSale.ncfType === 'B01'
-        ? 'Crédito Fiscal (B01)'
-        : recentSale.ncfType === 'B02'
-          ? 'Consumo Final (B02)'
-          : `Tipo NCF: ${recentSale.ncfType || 'B02'}`;
-      doc.text(ncfLabel, badgeX + badgeWidth / 2, badgeY + 19, { align: 'center' });
-      doc.text('Válido para fines tributarios', badgeX + badgeWidth / 2, badgeY + 23.5, { align: 'center' });
-
-      // Horizontal Divider
-      doc.setDrawColor(226, 232, 240); // Slate 200
-      doc.setLineWidth(0.5);
-      doc.line(14, 43, pageWidth - 14, 43);
-
-      // Metadata Grid: Customer Info & Transaction Info
-      const custName = recentSale.customerName || recentSale.customer?.name || 'CONSUMIDOR FINAL';
-      const custDoc = recentSale.customer?.documentId || recentSale.customer?.rnc || '000-0000000-0';
-      const custPhone = recentSale.customer?.phone || recentSale.customer?.address || 'N/D';
-
-      const saleDate = new Date(recentSale.createdAt || Date.now()).toLocaleString('es-DO', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-      const payment = recentSale.paymentMethod || 'EFECTIVO';
-      const cashier = recentSale.userName || recentSale.user?.fullName || 'Cajero Principal';
-
-      // Column 1: Customer Details
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text('DATOS DEL CLIENTE', 14, 48);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(30, 41, 59);
-      doc.text(`Nombre / Razón:`, 14, 53);
-      doc.setFont('helvetica', 'bold');
-      doc.text(custName.substring(0, 35), 40, 53);
-
-      doc.setFont('helvetica', 'normal');
-      doc.text(`RNC / Cédula:`, 14, 58);
-      doc.setFont('helvetica', 'bold');
-      doc.text(custDoc, 40, 58);
-
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Contacto:`, 14, 63);
-      doc.text(custPhone.substring(0, 35), 40, 63);
-
-      // Column 2: Sale & Fiscal Details
-      const col2X = 118;
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text('DATOS DE EMISIÓN', col2X, 48);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(30, 41, 59);
-      doc.text(`Fecha Emisión:`, col2X, 53);
-      doc.text(saleDate, col2X + 26, 53);
-
-      doc.text(`Método Pago:`, col2X, 58);
-      doc.setFont('helvetica', 'bold');
-      doc.text(payment, col2X + 26, 58);
-
-      doc.setFont('helvetica', 'normal');
-      doc.text(`Vendedor/Caja:`, col2X, 63);
-      doc.text(cashier, col2X + 26, 63);
-
-      // Detailed Items Table
-      const tableRows = (recentSale.details || []).map((det, index) => {
-        const qty = det.quantity || 1;
-        const unit = Number(det.unitPrice || 0);
-        const disc = Number(det.discount || 0);
-        const sub = Number(det.subtotal || (unit * qty - disc));
-
-        return [
-          index + 1,
-          det.productName || det.product?.name || `Artículo #${index + 1}`,
-          qty,
-          `$${unit.toFixed(2)}`,
-          disc > 0 ? `-$${disc.toFixed(2)}` : '$0.00',
-          `$${sub.toFixed(2)}`
-        ];
-      });
-
-      autoTable(doc, {
-        startY: 68,
-        head: [['#', 'Descripción del Producto', 'Cant.', 'Precio Unit.', 'Desc.', 'Total']],
-        body: tableRows,
-        theme: 'striped',
-        headStyles: {
-          fillColor: [79, 70, 229], // Indigo 600
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          fontSize: 8.5,
-          halign: 'left',
-        },
-        columnStyles: {
-          0: { cellWidth: 10, halign: 'center' },
-          1: { cellWidth: 'auto', halign: 'left' },
-          2: { cellWidth: 16, halign: 'center' },
-          3: { cellWidth: 26, halign: 'right' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 28, halign: 'right' },
-        },
-        styles: {
-          font: 'helvetica',
-          fontSize: 8,
-          cellPadding: 2.5,
-          textColor: [30, 41, 59],
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252],
-        },
-        margin: { left: 14, right: 14 },
-      });
-
-      // Totals Calculations Box
-      let finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 6 : 120;
-      if (finalY > 235) {
-        doc.addPage();
-        finalY = 20;
-      }
-
-      const totalBoxX = pageWidth - 80;
-      const totalBoxWidth = 66;
-
-      const subtotalVal = Number(recentSale.subtotal || 0);
-      const discountVal = Number(recentSale.discount || 0);
-      const taxVal = Number(recentSale.tax || 0);
-      const totalVal = Number(recentSale.total || 0);
-
-      // Left column: Commercial notes / fiscal compliance
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(100, 116, 139);
-      doc.text('TÉRMINOS & CONDICIONES', 14, finalY + 4);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(148, 163, 184); // Slate 400
-      doc.text('• Comprobante fiscal electrónico conforme a las normativas de la DGII.', 14, finalY + 9);
-      doc.text('• No se aceptan devoluciones sin la presentación de este comprobante.', 14, finalY + 13.5);
-      doc.text('• ¡Gracias por su compra y preferir nuestros servicios!', 14, finalY + 18);
-
-      // Right column: Financial Summary
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8.5);
-      doc.setTextColor(71, 85, 105); // Slate 600
-
-      doc.text('Subtotal:', totalBoxX, finalY + 4);
-      doc.text(`$${subtotalVal.toFixed(2)}`, pageWidth - 14, finalY + 4, { align: 'right' });
-
-      doc.text('Descuentos:', totalBoxX, finalY + 9);
-      doc.setTextColor(225, 29, 72); // Rose 600
-      doc.text(`-$${discountVal.toFixed(2)}`, pageWidth - 14, finalY + 9, { align: 'right' });
-
-      doc.setTextColor(71, 85, 105);
-      doc.text('ITBIS (18%):', totalBoxX, finalY + 14);
-      doc.text(`$${taxVal.toFixed(2)}`, pageWidth - 14, finalY + 14, { align: 'right' });
-
-      // Total Final Highlight Box
-      doc.setFillColor(238, 242, 255); // Indigo 50
-      doc.setDrawColor(199, 210, 254); // Indigo 200
-      doc.roundedRect(totalBoxX - 2, finalY + 18, totalBoxWidth + 2, 9, 1.5, 1.5, 'FD');
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(79, 70, 229); // Indigo 600
-      doc.text('TOTAL A PAGAR:', totalBoxX, finalY + 24);
-      doc.text(`$${totalVal.toFixed(2)}`, pageWidth - 14, finalY + 24, { align: 'right' });
-
-      // Page Footer
-      const pageCount = doc.internal.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7);
-        doc.setTextColor(148, 163, 184);
-        doc.text(
-          `SalesPro v2 — Documento Fiscal Digital • Página ${i} de ${pageCount}`,
-          pageWidth / 2,
-          doc.internal.pageSize.getHeight() - 7,
-          { align: 'center' }
-        );
-      }
-
-      // Download / Open PDF directly
-      const invoiceFileName = `Factura_${recentSale.invoiceNumber || 'POS'}.pdf`;
-      doc.save(invoiceFileName);
-
-      // Open in preview tab for direct printing
-      const pdfBlob = doc.output('blob');
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      window.open(blobUrl, '_blank');
-    } catch (err) {
-      console.error('Error al generar PDF de factura:', err);
-      alert('Ocurrió un error al generar el PDF del comprobante.');
+      localStorage.setItem('factos-pos-large', next ? '1' : '0');
+    } catch {
+      // almacenamiento no disponible
     }
   };
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.();
+  };
+
+  // Pantalla del cliente: se envía el estado del carrito por BroadcastChannel
+  const displayChannelRef = useRef(null);
+  const displayPayloadRef = useRef(null);
+  displayPayloadRef.current = {
+    business: { name: config.business.name },
+    taxPercent,
+    items: cart.map(item => ({
+      id: item.product.id,
+      name: item.product.name,
+      quantity: item.quantity,
+      unitPrice: Number(item.product.salePrice || 0),
+      discount: Number(item.discount || 0),
+      total: Number(item.product.salePrice || 0) * item.quantity - Number(item.discount || 0),
+    })),
+    totals: {
+      subtotal: cartSubtotal,
+      discount: totalDiscount,
+      tax: cartTax,
+      total: cartTotal,
+    },
+  };
+
+  useEffect(() => {
+    const channel = new BroadcastChannel(CUSTOMER_DISPLAY_CHANNEL);
+    displayChannelRef.current = channel;
+    channel.onmessage = event => {
+      if (event.data?.type === 'hello') {
+        channel.postMessage({ type: 'cart', payload: displayPayloadRef.current });
+      }
+    };
+    return () => channel.close();
+  }, []);
+
+  useEffect(() => {
+    displayChannelRef.current?.postMessage({ type: 'cart', payload: displayPayloadRef.current });
+  }, [cart, globalDiscount, config.taxRate]);
+
+  useEffect(() => {
+    if (recentSale) {
+      displayChannelRef.current?.postMessage({
+        type: 'sale-complete',
+        payload: { total: Number(recentSale.total || 0) },
+      });
+    }
+  }, [recentSale]);
+
+  const handlePrint = () => printReceipt(recentSale);
+
+  // Escáner de código de barras: busca por código exacto y agrega al carrito
+  const addByCode = (rawCode) => {
+    const code = rawCode.trim().toLowerCase();
+    const prod = safeProducts.find(p => (p.code || '').toLowerCase() === code);
+    if (!prod) return false;
+    handleAddProduct(prod);
+    return true;
+  };
+
+  const handleScannedCode = (code) => {
+    if (!addByCode(code)) alert(`No se encontró ningún producto con el código ${code}.`);
+    setProdSearch('');
+  };
+
+  const serialScanner = useSerialScanner(handleScannedCode);
+
+  useBarcodeScanner(
+    handleScannedCode,
+    { enabled: !loading && !recentSale && !removeTarget && !isNewCustOpen }
+  );
 
   if (loading && products.length === 0) {
     return (
@@ -477,7 +358,43 @@ export default function SalesPOS() {
   }
 
   return (
+    <div
+      className={cashierMode ? 'fixed inset-0 z-40 overflow-y-auto p-4 bg-[#f4f6fa] dark:bg-[#090d16]' : ''}
+      style={cashierMode ? { zoom: 1.2 } : undefined}
+    >
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6" id="pos-view">
+      <div className="lg:col-span-12 flex flex-col xl:flex-row xl:items-center gap-3">
+        <div className="flex-1">
+          <ShiftBar shiftState={shiftState} requireOpenShift={config.requireOpenShift} />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openCustomerDisplay}
+            title="Abrir la pantalla del cliente en otra ventana/monitor"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-indigo-600 cursor-pointer"
+          >
+            <Monitor className="w-4 h-4" /> Pantalla del cliente
+          </button>
+          <button
+            type="button"
+            onClick={toggleCashierMode}
+            title={cashierMode ? 'Volver a la vista normal' : 'Vista de caja: más grande y sin menú lateral'}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg border cursor-pointer ${cashierMode ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-indigo-600'}`}
+          >
+            {cashierMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            {cashierMode ? 'Salir de vista de caja' : 'Vista de caja'}
+          </button>
+          <button
+            type="button"
+            onClick={toggleFullscreen}
+            title="Pantalla completa del navegador"
+            className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:text-indigo-600 cursor-pointer"
+          >
+            <Expand className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
       {/* Products Column (7/12) */}
       <div className="lg:col-span-7 space-y-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -495,10 +412,40 @@ export default function SalesPOS() {
               placeholder="Buscar por código o nombre..."
               value={prodSearch}
               onChange={(e) => setProdSearch(e.target.value)}
+              data-scan-target
+              onKeyDown={(e) => {
+                // Entrada manual de código (sin lector físico): Enter agrega el código exacto
+                if (e.key === 'Enter' && prodSearch.trim() && addByCode(prodSearch)) {
+                  e.preventDefault();
+                  setProdSearch('');
+                }
+              }}
               className="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent text-xs focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
             />
           </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setCameraOpen(true)}
+              title="Escanear con cámara"
+              className="p-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-500 hover:text-indigo-600 cursor-pointer"
+            >
+              <Camera className="w-4 h-4" />
+            </button>
+            {serialScanner.supported && (
+              <button
+                type="button"
+                onClick={serialScanner.connected ? serialScanner.disconnect : serialScanner.connect}
+                title={serialScanner.connected ? 'Desconectar lector serial' : serialScanner.error || 'Conectar lector por puerto serie (COM)'}
+                className={`p-2 border rounded-lg cursor-pointer ${serialScanner.connected ? 'border-emerald-500 text-emerald-600' : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:text-indigo-600'}`}
+              >
+                <Plug className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
+
+        <CameraScannerModal isOpen={cameraOpen} onClose={() => setCameraOpen(false)} onScan={handleScannedCode} />
 
         {/* Products Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[650px] overflow-y-auto pr-1">
@@ -611,7 +558,7 @@ export default function SalesPOS() {
                           step="0.1"
                           placeholder="0.00"
                           disabled={!canApplyDiscount}
-                          title={!canApplyDiscount ? 'Descuentos solo disponibles para administradores' : undefined}
+                          title={!canApplyDiscount ? 'Descuentos no habilitados para su rol' : undefined}
                           value={item.discount || ''}
                           onChange={(e) => handleUpdateItemDiscount(item.product.id, parseFloat(e.target.value) || 0)}
                           className="w-16 text-center p-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
@@ -657,7 +604,7 @@ export default function SalesPOS() {
                 <span className="font-mono">-${totalDiscount.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span>ITBIS (18%)</span>
+                <span>ITBIS ({taxPercent}%)</span>
                 <span className="font-mono">${cartTax.toFixed(2)}</span>
               </div>
 
@@ -669,7 +616,7 @@ export default function SalesPOS() {
                   min="0"
                   step="0.5"
                   disabled={!canApplyDiscount}
-                  title={!canApplyDiscount ? 'Descuentos solo disponibles para administradores' : undefined}
+                  title={!canApplyDiscount ? 'Descuentos no habilitados para su rol' : undefined}
                   value={globalDiscount || ''}
                   onChange={(e) => setGlobalDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
                   className="w-20 text-right px-1.5 py-0.5 border border-slate-200 dark:border-slate-800 rounded text-xs font-mono bg-transparent disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-100 dark:disabled:bg-slate-800/40"
@@ -683,12 +630,12 @@ export default function SalesPOS() {
                   {[
                     { id: 'EFECTIVO', label: 'Efectivo' },
                     { id: 'TARJETA', label: 'Tarjeta' },
-                  ].map((item) => (
+                  ].filter((item) => config.paymentMethods.includes(item.id)).map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => setPaymentMethod(item.id)}
-                      className={`px-3 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${paymentMethod === item.id
+                      className={`px-3 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${activePaymentMethod === item.id
                         ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
                         : 'border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
                         }`}
@@ -725,6 +672,44 @@ export default function SalesPOS() {
       </div>
 
       {/* Form Dialog for New Client */}
+      <Modal isOpen={!!removeTarget} onClose={closeRemoveModal} title="Quitar producto del carrito" maxWidth="sm">
+        <form onSubmit={confirmRemoveItem} className="space-y-4">
+          <p className="text-sm">
+            ¿Quitar <strong>{removeTarget?.product.name}</strong> (x{removeTarget?.quantity}) del carrito?
+          </p>
+          {isVendedor && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">Se requiere autorización de un administrador.</p>
+              <input
+                type="text"
+                autoComplete="off"
+                required
+                placeholder="Usuario administrador"
+                value={removeAdminUser}
+                onChange={(e) => setRemoveAdminUser(e.target.value)}
+                className="w-full p-2 border border-slate-200 dark:border-slate-800 rounded text-sm bg-transparent"
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                required
+                placeholder="Contraseña"
+                value={removeAdminPass}
+                onChange={(e) => setRemoveAdminPass(e.target.value)}
+                className="w-full p-2 border border-slate-200 dark:border-slate-800 rounded text-sm bg-transparent"
+              />
+            </div>
+          )}
+          {removeError && <p className="text-xs text-rose-500">{removeError}</p>}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={closeRemoveModal} className="px-3 py-1.5 text-sm rounded border border-slate-200 dark:border-slate-700 cursor-pointer">Cancelar</button>
+            <button type="submit" disabled={removing} className="px-3 py-1.5 text-sm rounded bg-rose-600 text-white disabled:opacity-50 cursor-pointer">
+              {removing ? 'Procesando...' : 'Quitar'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       <Modal
         isOpen={isNewCustOpen}
         onClose={() => setIsNewCustOpen(false)}
@@ -870,7 +855,7 @@ export default function SalesPOS() {
             <div className="border border-slate-200 dark:border-slate-800 rounded-xl p-5 bg-slate-50/50 dark:bg-slate-900/50 space-y-4 font-mono text-xs">
               <div className="flex justify-between items-start gap-4">
                 <div>
-                  <h3 className="font-sans font-extrabold text-slate-900 dark:text-slate-100 text-sm tracking-wider">SALESPRO v2</h3>
+                  <h3 className="font-sans font-extrabold text-slate-900 dark:text-slate-100 text-sm tracking-wider">FACTOS</h3>
                   <p className="text-[10px] text-slate-400">Av. 27 de Febrero #100</p>
                   <p className="text-[10px] text-slate-400">Santo Domingo, D.N. - Rep. Dom.</p>
                   <p className="text-[10px] text-slate-400">RNC: 1-31-88942-1</p>
@@ -943,7 +928,7 @@ export default function SalesPOS() {
                   <span>-${recentSale.discount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">ITBIS (18%):</span>
+                  <span className="text-slate-400">ITBIS ({formatTaxPercent(recentSale.subtotal - recentSale.discount > 0 ? recentSale.tax / (recentSale.subtotal - recentSale.discount) : config.taxRate)}%):</span>
                   <span>${recentSale.tax.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t border-slate-200 dark:border-slate-800 pt-1.5 font-bold text-slate-900 dark:text-slate-100">
@@ -960,6 +945,7 @@ export default function SalesPOS() {
               >
                 Cerrar Terminal
               </button>
+              <ReceiptFormatSelect />
               <button
                 onClick={handlePrint}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg shadow transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -970,6 +956,7 @@ export default function SalesPOS() {
           </div>
         )}
       </Modal>
+    </div>
     </div>
   );
 }

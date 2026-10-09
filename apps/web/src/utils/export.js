@@ -5,7 +5,7 @@ export function generateFilename(reportType, filters = {}) {
   const from = filters.from || 'all';
   const to = filters.to || 'all';
   const safe = (s) => String(s).replace(/[^a-zA-Z0-9-_]/g, '');
-  return `salespro_${safe(reportType)}_${safe(from)}_${safe(to)}`;
+  return `factos_${safe(reportType)}_${safe(from)}_${safe(to)}`;
 }
 
 function downloadBlob(blob, filename) {
@@ -79,7 +79,7 @@ export function exportToPDF(title, columns, data, filename) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.setTextColor(30, 41, 59);
-  doc.text('SALESPRO v2', 14, 16);
+  doc.text('FACTOS', 14, 16);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);

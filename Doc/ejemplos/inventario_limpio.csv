@@ -1,0 +1,31 @@
+codigo_barras,descripcion,categoria,costo,precio_venta,existencia
+7460001000004,"Arroz Selecto 5 lb",Abarrotes,142.5,182.4,40
+7460001000370,"Habichuelas Rojas 1 lb",Abarrotes,48,62.4,60
+7460001000745,"Aceite Vegetal 1 L",Abarrotes,165,206.25,36
+7460001001117,"Azúcar Crema 5 lb",Abarrotes,118,149.86,30
+7460001001483,"Sal Fina 1 lb",Abarrotes,14,19.6,80
+7460001001858,"Spaghetti 400 g",Abarrotes,38,51.3,70
+7460001002220,"Salsa de Tomate 8 oz",Abarrotes,26,35.88,90
+7460001002596,"Café Molido 1 lb",Abarrotes,210,256.2,25
+7460001002961,"Avena en Hojuelas 400 g",Abarrotes,55,73.15,45
+7460001003333,"Leche Entera 1 L",Lácteos,62.5,80,48
+7460001003708,"Leche Evaporada 354 ml",Lácteos,41,53.3,55
+7460001004071,"Queso Blanco 1 lb",Lácteos,180,225,20
+7460001004446,"Mantequilla 200 g",Lácteos,96,124.8,24
+7460001004811,"Yogurt Natural 1 L",Lácteos,88,112.64,18
+7460001005184,"Agua Purificada 500 ml",Bebidas,9,14.4,200
+7460001005559,"Refresco Cola 2 L",Bebidas,72,93.6,60
+7460001005924,"Jugo de Naranja 1 L",Bebidas,64,84.48,40
+7460001006297,"Cerveza Lata 355 ml",Bebidas,52,70.2,120
+7460001006662,"Malta 8 oz",Bebidas,33,44.88,80
+7460001007034,"Detergente en Polvo 1 kg",Limpieza,98,127.4,35
+7460001007409,"Cloro 1 gal",Limpieza,76,102.6,30
+7460001007775,"Jabón de Cuaba",Limpieza,22,31.9,100
+7460001008147,"Fregador Antibacterial",Limpieza,18,27,70
+7460001008512,"Papel Higiénico 4 rollos",Higiene,85,110.5,50
+7460001008888,"Jabón de Baño 3 pack",Higiene,70,92.4,45
+7460001009250,"Pasta Dental 100 ml",Higiene,58,77.72,60
+7460001009625,"Champú 400 ml",Higiene,135,172.8,28
+7460001009991,"Desodorante Roll-on",Higiene,92,119.6,32
+7460001010362,"Pan Sobao Paquete",Panadería,45,63,25
+7460001010737,"Galletas de Soda",Panadería,31,44.02,65

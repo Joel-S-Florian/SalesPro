@@ -28,7 +28,11 @@ export const purchaseSchema = z.object({
     productId: z.string().cuid(),
     quantity: z.number().int().positive('Cantidad debe ser positiva'),
     unitCost: z.number().positive('Costo unitario debe ser positivo'),
-    supplier: z.string().min(1, 'Proveedor requerido').max(200),
+    supplierId: z.string().min(1).max(64).optional(),
+    supplier: z.string().min(1, 'Proveedor requerido').max(200).optional(),
     invoiceNumber: z.string().max(50).optional(),
+  }).refine(data => data.supplierId || data.supplier, {
+    message: 'Proveedor requerido',
+    path: ['supplierId'],
   }),
 });

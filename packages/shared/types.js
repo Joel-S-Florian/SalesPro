@@ -1,5 +1,5 @@
 /**
- * SalesPro JS Constants and Enums
+ * Factos JS Constants and Enums
  */
 
 export const UserRoles = {

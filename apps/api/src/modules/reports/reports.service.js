@@ -1,6 +1,6 @@
 import { prisma } from '../../config/db.js';
 import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
-import { TAX_RATE } from '../../../../../packages/shared/constants.js';
+import { getConfig } from '../config/config.service.js';
 
 const VALID_PAYMENT_METHODS = ['EFECTIVO', 'TARJETA'];
 const VALID_DOC_TYPES = ['CEDULA', 'RNC'];
@@ -340,7 +340,7 @@ export async function getTaxReport({ startDate, endDate }) {
     totalDiscount: round2(totalDiscount),
     taxableBase: round2(totalSubtotal - totalDiscount),
     totalTax: round2(totalTax),
-    taxRate: TAX_RATE * 100,
+    taxRate: (await getConfig()).taxRate * 100,
     salesCount: sales.length,
   };
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@salespro/web",
+  "name": "@factos/web",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -11,8 +11,11 @@
     "@hookform/resolvers": "^5.9.1",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-query-devtools": "^5.102.8",
+    "@zxing/browser": "^0.1.5",
+    "@zxing/library": "^0.21.3",
     "date-fns": "^4.4.0",
     "idb": "^8.0.3",
+    "jsbarcode": "^3.11.6",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.546.0",

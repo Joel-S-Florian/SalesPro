@@ -28,6 +28,7 @@ export default function Inventory() {
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [purchaseUnitCost, setPurchaseUnitCost] = useState(0);
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
+  const [suppliers, setSuppliers] = useState([]);
   const [purchaseInvoice, setPurchaseInvoice] = useState('');
   const [submittingPurchase, setSubmittingPurchase] = useState(false);
 
@@ -78,11 +79,15 @@ export default function Inventory() {
     setPurchaseSupplier('');
     setPurchaseInvoice('');
     setIsPurchaseOpen(true);
+    api.suppliers
+      .list({ active: 'true', limit: 100 })
+      .then(res => setSuppliers(res?.data || []))
+      .catch(() => setSuppliers([]));
   };
 
   const handleRegisterPurchase = async (e) => {
     e.preventDefault();
-    if (!purchaseProdId || purchaseQty <= 0 || purchaseUnitCost <= 0 || !purchaseSupplier.trim()) {
+    if (!purchaseProdId || purchaseQty <= 0 || purchaseUnitCost <= 0 || !purchaseSupplier) {
       alert('Por favor complete proveedor, producto, cantidad y costo correctamente');
       return;
     }
@@ -93,7 +98,7 @@ export default function Inventory() {
         productId: purchaseProdId,
         quantity: Number(purchaseQty),
         unitCost: Number(purchaseUnitCost),
-        supplier: purchaseSupplier.trim(),
+        supplierId: purchaseSupplier,
         invoiceNumber: purchaseInvoice.trim() || undefined,
       });
       setIsPurchaseOpen(false);
@@ -471,15 +476,22 @@ export default function Inventory() {
               <label htmlFor="purchase-supplier" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Proveedor *
               </label>
-              <input
+              <select
                 id="purchase-supplier"
-                type="text"
                 required
-                placeholder="Ej. Distribuidora Nacional SRL"
                 value={purchaseSupplier}
                 onChange={(e) => setPurchaseSupplier(e.target.value)}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
-              />
+              >
+                <option value="">
+                  {suppliers.length ? 'Seleccione un proveedor...' : 'No hay proveedores: créelos en el módulo Proveedores'}
+                </option>
+                {suppliers.map(sup => (
+                  <option key={sup.id} value={sup.id}>
+                    {sup.name}{sup.rnc ? ` — ${sup.rnc}` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-1.5 col-span-1 md:col-span-2">

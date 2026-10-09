@@ -1,11 +1,11 @@
-# SalesPro v2
+# Factos
 
 Sistema de Gestión de Ventas moderno para pequeñas y medianas empresas, con gestión de inventario, clientes, ventas y reportes avanzados.
 
 ## Arquitectura Monorepo
 
 ```
-salespro-v2/
+factos/
 ├── apps/
 │   ├── web/                    # Frontend (React + Vite)
 │   └── api/                    # Backend (Express + Prisma)
@@ -44,9 +44,9 @@ salespro-v2/
 
 ## Workspaces
 
-- **@salespro/web** - Frontend React + Vite + Tailwind CSS + Zustand
-- **@salespro/api** - Backend Express + Prisma + JWT + Rate Limiting
-- **@salespro/shared** - Constantes y tipos compartidos
+- **@factos/web** - Frontend React + Vite + Tailwind CSS + Zustand
+- **@factos/api** - Backend Express + Prisma + JWT + Rate Limiting
+- **@factos/shared** - Constantes y tipos compartidos
 
 ## Variables de Entorno
 
@@ -60,4 +60,4 @@ Consulta `.env.example` para la lista completa de variables requeridas.
 
 ## Licencia
 
-Propiedad de SalesPro. Todos los derechos reservados.
+Propiedad de Factos. Todos los derechos reservados.

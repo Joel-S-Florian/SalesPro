@@ -6,6 +6,7 @@ const PAYMENT_METHODS = ['EFECTIVO', 'TARJETA'];
 export const createSaleSchema = z.object({
   body: z.object({
     customerId: z.string().cuid(),
+    terminalId: z.string().cuid().optional(),
     details: z.array(z.object({
       productId: z.string().cuid(),
       quantity: z.number().int().positive('Cantidad debe ser positiva'),
@@ -43,5 +44,15 @@ export const saleQuerySchema = z.object({
     limit: z.coerce.number().int().positive().max(100).default(20),
     sortBy: z.string().default('createdAt'),
     sortOrder: z.enum(['asc', 'desc']).default('desc'),
+  }),
+});
+
+export const cartRemovalSchema = z.object({
+  body: z.object({
+    productId: z.string().cuid(),
+    quantity: z.number().int().positive(),
+    reason: z.string().max(200).optional(),
+    adminUsername: z.string().max(50).optional(),
+    adminPassword: z.string().max(200).optional(),
   }),
 });

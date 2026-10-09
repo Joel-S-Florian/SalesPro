@@ -184,7 +184,7 @@ async function main() {
       create: {
         documentId: '000000000',
         name: 'Consumidor Final',
-        email: 'consumidor@salespro.com',
+        email: 'consumidor@factos.com',
         phone: '999999999',
         address: 'Venta presencial',
       },

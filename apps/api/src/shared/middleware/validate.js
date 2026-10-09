@@ -20,7 +20,7 @@ export function validate(schemas) {
       next();
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const details = error.errors.map(e => ({
+        const details = (error.issues ?? error.errors).map(e => ({
           field: e.path.join('.'),
           message: e.message,
           code: e.code,

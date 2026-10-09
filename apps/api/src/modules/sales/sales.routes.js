@@ -3,7 +3,7 @@ import * as salesController from './sales.controller.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { createSaleSchema, saleIdParamSchema, saleQuerySchema } from './validators.js';
+import { createSaleSchema, saleIdParamSchema, saleQuerySchema, cartRemovalSchema } from './validators.js';
 import { auditLog } from '../../shared/middleware/audit.js';
 import { salesRateLimiter } from '../../shared/middleware/rateLimiter.js';
 
@@ -43,6 +43,13 @@ router.get('/:id', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), validat
  * @access Private (Admin, Vendedor)
  */
 router.post('/', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), salesRateLimiter, validate(createSaleSchema), auditLog('CREATE_SALE', 'sale'), salesController.createSale);
+
+/**
+ * @route POST /api/sales/cart-removal
+ * @description Audit + authorize removal of a cart item (vendedor needs admin credentials)
+ * @access Private (Admin, Vendedor)
+ */
+router.post('/cart-removal', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), salesRateLimiter, validate(cartRemovalSchema), salesController.logCartRemoval);
 
 /**
  * @route POST /api/sales/:id/credit-note
