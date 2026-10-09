@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe el prototipo original de una sola página con `localStorage`. La arquitectura vigente está en [`CONTEXTO_TECNICO_FACTOS.md`](CONTEXTO_TECNICO_FACTOS.md).
+
 # Documentación Técnica: SalesPro
 
 SalesPro es un sistema de gestión de ventas tipo SPA (Single Page Application) desarrollado en un archivo único utilizando HTML5, TailwindCSS para el estilo, y JavaScript vainilla para la lógica y gestión de datos local.

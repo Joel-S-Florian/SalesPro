@@ -492,7 +492,7 @@ export default function Products() {
               {priceChanged && (
                 <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 rounded-lg p-3 space-y-2">
                   <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
-                    Estás modificando el precio de venta. Para confirmar, escribe "editarProducto":
+                    Estás modificando el precio de venta. Para confirmar, escribe &quot;editarProducto&quot;:
                   </p>
                   <input
                     type="text"

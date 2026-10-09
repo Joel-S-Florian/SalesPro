@@ -26,7 +26,7 @@ async function main() {
       username: 'superadmin',
       fullName: 'Administrador de la Plataforma',
       role: 'SUPERADMIN',
-      passwordHash: await bcrypt.hash('superadmin', 12),
+      passwordHash: await bcrypt.hash(process.env.SUPERADMIN_PASSWORD || 'superadmin', 12),
       active: true,
     },
   });

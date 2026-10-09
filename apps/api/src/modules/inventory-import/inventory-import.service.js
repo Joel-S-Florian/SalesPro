@@ -38,7 +38,7 @@ function flatten(value, prefix = '', out = {}) {
 function readJson(buffer) {
   let parsed;
   try {
-    parsed = JSON.parse(buffer.toString('utf8').replace(/^﻿/, ''));
+    parsed = JSON.parse(buffer.toString('utf8').replace(/^\uFEFF/, ''));
   } catch {
     throw AppError.badRequest('El JSON no es válido. Verifique comas, comillas y llaves');
   }

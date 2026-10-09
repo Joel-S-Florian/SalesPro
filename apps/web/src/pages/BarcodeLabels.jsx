@@ -97,7 +97,7 @@ export default function BarcodeLabels() {
         .name { font-size: 11px; font-weight: 600; height: 28px; overflow: hidden; }
         .price { font-size: 14px; font-weight: bold; }
       </style></head><body><div class="sheet">${sheetRef.current.innerHTML}</div>
-      <script>window.onload = () => { window.print(); }<\/script></body></html>`);
+      <script>window.onload = () => { window.print(); }</script></body></html>`);
     win.document.close();
   };
 

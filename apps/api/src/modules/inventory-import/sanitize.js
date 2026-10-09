@@ -3,7 +3,7 @@
  */
 
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F​-‍﻿]/g;
+const CONTROL_CHARS = /[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF]/g;
 
 /** Quita caracteres de control/invisibles y colapsa espacios. */
 export function cleanText(value) {

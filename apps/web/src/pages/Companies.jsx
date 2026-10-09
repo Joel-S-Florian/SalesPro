@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Power, Eye, KeyRound, Building2, Users, Receipt, Package } from 'lucide-react';
+import { Loader2, Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
 import Modal from '../components/Modal';
 
 const inputClass =
@@ -38,6 +38,9 @@ export default function Companies() {
   const [saving, setSaving] = useState(false);
 
   const [detail, setDetail] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [editError, setEditError] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetMessage, setResetMessage] = useState('');
@@ -105,6 +108,33 @@ export default function Companies() {
       setDetail(await api.platform.company(company.id));
     } catch (err) {
       alert(err.message || 'No se pudo cargar la empresa');
+    }
+  };
+
+  const startEdit = () => {
+    setEditError('');
+    setEditForm({
+      name: detail.name || '',
+      rnc: detail.rnc || '',
+      email: detail.email || '',
+      phone: detail.phone || '',
+      address: detail.address || '',
+    });
+  };
+
+  const handleEdit = async e => {
+    e.preventDefault();
+    try {
+      setEditSaving(true);
+      setEditError('');
+      const updated = await api.platform.updateCompany(detail.id, editForm);
+      setDetail(updated);
+      setEditForm(null);
+      loadData();
+    } catch (err) {
+      setEditError(err.message || 'No se pudo guardar la empresa');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -263,14 +293,51 @@ export default function Companies() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!detail} onClose={() => { setDetail(null); setResetTarget(null); setResetMessage(''); }} title={detail?.name || ''} maxWidth="lg">
+      <Modal isOpen={!!detail} onClose={() => { setDetail(null); setResetTarget(null); setResetMessage(''); setEditForm(null); }} title={detail?.name || ''} maxWidth="lg">
         {detail && (
           <div className="space-y-4">
-            <div className="text-xs space-y-1">
-              <p>RNC: <span className="font-mono">{detail.rnc || '—'}</span></p>
-              <p>Contacto: {[detail.phone, detail.email].filter(Boolean).join(' · ') || '—'}</p>
-              <p>Estado: <strong className={detail.active ? 'text-emerald-600' : 'text-rose-500'}>{detail.active ? 'Activa' : 'Suspendida'}</strong></p>
-            </div>
+            {editForm ? (
+              <form onSubmit={handleEdit} className="space-y-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {[
+                    ['name', 'Nombre comercial *', true, 'md:col-span-2'],
+                    ['rnc', 'RNC', false, ''],
+                    ['phone', 'Teléfono', false, ''],
+                    ['email', 'Email', false, 'md:col-span-2'],
+                    ['address', 'Dirección', false, 'md:col-span-2'],
+                  ].map(([key, label, required, span]) => (
+                    <div key={key} className={`space-y-1.5 ${span}`}>
+                      <label htmlFor={`edit-${key}`} className={labelClass}>{label}</label>
+                      <input
+                        id={`edit-${key}`}
+                        required={required}
+                        type={key === 'email' ? 'email' : 'text'}
+                        value={editForm[key]}
+                        onChange={e => setEditForm({ ...editForm, [key]: e.target.value })}
+                        className={inputClass}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {editError && <p className="text-xs text-rose-500">{editError}</p>}
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setEditForm(null)} className="px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">Cancelar</button>
+                  <button type="submit" disabled={editSaving} className="px-4 py-1.5 text-xs rounded-lg bg-indigo-600 text-white disabled:opacity-50 cursor-pointer">{editSaving ? 'Guardando...' : 'Guardar'}</button>
+                </div>
+              </form>
+            ) : (
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-xs space-y-1">
+                  <p>RNC: <span className="font-mono">{detail.rnc || '—'}</span></p>
+                  <p>Contacto: {[detail.phone, detail.email].filter(Boolean).join(' · ') || '—'}</p>
+                  <p>Dirección: {detail.address || '—'}</p>
+                  <p>Estado: <strong className={detail.active ? 'text-emerald-600' : 'text-rose-500'}>{detail.active ? 'Activa' : 'Suspendida'}</strong></p>
+                </div>
+                <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-indigo-600 cursor-pointer">
+                  <Pencil className="w-3.5 h-3.5" /> Editar datos
+                </button>
+              </div>
+            )}
             <table className="w-full text-xs text-left">
               <thead className="text-slate-500 uppercase">
                 <tr><th className="py-2">Usuario</th><th className="py-2">Nombre</th><th className="py-2">Rol</th><th className="py-2 text-right">Acción</th></tr>
