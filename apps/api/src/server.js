@@ -3,7 +3,7 @@ import express from 'express';
 import app from './app.js';
 import { env } from './config/env.js';
 import { initializeNCFSequences } from './shared/utils/ncf.js';
-import { prisma } from './config/db.js';
+import { basePrisma as prisma } from './config/db.js';
 
 const PORT = env.PORT;
 
@@ -13,8 +13,9 @@ server.use('/api', app);
 
 async function startServer() {
   try {
-    await initializeNCFSequences();
-    console.log('[Factos] NCF sequences initialized');
+    const companies = await prisma.company.findMany({ select: { id: true } });
+    for (const company of companies) await initializeNCFSequences(company.id);
+    console.log(`[Factos] NCF sequences initialized for ${companies.length} companies`);
   } catch (error) {
     console.warn('[Factos] Failed to initialize NCF sequences:', error.message);
   }

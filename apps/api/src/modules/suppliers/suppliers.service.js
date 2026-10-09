@@ -54,7 +54,7 @@ export async function getSupplierById(id) {
 
 async function assertRncAvailable(rnc, exceptId) {
   if (!rnc) return;
-  const existing = await prisma.supplier.findUnique({ where: { rnc } });
+  const existing = await prisma.supplier.findFirst({ where: { rnc } });
   if (existing && existing.id !== exceptId) {
     throw AppError.conflict('Ya existe un proveedor con ese RNC', ERROR_CODES.DUPLICATE_ENTRY);
   }

@@ -1,4 +1,5 @@
-import { prisma } from '../../config/db.js';
+import { basePrisma } from '../../config/db.js';
+import { getTenantIdOrNull } from '../../config/tenant.js';
 import { logger } from '../../shared/utils/logger.js';
 
 /**
@@ -45,9 +46,10 @@ export function auditLog(action, entity) {
         // For updates, we could fetch old data here if needed
         // For now, just log the action
 
-        await prisma.auditLog.create({
+        await basePrisma.auditLog.create({
           data: {
             userId,
+            companyId: req.user?.companyId ?? null,
             action,
             entity,
             entityId: req.params.id || (newData?.id ? newData.id : null),
@@ -71,7 +73,7 @@ export function auditLog(action, entity) {
  */
 export async function createAuditLog(data) {
   try {
-    await prisma.auditLog.create({ data });
+    await basePrisma.auditLog.create({ data: { companyId: getTenantIdOrNull(), ...data } });
   } catch (error) {
     logger.warn('Manual audit log failed:', { error: error.message });
   }

@@ -11,6 +11,7 @@ import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
 import Suppliers from './pages/Suppliers';
 import Settings from './pages/Settings';
+import Companies from './pages/Companies';
 import ImportInventory from './pages/ImportInventory';
 import BarcodeLabels from './pages/BarcodeLabels';
 import CashierCloses from './pages/CashierCloses';
@@ -43,17 +44,24 @@ import {
   Settings as SettingsIcon,
   Calculator,
   FileUp,
-  Barcode
+  Barcode,
+  Building2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
+const homeTabFor = role => {
+  const normalized = (role || '').toUpperCase();
+  if (normalized === 'SUPERADMIN') return 'COMPANIES';
+  return normalized === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD';
+};
 
 export default function App() {
   const { user, isAuthenticated, accessToken, refreshToken, login, logout, setUser } = useAuthStore();
   const { data: authData, isLoading: authLoading, error: authError } = useAuthMe();
   const loadConfig = useConfigStore(state => state.load);
   useEffect(() => {
-    if (isAuthenticated) loadConfig();
-  }, [isAuthenticated, loadConfig]);
+    if (isAuthenticated && user?.role !== 'SUPERADMIN') loadConfig();
+  }, [isAuthenticated, user?.role, loadConfig]);
   const [loginError, setLoginError] = useState(null);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);
@@ -85,6 +93,9 @@ export default function App() {
     if (role === 'VENDEDOR' && activeTab === 'DASHBOARD') {
       setActiveTab('VENDOR_DASHBOARD');
     }
+    if (role === 'SUPERADMIN' && activeTab !== 'COMPANIES') {
+      setActiveTab('COMPANIES');
+    }
   }, [user?.role, activeTab, setActiveTab]);
 
   const handleLogin = async (e) => {
@@ -96,7 +107,7 @@ export default function App() {
       setSessionMessage(null);
       const data = await api.auth.login(username, password);
       login(data.user, data.accessToken, data.refreshToken);
-      setActiveTab((data.user?.role || '').toUpperCase() === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD');
+      setActiveTab(homeTabFor(data.user?.role));
     } catch (err) {
       setLoginError(err.message || 'Error de autenticacion');
     } finally {
@@ -113,7 +124,7 @@ export default function App() {
       setSessionMessage(null);
       const data = await api.auth.login(usr, pass);
       login(data.user, data.accessToken, data.refreshToken);
-      setActiveTab((data.user?.role || '').toUpperCase() === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD');
+      setActiveTab(homeTabFor(data.user?.role));
     } catch (err) {
       setLoginError(err.message || 'Error de autenticacion');
     } finally {
@@ -257,6 +268,7 @@ export default function App() {
 
   // NAVIGATION ITEM HELPER
   const navItems = [
+    { id: 'COMPANIES', label: 'Empresas', icon: Building2, roles: ['SUPERADMIN'] },
     { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMINISTRADOR'] },
     { id: 'VENDOR_DASHBOARD', label: 'Mi Dashboard', icon: LayoutDashboard, roles: ['VENDEDOR'] },
     { id: 'POS', label: 'Nueva Venta (POS)', icon: ShoppingCart, roles: ['ADMINISTRADOR', 'VENDEDOR'] },
@@ -326,6 +338,8 @@ export default function App() {
         return <Finance />;
       case 'CASHIER_CLOSES':
         return <CashierCloses />;
+      case 'COMPANIES':
+        return <Companies />;
       case 'SETTINGS':
         return <Settings />;
       case 'UNAUTHORIZED':
@@ -364,6 +378,9 @@ export default function App() {
           <div className="min-w-0">
             <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{user.fullName}</p>
             <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">Rol: {user.role}</span>
+            {(user.companyName || user.company?.name) && (
+              <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold block truncate">{user.companyName || user.company?.name}</span>
+            )}
           </div>
         </div>
 

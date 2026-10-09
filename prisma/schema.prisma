@@ -7,6 +7,34 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Company {
+  id            String            @id @default(cuid())
+  name          String
+  rnc           String?           @unique
+  email         String?
+  phone         String?
+  address       String?
+  active        Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  users         User[]
+  categories    Category[]
+  products      Product[]
+  customers     Customer[]
+  sales         Sale[]
+  saleDetails   SaleDetail[]
+  inventoryLogs InventoryLog[]
+  suppliers     Supplier[]
+  configs       SystemConfig[]
+  terminals     Terminal[]
+  cashierCloses CashierClose[]
+  imports       InventoryImport[]
+  ncfSequences  NCFSequence[]
+  auditLogs     AuditLog[]
+
+  @@map("companies")
+}
+
 model User {
   id                String         @id @default(cuid())
   username          String         @unique
@@ -24,7 +52,10 @@ model User {
   defaultTerminalId String?
   defaultTerminal   Terminal?      @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
   cashierCloses     CashierClose[] @relation("CloseCashier")
+  companyId         String?
+  company           Company?       @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("users")
 }
 
@@ -41,18 +72,22 @@ model Session {
 
 model Category {
   id          String    @id @default(cuid())
-  name        String    @unique
+  name        String
   description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   products    Product[]
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("categories")
 }
 
 model Product {
   id            String         @id @default(cuid())
-  code          String         @unique
+  code          String
   name          String
   description   String?
   categoryId    String
@@ -66,13 +101,17 @@ model Product {
   inventoryLogs InventoryLog[]
   category      Category       @relation(fields: [categoryId], references: [id])
   saleDetails   SaleDetail[]
+  companyId     String
+  company       Company        @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, code])
+  @@index([companyId])
   @@map("products")
 }
 
 model Customer {
   id         String   @id @default(cuid())
-  documentId String   @unique
+  documentId String
   name       String
   email      String?
   phone      String?
@@ -81,13 +120,17 @@ model Customer {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   sales      Sale[]
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, documentId])
+  @@index([companyId])
   @@map("customers")
 }
 
 model Sale {
   id             String        @id @default(cuid())
-  invoiceNumber  String        @unique
+  invoiceNumber  String
   ncfType        NCFType       @default(B01)
   customerId     String
   customerName   String
@@ -107,7 +150,11 @@ model Sale {
   cashierClose   CashierClose? @relation(fields: [cashierCloseId], references: [id])
   customer       Customer      @relation(fields: [customerId], references: [id])
   user           User          @relation("SaleUser", fields: [userId], references: [id])
+  companyId      String
+  company        Company       @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, invoiceNumber])
+  @@index([companyId])
   @@map("sales")
 }
 
@@ -123,7 +170,10 @@ model SaleDetail {
   subtotal    Float
   product     Product @relation(fields: [productId], references: [id])
   sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("sale_details")
 }
 
@@ -145,49 +195,60 @@ model InventoryLog {
   product       Product       @relation(fields: [productId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
   supplierRef   Supplier?     @relation(fields: [supplierId], references: [id])
+  companyId     String
+  company       Company       @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("inventory_logs")
 }
 
 model Supplier {
   id           String         @id @default(cuid())
   name         String
-  rnc          String?        @unique
+  rnc          String?
   contactName  String?
   email        String?
   phone        String?
   address      String?
   paymentTerms String?
   active       Boolean        @default(true)
-  companyId    String? // reservado para multi-cliente
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   purchases    InventoryLog[]
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, rnc])
+  @@index([companyId])
   @@map("suppliers")
 }
 
 model SystemConfig {
-  key       String   @id
+  key       String
   value     Json
-  companyId String? // reservado para multi-cliente
   updatedAt DateTime @updatedAt
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
 
+  @@id([companyId, key])
   @@map("system_config")
 }
 
 model Terminal {
   id            String         @id @default(cuid())
-  name          String         @unique
+  name          String
   active        Boolean        @default(true)
-  companyId     String? // reservado para multi-cliente
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   users         User[]         @relation("TerminalUsers")
   defaultFor    User[]         @relation("DefaultTerminal")
   sales         Sale[]
   cashierCloses CashierClose[]
+  companyId     String
+  company       Company        @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, name])
+  @@index([companyId])
   @@map("terminals")
 }
 
@@ -207,7 +268,10 @@ model CashierClose {
   terminal       Terminal    @relation(fields: [terminalId], references: [id])
   user           User        @relation("CloseCashier", fields: [userId], references: [id])
   sales          Sale[]
+  companyId      String
+  company        Company     @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("cashier_closes")
 }
 
@@ -226,11 +290,13 @@ model InventoryImport {
   mapping    Json?
   options    Json?
   summary    Json?
-  companyId  String? // reservado para multi-cliente
   createdAt  DateTime             @default(now())
   appliedAt  DateTime?
   rows       InventoryImportRow[]
+  companyId  String
+  company    Company              @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("inventory_imports")
 }
 
@@ -272,22 +338,30 @@ model AuditLog {
   userAgent String?
   createdAt DateTime @default(now())
   user      User?    @relation(fields: [userId], references: [id])
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
 
+  @@index([companyId])
   @@map("audit_logs")
 }
 
 model NCFSequence {
   id        String   @id @default(cuid())
-  ncfType   NCFType  @unique
+  ncfType   NCFType
   prefix    String
   current   Int      @default(0)
   max       Int      @default(99999999)
   updatedAt DateTime @updatedAt
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, ncfType])
+  @@index([companyId])
   @@map("ncf_sequences")
 }
 
 enum UserRole {
+  SUPERADMIN
   ADMINISTRADOR
   VENDEDOR
 }

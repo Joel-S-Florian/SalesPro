@@ -1,4 +1,5 @@
 import { prisma } from '../../config/db.js';
+import { getTenantId } from '../../config/tenant.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 
 const withUsers = {
@@ -7,7 +8,7 @@ const withUsers = {
 };
 
 async function assertNameAvailable(name, exceptId) {
-  const existing = await prisma.terminal.findUnique({ where: { name } });
+  const existing = await prisma.terminal.findFirst({ where: { name } });
   if (existing && existing.id !== exceptId) {
     throw AppError.conflict('Ya existe una caja con ese nombre', ERROR_CODES.DUPLICATE_ENTRY);
   }
@@ -20,7 +21,11 @@ export function listTerminals() {
 export async function createTerminal({ name, userIds = [] }) {
   await assertNameAvailable(name);
   return prisma.terminal.create({
-    data: { name, users: { connect: userIds.map(id => ({ id })) } },
+    data: {
+      name,
+      company: { connect: { id: getTenantId() } },
+      users: { connect: userIds.map(id => ({ id })) },
+    },
     include: withUsers,
   });
 }

@@ -87,7 +87,7 @@ export async function createCustomer(data) {
 
   // Check documentId uniqueness (except consumidor final)
   if (documentId !== '000000000') {
-    const existing = await prisma.customer.findUnique({ where: { documentId } });
+    const existing = await prisma.customer.findFirst({ where: { documentId } });
     if (existing) {
       throw AppError.conflict('El Documento de Identidad ya existe', ERROR_CODES.DUPLICATE_ENTRY);
     }

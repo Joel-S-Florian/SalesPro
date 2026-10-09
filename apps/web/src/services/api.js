@@ -212,6 +212,20 @@ export const api = {
     delete: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
   },
 
+  platform: {
+    stats: () => request('/platform/stats'),
+    companies: (params = {}) => request(`/platform/companies?${toQuery(params)}`),
+    company: (id) => request(`/platform/companies/${id}`),
+    createCompany: (payload) => request('/platform/companies', { method: 'POST', body: JSON.stringify(payload) }),
+    updateCompany: (id, payload) =>
+      request(`/platform/companies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    resetUserPassword: (companyId, userId, password) =>
+      request(`/platform/companies/${companyId}/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ password }),
+      }),
+  },
+
   inventoryImport: {
     stage: (payload) => request('/inventory-import', { method: 'POST', body: JSON.stringify(payload) }),
     preview: (id, payload) =>

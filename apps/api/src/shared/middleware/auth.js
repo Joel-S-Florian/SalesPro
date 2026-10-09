@@ -1,5 +1,6 @@
 import { verifyAccessToken, verifyRefreshToken } from '../../shared/utils/jwt.js';
-import { prisma } from '../../config/db.js';
+import { basePrisma as prisma } from '../../config/db.js';
+import { tenantStore } from '../../config/tenant.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 
@@ -32,7 +33,15 @@ export async function authenticate(req, res, next) {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, username: true, fullName: true, role: true, active: true },
+      select: {
+        id: true,
+        username: true,
+        fullName: true,
+        role: true,
+        active: true,
+        companyId: true,
+        company: { select: { active: true } },
+      },
     });
     console.log('👤 [DEBUG AUTH] 6. Usuario encontrado en DB:', user ? user.username : 'NULL');
 
@@ -44,15 +53,22 @@ export async function authenticate(req, res, next) {
       throw AppError.forbidden('Usuario inactivo', ERROR_CODES.USER_INACTIVE);
     }
 
+    // Usuarios de empresa: la empresa debe existir y estar activa. SUPERADMIN no pertenece a ninguna.
+    if (user.role !== 'SUPERADMIN' && (!user.companyId || !user.company?.active)) {
+      throw AppError.forbidden('La empresa se encuentra suspendida o inactiva', 'COMPANY_INACTIVE');
+    }
+
     req.user = {
       userId: user.id,
       username: user.username,
       role: user.role,
       fullName: user.fullName,
+      companyId: user.companyId,
     };
 
     console.log('✅ [DEBUG AUTH] 7. Autenticación exitosa para:', req.user.username);
-    next();
+    // Todo lo que sigue (controladores, servicios) corre dentro del contexto de la empresa
+    tenantStore.run({ companyId: user.companyId }, () => next());
   } catch (error) {
     console.error('💥 [DEBUG AUTH] ERROR FINAL:', error.message);
     next(error);
@@ -87,6 +103,7 @@ export async function authenticateRefresh(req, res, next) {
       username: session.user.username,
       role: session.user.role,
       fullName: session.user.fullName,
+      companyId: session.user.companyId,
     };
     req.session = session;
     req.refreshToken = token;

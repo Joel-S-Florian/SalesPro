@@ -21,6 +21,7 @@ import configRoutes from './modules/config/config.routes.js';
 import terminalsRoutes from './modules/terminals/terminals.routes.js';
 import cashierRoutes from './modules/cashier/cashier.routes.js';
 import inventoryImportRoutes from './modules/inventory-import/inventory-import.routes.js';
+import platformRoutes from './modules/platform/platform.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
 
 const app = express();
@@ -79,6 +80,7 @@ app.use('/config', configRoutes);
 app.use('/terminals', terminalsRoutes);
 app.use('/cashier', cashierRoutes);
 app.use('/inventory-import', inventoryImportRoutes);
+app.use('/platform', platformRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

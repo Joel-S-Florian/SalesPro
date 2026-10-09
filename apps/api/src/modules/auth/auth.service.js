@@ -1,4 +1,4 @@
-import { prisma } from '../../config/db.js';
+import { prisma, basePrisma } from '../../config/db.js';
 import { hashPassword, comparePassword } from '../../shared/utils/crypto.js';
 import { generateTokenPair, generateRefreshToken, verifyRefreshToken } from '../../shared/utils/jwt.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
@@ -12,8 +12,9 @@ import { env } from '../../config/env.js';
  * @returns {Promise<Object>} User data and tokens
  */
 export async function login(username, password) {
-  const user = await prisma.user.findUnique({
+  const user = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
+    include: { company: { select: { id: true, name: true, active: true } } },
   });
 
   if (!user) {
@@ -27,6 +28,10 @@ export async function login(username, password) {
 
   if (!user.active) {
     throw AppError.forbidden('El usuario se encuentra inactivo', ERROR_CODES.USER_INACTIVE);
+  }
+
+  if (user.role !== 'SUPERADMIN' && !user.company?.active) {
+    throw AppError.forbidden('La empresa se encuentra suspendida o inactiva', 'COMPANY_INACTIVE');
   }
 
   // Generate token pair
@@ -45,7 +50,7 @@ export async function login(username, password) {
   });
 
   // Update last login
-  await prisma.user.update({
+  await basePrisma.user.update({
     where: { id: user.id },
     data: { updatedAt: new Date() },
   });
@@ -57,6 +62,8 @@ export async function login(username, password) {
       fullName: user.fullName,
       role: user.role,
       active: user.active,
+      companyId: user.companyId,
+      companyName: user.company?.name ?? null,
     },
     accessToken,
     refreshToken,
@@ -76,9 +83,9 @@ export async function refreshTokens(refreshToken) {
   }
 
   // Find session
-  const session = await prisma.session.findUnique({
+  const session = await basePrisma.session.findUnique({
     where: { token: refreshToken },
-    include: { user: true },
+    include: { user: { include: { company: { select: { active: true } } } } },
   });
 
   if (!session || session.expiresAt < new Date()) {
@@ -87,6 +94,9 @@ export async function refreshTokens(refreshToken) {
 
   if (!session.user.active) {
     throw AppError.forbidden('Usuario inactivo', ERROR_CODES.USER_INACTIVE);
+  }
+  if (session.user.role !== 'SUPERADMIN' && !session.user.company?.active) {
+    throw AppError.forbidden('La empresa se encuentra suspendida o inactiva', 'COMPANY_INACTIVE');
   }
 
   // Rotate refresh token (generate new pair)
@@ -142,7 +152,7 @@ export async function logoutAll(userId) {
  * @returns {Promise<void>}
  */
 export async function changePassword(userId, oldPassword, newPassword) {
-  const user = await prisma.user.findUnique({
+  const user = await basePrisma.user.findUnique({
     where: { id: userId },
   });
 
@@ -157,7 +167,7 @@ export async function changePassword(userId, oldPassword, newPassword) {
 
   const newHash = await hashPassword(newPassword);
 
-  await prisma.user.update({
+  await basePrisma.user.update({
     where: { id: userId },
     data: { passwordHash: newHash },
   });
@@ -172,9 +182,11 @@ export async function changePassword(userId, oldPassword, newPassword) {
  * @returns {Promise<Object>} User data
  */
 export async function getProfile(userId) {
-  const user = await prisma.user.findUnique({
+  const user = await basePrisma.user.findUnique({
     where: { id: userId },
     select: {
+      companyId: true,
+      company: { select: { name: true } },
       id: true,
       username: true,
       fullName: true,
@@ -200,7 +212,7 @@ export async function getProfile(userId) {
 export async function createUser(data) {
   const { username, fullName, role, password, active } = data;
 
-  const existing = await prisma.user.findUnique({
+  const existing = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
   });
 

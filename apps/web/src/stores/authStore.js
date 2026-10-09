@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 const ROLES = {
+  SUPERADMIN: 'SUPERADMIN',
   ADMINISTRADOR: 'ADMINISTRADOR',
   VENDEDOR: 'VENDEDOR',
 };
@@ -35,6 +36,7 @@ const PERMISSIONS = {
 };
 
 const ROLE_PERMISSIONS = {
+  [ROLES.SUPERADMIN]: [],
   [ROLES.ADMINISTRADOR]: Object.values(PERMISSIONS),
   [ROLES.VENDEDOR]: [
     PERMISSIONS.POS_ACCESS,

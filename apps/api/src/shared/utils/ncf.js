@@ -1,4 +1,5 @@
-import { prisma } from '../../config/db.js';
+import { prisma, basePrisma } from '../../config/db.js';
+import { getTenantId } from '../../config/tenant.js';
 import { NCF_PREFIXES } from '../../../../../packages/shared/constants.js';
 
 /**
@@ -9,12 +10,14 @@ import { NCF_PREFIXES } from '../../../../../packages/shared/constants.js';
 export async function getNextNCF(ncfType) {
   const prefix = NCF_PREFIXES[ncfType] || 'B01';
 
+  const companyId = getTenantId();
   const sequence = await prisma.nCFSequence.upsert({
-    where: { ncfType },
+    where: { companyId_ncfType: { companyId, ncfType } },
     update: {
       current: { increment: 1 },
     },
     create: {
+      companyId,
       ncfType,
       prefix,
       current: 1,
@@ -26,22 +29,16 @@ export async function getNextNCF(ncfType) {
 }
 
 /**
- * Initialize NCF sequences in database
+ * Crea las secuencias NCF de una empresa (idempotente).
+ * @param {string} companyId - Empresa
  * @returns {Promise<void>}
  */
-export async function initializeNCFSequences() {
-  const sequences = Object.entries(NCF_PREFIXES).map(([type, prefix]) => ({
-    ncfType: type,
-    prefix,
-    current: 0,
-    max: 99999999,
-  }));
-
-  for (const seq of sequences) {
-    await prisma.nCFSequence.upsert({
-      where: { ncfType: seq.ncfType },
+export async function initializeNCFSequences(companyId) {
+  for (const [ncfType, prefix] of Object.entries(NCF_PREFIXES)) {
+    await basePrisma.nCFSequence.upsert({
+      where: { companyId_ncfType: { companyId, ncfType } },
       update: {},
-      create: seq,
+      create: { companyId, ncfType, prefix, current: 0, max: 99999999 },
     });
   }
 }

@@ -5,6 +5,7 @@ import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange, c
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
 import { comparePassword } from '../../shared/utils/crypto.js';
 import { createAuditLog } from '../../shared/middleware/audit.js';
+import { getTenantId } from '../../config/tenant.js';
 import { getConfig } from '../config/config.service.js';
 import { resolveShiftForSale } from '../cashier/cashier.service.js';
 
@@ -311,6 +312,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
         cashierCloseId: shift.cashierCloseId,
         details: {
           create: saleDetails.map(d => ({
+            companyId: getTenantId(),
             productId: d.productId,
             productName: d.productName,
             quantity: d.quantity,

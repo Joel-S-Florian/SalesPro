@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { prisma } from '../../config/db.js';
+import { prisma, basePrisma } from '../../config/db.js';
+import { getTenantId } from '../../config/tenant.js';
 
 const text = max => z.string().trim().max(max);
 
@@ -37,12 +38,24 @@ export const DEFAULT_CONFIG = {
 };
 
 export async function getConfig() {
-  const rows = await prisma.systemConfig.findMany();
+  const companyId = getTenantId();
+  const [rows, company] = await Promise.all([
+    prisma.systemConfig.findMany(),
+    basePrisma.company.findUnique({ where: { id: companyId }, select: { name: true } }),
+  ]);
   const stored = Object.fromEntries(rows.map(row => [row.key, row.value]));
+  // Una empresa nueva muestra su propio nombre, no los datos de ejemplo
+  const businessDefaults = {
+    name: company?.name || DEFAULT_CONFIG.business.name,
+    rnc: '',
+    address: '',
+    phone: '',
+    email: '',
+  };
   return {
     ...DEFAULT_CONFIG,
     ...stored,
-    business: { ...DEFAULT_CONFIG.business, ...(stored.business || {}) },
+    business: { ...businessDefaults, ...(stored.business || {}) },
   };
 }
 
@@ -51,13 +64,14 @@ export async function getConfig() {
  */
 export async function updateConfig(changes) {
   const merged = configSchema.parse({ ...(await getConfig()), ...changes });
+  const companyId = getTenantId();
   const keys = Object.keys(changes).filter(key => key in merged);
 
   await prisma.$transaction(
     keys.map(key =>
       prisma.systemConfig.upsert({
-        where: { key },
-        create: { key, value: merged[key] },
+        where: { companyId_key: { companyId, key } },
+        create: { companyId, key, value: merged[key] },
         update: { value: merged[key] },
       })
     )
