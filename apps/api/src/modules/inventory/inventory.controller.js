@@ -2,8 +2,9 @@ import * as inventoryService from './inventory.service.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 
 export const getInventoryLogs = asyncHandler(async (req, res) => {
-  const { page, limit, sortBy, sortOrder, productId, type, userId, startDate, endDate } = req.query;
+  const { page, limit, sortBy, sortOrder, productId, type, userId, startDate, endDate, q } = req.query;
   const result = await inventoryService.getInventoryLogs({
+    q,
     page: parseInt(page) || 1,
     limit: parseInt(limit) || 50,
     sortBy,

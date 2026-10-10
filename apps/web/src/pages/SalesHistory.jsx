@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { api } from '../services/api';
@@ -7,6 +7,8 @@ import { Eye, Printer, Search } from 'lucide-react';
 import { reprintSaleById } from '../utils/receiptPdf';
 import { motion } from 'motion/react';
 import SaleDetailModal from '../components/SaleDetailModal';
+import Pagination from '../components/Pagination';
+import { useStoredPageSize } from '../hooks/usePagedList';
 
 export default function SalesHistory() {
   const { user } = useAuthStore();
@@ -16,7 +18,7 @@ export default function SalesHistory() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedSaleId, setSelectedSaleId] = useState(null);
-  const limit = 10;
+  const [limit, setLimit] = useStoredPageSize();
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   useEffect(() => {
@@ -28,7 +30,8 @@ export default function SalesHistory() {
   }, [search]);
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['sales', 'history', page, debouncedSearch, dateFrom, dateTo],
+    queryKey: ['sales', 'history', page, limit, debouncedSearch, dateFrom, dateTo],
+    placeholderData: keepPreviousData,
     queryFn: () => {
       const params = { page, limit };
       if (debouncedSearch) params.search = debouncedSearch;
@@ -181,14 +184,14 @@ export default function SalesHistory() {
                       {formatCurrency(sale.total)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
+                      <button aria-label="Ver detalle"
                         onClick={() => setSelectedSaleId(sale.id)}
                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                         title="Ver detalle"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button
+                      <button aria-label="Reimprimir / Descargar PDF"
                         onClick={() => reprintSaleById(sale.id)}
                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
                         title="Reimprimir / Descargar PDF"
@@ -203,30 +206,17 @@ export default function SalesHistory() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {pagination.totalPages > 1 && (
-          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/30">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-              Mostrando {pagination.total} ventas
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-sm"
-              >
-                Anterior
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                disabled={page === pagination.totalPages}
-                className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 text-sm"
-              >
-                Siguiente
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          pageSize={limit}
+          total={pagination.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={size => {
+            setLimit(size);
+            setPage(1);
+          }}
+          noun="ventas"
+        />
       </div>
 
       <SaleDetailModal

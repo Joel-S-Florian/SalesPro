@@ -6,7 +6,7 @@ import { buildPaginationQuery, getPaginationMeta, round2, cleanFilterString } fr
 /**
  * Get all products with pagination, search, and filters
  */
-export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q, categoryId, active, lowStock }) {
+export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q, categoryId, active, lowStock, stockStatus }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
   const where = {};
@@ -31,11 +31,21 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
 
   const onlyLowStock = lowStock === true || lowStock === 'true';
 
+  // OUT se resuelve en la base; OK y LOW comparan dos columnas (stock vs minStock) y se filtran en memoria
+  if (stockStatus === 'OUT') where.stock = 0;
+  const memoryFilter = onlyLowStock
+    ? p => p.stock <= p.minStock
+    : stockStatus === 'LOW'
+      ? p => p.stock > 0 && p.stock <= p.minStock
+      : stockStatus === 'OK'
+        ? p => p.stock > p.minStock
+        : null;
+
   const [products, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      skip: onlyLowStock ? undefined : skip,
-      take: onlyLowStock ? undefined : take,
+      skip: memoryFilter ? undefined : skip,
+      take: memoryFilter ? undefined : take,
       orderBy,
       include: {
         category: { select: { id: true, name: true } },
@@ -44,9 +54,9 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
     prisma.product.count({ where }),
   ]);
 
-  const filtered = onlyLowStock ? products.filter(p => p.stock <= p.minStock) : products;
-  const paginated = onlyLowStock ? filtered.slice(skip, skip + take) : filtered;
-  const finalTotal = onlyLowStock ? filtered.length : total;
+  const filtered = memoryFilter ? products.filter(memoryFilter) : products;
+  const paginated = memoryFilter ? filtered.slice(skip, skip + take) : filtered;
+  const finalTotal = memoryFilter ? filtered.length : total;
 
   // Calculate margin for each product
   const productsWithMargin = paginated.map(p => ({

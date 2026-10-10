@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const inventoryLogQuerySchema = z.object({
   query: z.object({
     productId: z.string().cuid().optional(),
+    q: z.string().optional(),
     type: z.enum(['ENTRADA', 'SALIDA', 'AJUSTE', 'DEVOLUCION']).optional(),
     userId: z.string().cuid().optional(),
     startDate: z.string().datetime().optional(),

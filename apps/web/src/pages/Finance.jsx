@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
+import Pagination from '../components/Pagination';
+import { useClientPage } from '../hooks/usePagedList';
 import { Loader2, AlertTriangle, RefreshCw, TrendingUp, TrendingDown, Wallet, Calendar, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 function defaultRange() {
@@ -12,6 +14,8 @@ function defaultRange() {
   };
 }
 
+const NO_TRANSACTIONS = [];
+
 export default function Finance() {
   const initial = defaultRange();
   const [from, setFrom] = useState(initial.from);
@@ -19,6 +23,7 @@ export default function Finance() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const pager = useClientPage(data?.transactions || NO_TRANSACTIONS);
 
   const fetchCashflow = async () => {
     try {
@@ -108,17 +113,17 @@ export default function Finance() {
           />
         </div>
         <div className="flex gap-3">
-          <button
+          <button aria-label="Refrescar datos"
             type="button"
             onClick={fetchCashflow}
-            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer"
+            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-medium transition cursor-pointer"
             title="Refrescar datos"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
             type="submit"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm transition-all cursor-pointer"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
           >
             Aplicar Filtros
           </button>
@@ -171,7 +176,7 @@ export default function Finance() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {transactions.map((t) => (
+              {pager.rows.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 font-mono text-slate-400">{formatDate(t.date)}</td>
                   <td className="px-6 py-4 font-medium text-slate-800 dark:text-slate-200">
@@ -206,6 +211,7 @@ export default function Finance() {
             </tbody>
           </table>
         </div>
+        <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPageChange={pager.setPage} onPageSizeChange={pager.setPageSize} noun="movimientos" />
       </div>
 
       <p className="text-[11px] text-slate-400 flex items-center gap-1.5">

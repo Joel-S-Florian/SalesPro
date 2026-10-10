@@ -97,12 +97,13 @@ export const changePassword = asyncHandler(async (req, res) => {
  * Get all users (admin only)
  */
 export const getUsers = asyncHandler(async (req, res) => {
-  const { page, limit, sortBy, sortOrder } = req.query;
+  const { page, limit, sortBy, sortOrder, q } = req.query;
   const result = await authService.getUsers({
     page: parseInt(page) || 1,
-    limit: parseInt(limit) || 20,
+    limit: Math.min(parseInt(limit) || 20, 100),
     sortBy,
     sortOrder,
+    q: typeof q === 'string' ? q.trim() : undefined,
   });
   res.json(result);
 });

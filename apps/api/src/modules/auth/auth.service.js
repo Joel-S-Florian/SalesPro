@@ -248,14 +248,26 @@ export async function createUser(data) {
  * @param {Object} params - Query params
  * @returns {Promise<Object>} Users with pagination
  */
-export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' }) {
+const USER_SORT_FIELDS = ['createdAt', 'fullName', 'username', 'role', 'active'];
+
+export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc', q }) {
   const skip = (page - 1) * limit;
+  const orderField = USER_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt';
+  const where = q
+    ? {
+        OR: [
+          { fullName: { contains: q, mode: 'insensitive' } },
+          { username: { contains: q, mode: 'insensitive' } },
+        ],
+      }
+    : {};
   
   const [users, total] = await Promise.all([
     prisma.user.findMany({
+      where,
       skip,
       take: limit,
-      orderBy: { [sortBy]: sortOrder },
+      orderBy: { [orderField]: sortOrder === 'asc' ? 'asc' : 'desc' },
       select: {
         id: true,
         username: true,
@@ -266,7 +278,7 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
         updatedAt: true,
       },
     }),
-    prisma.user.count(),
+    prisma.user.count({ where }),
   ]);
 
   return {

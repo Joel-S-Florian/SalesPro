@@ -2,7 +2,7 @@ import * as productsService from './products.service.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 
 export const getProducts = asyncHandler(async (req, res) => {
-  const { page, limit, sortBy, sortOrder, q, categoryId, active, lowStock } = req.query;
+  const { page, limit, sortBy, sortOrder, q, categoryId, active, lowStock, stockStatus } = req.query;
   const result = await productsService.getProducts({
     page: parseInt(page) || 1,
     limit: parseInt(limit) || 20,
@@ -12,6 +12,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     categoryId,
     active: active !== undefined ? active === 'true' : undefined,
     lowStock: lowStock === 'true',
+    stockStatus: ['OK', 'LOW', 'OUT'].includes(stockStatus) ? stockStatus : undefined,
   });
   res.json(result);
 });

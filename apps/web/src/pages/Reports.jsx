@@ -4,6 +4,8 @@ import {
   Loader2, TrendingUp, Users, Calendar,
   BarChart2, Package, UserCheck, Layers, FileJson, FileSpreadsheet, FileText, FileCode,
 } from 'lucide-react';
+import Pagination from '../components/Pagination';
+import { useClientPage } from '../hooks/usePagedList';
 import { generateFilename, exportToCSV, exportToJSON, exportToXML, exportToPDF } from '../utils/export';
 
 const DATE_PRESETS = [
@@ -44,19 +46,19 @@ function presetRange(preset) {
 }
 
 function ExportButtons({ onExport, disabled }) {
-  const btn = 'flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
+  const btn = 'flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
   return (
     <div className="flex flex-wrap gap-2">
-      <button onClick={() => onExport('pdf')} disabled={disabled} className={btn} title="Exportar PDF">
+      <button aria-label="Exportar PDF" onClick={() => onExport('pdf')} disabled={disabled} className={btn} title="Exportar PDF">
         <FileText className="w-3.5 h-3.5" /> PDF
       </button>
-      <button onClick={() => onExport('csv')} disabled={disabled} className={btn} title="Exportar Excel (CSV)">
+      <button aria-label="Exportar Excel (CSV)" onClick={() => onExport('csv')} disabled={disabled} className={btn} title="Exportar Excel (CSV)">
         <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
       </button>
-      <button onClick={() => onExport('json')} disabled={disabled} className={btn} title="Exportar JSON">
+      <button aria-label="Exportar JSON" onClick={() => onExport('json')} disabled={disabled} className={btn} title="Exportar JSON">
         <FileJson className="w-3.5 h-3.5" /> JSON
       </button>
-      <button onClick={() => onExport('xml')} disabled={disabled} className={btn} title="Exportar XML">
+      <button aria-label="Exportar XML" onClick={() => onExport('xml')} disabled={disabled} className={btn} title="Exportar XML">
         <FileCode className="w-3.5 h-3.5" /> XML
       </button>
     </div>
@@ -85,8 +87,10 @@ function KpiCard({ label, value, icon: Icon, tone = 'indigo' }) {
 }
 
 function DataTable({ columns, rows, emptyMessage = 'Sin datos registrados' }) {
+  const pager = useClientPage(rows);
   return (
-    <div className="overflow-x-auto flex-1">
+    <div className="flex-1">
+    <div className="overflow-x-auto">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="text-slate-400 font-mono py-2 border-b border-slate-100 dark:border-slate-800">
@@ -98,7 +102,7 @@ function DataTable({ columns, rows, emptyMessage = 'Sin datos registrados' }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-          {rows.map((row, idx) => (
+          {pager.rows.map((row, idx) => (
             <tr key={row.id || idx} className="text-slate-600 dark:text-slate-400 hover:bg-slate-50/50">
               {columns.map((c) => (
                 <td key={c.key} className={`py-2.5 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : ''} ${c.bold ? 'font-semibold text-slate-800 dark:text-slate-200' : ''} ${c.mono ? 'font-mono' : ''}`}>
@@ -114,6 +118,8 @@ function DataTable({ columns, rows, emptyMessage = 'Sin datos registrados' }) {
           )}
         </tbody>
       </table>
+    </div>
+    <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPageChange={pager.setPage} onPageSizeChange={pager.setPageSize} noun="filas" />
     </div>
   );
 }
@@ -300,6 +306,7 @@ export default function Reports() {
 
   const productRows = productData.data || [];
   const customerRows = customerData.data || [];
+  const customerPager = useClientPage(customerRows);
   const staffRows = staffData.data || [];
 
   const customerColumns = [
@@ -348,7 +355,7 @@ export default function Reports() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`pb-3 text-sm font-bold transition-all relative cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-3 text-sm font-bold transition relative cursor-pointer flex items-center gap-1.5 ${
               tab === t.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
@@ -470,7 +477,7 @@ export default function Reports() {
 
         <button
           type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-sm cursor-pointer"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-sm cursor-pointer"
         >
           Aplicar Filtros
         </button>
@@ -542,7 +549,7 @@ export default function Reports() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/50">
-                  {customerRows.map((r) => (
+                  {customerPager.rows.map((r) => (
                     <React.Fragment key={r.customerId}>
                       <tr className="text-slate-600 dark:text-slate-400 hover:bg-slate-50/50">
                         <td className="py-2.5 font-semibold text-slate-800 dark:text-slate-200">{r.name}</td>
@@ -590,6 +597,7 @@ export default function Reports() {
                   )}
                 </tbody>
               </table>
+              <Pagination page={customerPager.page} pageSize={customerPager.pageSize} total={customerPager.total} onPageChange={customerPager.setPage} onPageSizeChange={customerPager.setPageSize} noun="clientes" />
             </div>
           </div>
         </div>

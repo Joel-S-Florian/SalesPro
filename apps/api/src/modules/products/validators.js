@@ -40,6 +40,7 @@ export const productQuerySchema = z.object({
     categoryId: z.string().cuid().optional(),
     active: z.coerce.boolean().optional(),
     lowStock: z.coerce.boolean().optional(),
+    stockStatus: z.enum(['OK', 'LOW', 'OUT']).optional(),
     page: z.coerce.number().int().positive().default(1),
     limit: z.coerce.number().int().positive().max(100).default(20),
     sortBy: z.string().default('name'),

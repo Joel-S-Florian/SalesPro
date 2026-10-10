@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
+import { Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { useClientPage } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 outline-none text-xs';
@@ -29,6 +33,7 @@ export default function Companies() {
   const [stats, setStats] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [search, setSearch] = useState('');
+  const pager = useClientPage(companies);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -82,6 +87,7 @@ export default function Companies() {
       });
       setIsFormOpen(false);
       setForm(EMPTY_FORM);
+      notify.success('Empresa creada');
       loadData();
     } catch (err) {
       setFormError(err.message || 'No se pudo crear la empresa');
@@ -99,7 +105,7 @@ export default function Companies() {
       loadData();
       if (detail?.id === company.id) setDetail(await api.platform.company(company.id));
     } catch (err) {
-      alert(err.message || 'No se pudo actualizar la empresa');
+      notify.error(err.message || 'No se pudo actualizar la empresa');
     }
   };
 
@@ -107,7 +113,7 @@ export default function Companies() {
     try {
       setDetail(await api.platform.company(company.id));
     } catch (err) {
-      alert(err.message || 'No se pudo cargar la empresa');
+      notify.error(err.message || 'No se pudo cargar la empresa');
     }
   };
 
@@ -130,6 +136,7 @@ export default function Companies() {
       const updated = await api.platform.updateCompany(detail.id, editForm);
       setDetail(updated);
       setEditForm(null);
+      notify.success('Datos de la empresa actualizados');
       loadData();
     } catch (err) {
       setEditError(err.message || 'No se pudo guardar la empresa');
@@ -217,7 +224,8 @@ export default function Companies() {
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
 
-      <div className={`${cardClass} overflow-x-auto`}>
+      <div className={`${cardClass} overflow-hidden`}>
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider">
             <tr>
@@ -231,14 +239,12 @@ export default function Companies() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
-            )}
+            {loading && <TableSkeleton rows={pager.pageSize} columns={7} />}
             {!loading && companies.length === 0 && (
               <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No hay empresas.</td></tr>
             )}
             {!loading &&
-              companies.map(c => (
+              pager.rows.map(c => (
                 <tr key={c.id} className={c.active ? '' : 'opacity-60'}>
                   <td className="px-4 py-3 font-medium">
                     {c.name}
@@ -251,10 +257,10 @@ export default function Companies() {
                   <td className="px-4 py-3">{new Date(c.createdAt).toLocaleDateString('es-DO')}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
-                      <button onClick={() => openDetail(c)} title="Ver usuarios" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
+                      <button aria-label="Ver usuarios" onClick={() => openDetail(c)} title="Ver usuarios" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
                         <Eye className="w-4 h-4" />
                       </button>
-                      <button onClick={() => toggleActive(c)} title={c.active ? 'Suspender' : 'Reactivar'} className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer">
+                      <button aria-label={c.active ? 'Suspender' : 'Reactivar'} onClick={() => toggleActive(c)} title={c.active ? 'Suspender' : 'Reactivar'} className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer">
                         <Power className="w-4 h-4" />
                       </button>
                     </div>
@@ -263,6 +269,8 @@ export default function Companies() {
               ))}
           </tbody>
         </table>
+        </div>
+        <Pagination page={pager.page} pageSize={pager.pageSize} total={pager.total} onPageChange={pager.setPage} onPageSizeChange={pager.setPageSize} noun="empresas" />
       </div>
 
       <Modal isOpen={isFormOpen} onClose={() => !saving && setIsFormOpen(false)} title="Nueva empresa" maxWidth="lg">
@@ -349,7 +357,7 @@ export default function Companies() {
                     <td className="py-2">{u.fullName}</td>
                     <td className="py-2">{u.role}</td>
                     <td className="py-2 text-right">
-                      <button onClick={() => { setResetTarget(u); setResetMessage(''); }} title="Restablecer contraseña" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
+                      <button aria-label="Restablecer contraseña" onClick={() => { setResetTarget(u); setResetMessage(''); }} title="Restablecer contraseña" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
                         <KeyRound className="w-4 h-4" />
                       </button>
                     </td>

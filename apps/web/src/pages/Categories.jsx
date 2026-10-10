@@ -1,15 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Trash2, Tag } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 export default function Categories() {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
   // Search filter
   const [search, setSearch] = useState('');
+
+  const { rows: categories, total, loading, error, page, pageSize, setPage, setPageSize, reload } = usePagedList(
+    api.categories.page,
+    { q: search.trim() || undefined }
+  );
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -17,23 +22,6 @@ export default function Categories() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.categories.list();
-      setCategories(Array.isArray(data) ? data : (data?.data || []));
-    } catch (err) {
-      setError(err.message || 'Error al cargar categorías');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -57,13 +45,15 @@ export default function Categories() {
       setSaving(true);
       if (editingId) {
         await api.categories.update(editingId, name, description);
+        notify.success('Categoría actualizada');
       } else {
         await api.categories.create(name, description);
+        notify.success('Categoría creada');
       }
       setIsFormOpen(false);
-      loadData();
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al guardar categoría');
+      notify.error(err.message || 'Error al guardar categoría');
     } finally {
       setSaving(false);
     }
@@ -74,26 +64,14 @@ export default function Categories() {
 
     try {
       await api.categories.delete(id);
-      loadData();
+      notify.success('Categoría eliminada');
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al eliminar categoría');
+      notify.error(err.message || 'Error al eliminar categoría');
     }
   };
 
-  const safeCategories = Array.isArray(categories) ? categories : [];
-  const filteredCategories = safeCategories.filter(c =>
-    (c.name || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (c.description || '').toLowerCase().includes((search || '').toLowerCase())
-  );
-
-  if (loading && safeCategories.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-mono">Cargando categorías...</p>
-      </div>
-    );
-  }
+  const filteredCategories = categories;
 
   return (
     <div className="space-y-6" id="categories-view">
@@ -109,7 +87,7 @@ export default function Categories() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition w-full sm:w-auto justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Nueva Categoría
         </button>
@@ -118,7 +96,7 @@ export default function Categories() {
       {/* Filter Toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
         <div className="relative">
-          <Search className="absolute left-3 top-3 w-4.5 h-4.5 text-slate-400" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar por nombre o descripción de categoría..."
@@ -143,6 +121,7 @@ export default function Categories() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading && filteredCategories.length === 0 && <TableSkeleton rows={pageSize} columns={5} />}
               {filteredCategories.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 text-indigo-500">
@@ -157,14 +136,14 @@ export default function Categories() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-1.5">
-                      <button
+                      <button aria-label="Editar"
                         onClick={() => openEditModal(c)}
                         className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         title="Editar"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button
+                      <button aria-label="Eliminar"
                         onClick={() => handleDeleteCategory(c.id)}
                         className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         title="Eliminar"
@@ -175,16 +154,17 @@ export default function Categories() {
                   </td>
                 </tr>
               ))}
-              {filteredCategories.length === 0 && (
+              {!loading && filteredCategories.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-10 text-slate-400 font-mono">
-                    No se encontraron categorías comerciales.
+                    {error || 'No se encontraron categorías comerciales.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} noun="categorías" />
       </div>
 
       {/* Create / Edit Form modal */}

@@ -6,10 +6,18 @@ import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilt
 /**
  * Get inventory logs with pagination and filters
  */
-export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc', productId, type, userId, startDate, endDate }) {
+export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc', productId, type, userId, startDate, endDate, q }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
   const where = {};
+
+  const cleanQ = cleanFilterString(q);
+  if (cleanQ) {
+    where.OR = [
+      { productName: { contains: cleanQ, mode: 'insensitive' } },
+      { reason: { contains: cleanQ, mode: 'insensitive' } },
+    ];
+  }
 
   const cleanProduct = cleanFilterString(productId);
   if (cleanProduct) where.productId = cleanProduct;

@@ -1,17 +1,29 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Trash2, History, Calendar, FileText, ShoppingBag } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
 import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
+import { notify } from '../utils/notify';
 
 export default function Customers() {
-  const [customers, setCustomers] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
   // Search filter
   const [search, setSearch] = useState('');
+
+  // Lista paginada y buscada en el servidor
+  const {
+    rows: customers,
+    total,
+    loading,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    reload,
+  } = usePagedList(api.customers.page, { q: search.trim() || undefined });
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -28,27 +40,8 @@ export default function Customers() {
   // History states
   const [selectedCustHistory, setSelectedCustHistory] = useState(null);
   const [custSales, setCustSales] = useState([]);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [cList, sList] = await Promise.all([
-        api.customers.list(),
-        api.sales.list()
-      ]);
-      setCustomers(Array.isArray(cList) ? cList : (cList?.data || []));
-      setSales(Array.isArray(sList) ? sList : (sList?.data || []));
-    } catch (err) {
-      setError(err.message || 'Error al cargar clientes');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
+  const [custSalesTotal, setCustSalesTotal] = useState(0);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -91,13 +84,15 @@ export default function Customers() {
       const payload = { documentId, name, email, phone, address };
       if (editingId) {
         await api.customers.update(editingId, payload);
+        notify.success('Cliente actualizado');
       } else {
         await api.customers.create(payload);
+        notify.success('Cliente creado');
       }
       setIsFormOpen(false);
-      loadData();
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al guardar cliente');
+      notify.error(err.message || 'Error al guardar cliente');
     } finally {
       setSaving(false);
     }
@@ -108,36 +103,30 @@ export default function Customers() {
 
     try {
       await api.customers.delete(id);
-      loadData();
+      notify.success('Cliente eliminado');
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al eliminar cliente');
+      notify.error(err.message || 'Error al eliminar cliente');
     }
   };
 
-  const safeCustomers = Array.isArray(customers) ? customers : [];
-  const safeSales = Array.isArray(sales) ? sales : [];
-
-  const openHistoryModal = (c) => {
-    const filteredSales = safeSales.filter(s => s.customerId === c.id);
+  const openHistoryModal = async (c) => {
     setSelectedCustHistory(c);
-    setCustSales(filteredSales);
+    setCustSales([]);
+    setCustSalesTotal(0);
+    try {
+      setLoadingHistory(true);
+      const result = await api.sales.list({ customerId: c.id, limit: 50 });
+      setCustSales(result?.data || []);
+      setCustSalesTotal(result?.pagination?.total ?? (result?.data || []).length);
+    } catch (err) {
+      notify.error(err.message || 'No se pudo cargar el historial del cliente');
+    } finally {
+      setLoadingHistory(false);
+    }
   };
 
-  const filteredCustomers = safeCustomers.filter(c =>
-    (c.name || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (c.documentId || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (c.email || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (c.phone || '').includes(search || '')
-  );
-
-  if (loading && safeCustomers.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-mono">Cargando catálogo de clientes...</p>
-      </div>
-    );
-  }
+  const filteredCustomers = customers;
 
   return (
     <div className="space-y-6" id="customers-view">
@@ -153,7 +142,7 @@ export default function Customers() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition w-full sm:w-auto justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Agregar Cliente
         </button>
@@ -162,7 +151,7 @@ export default function Customers() {
       {/* Filters Toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
         <div className="relative">
-          <Search className="absolute left-3 top-3 w-4.5 h-4.5 text-slate-400" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar por DNI/RUC, nombre o correo de cliente..."
@@ -187,6 +176,7 @@ export default function Customers() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading && filteredCustomers.length === 0 && <TableSkeleton rows={pageSize} columns={5} />}
               {filteredCustomers.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 font-mono font-semibold text-slate-900 dark:text-slate-100">
@@ -205,14 +195,14 @@ export default function Customers() {
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">{c.address || '-'}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-1.5">
-                      <button
+                      <button aria-label="Ver Historial de Compras"
                         onClick={() => openHistoryModal(c)}
                         className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         title="Ver Historial de Compras"
                       >
                         <History className="w-4 h-4" />
                       </button>
-                      <button
+                      <button aria-label="Editar"
                         onClick={() => openEditModal(c)}
                         disabled={c.id === 'cust_final'}
                         className="text-slate-400 hover:text-indigo-600 disabled:opacity-30 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -220,7 +210,7 @@ export default function Customers() {
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
-                      <button
+                      <button aria-label="Eliminar"
                         onClick={() => handleDeleteCustomer(c.id)}
                         disabled={c.id === 'cust_final'}
                         className="text-slate-400 hover:text-rose-500 disabled:opacity-30 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -232,16 +222,24 @@ export default function Customers() {
                   </td>
                 </tr>
               ))}
-              {filteredCustomers.length === 0 && (
+              {!loading && filteredCustomers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-10 text-slate-400 font-mono">
-                    Ningún cliente coincide con la búsqueda.
+                    {error || 'Ningún cliente coincide con la búsqueda.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          noun="clientes"
+        />
       </div>
 
       {/* Form modal */}
@@ -397,14 +395,14 @@ export default function Customers() {
                 <p className="font-bold text-slate-800 dark:text-slate-100">{selectedCustHistory.phone || '-'}</p>
               </div>
               <div>
-                <p className="text-slate-400">TOTAL FACTURADO:</p>
+                <p className="text-slate-400">{custSalesTotal > custSales.length ? `FACTURADO (ÚLTIMAS ${custSales.length}):` : 'TOTAL FACTURADO:'}</p>
                 <p className="font-bold text-indigo-600 dark:text-indigo-400">
                   ${custSales.reduce((acc, x) => acc + Number(x.total || 0), 0).toFixed(2)}
                 </p>
               </div>
               <div>
                 <p className="text-slate-400">BOLETAS TOTALES:</p>
-                <p className="font-bold text-slate-800 dark:text-slate-100">{custSales.length} comprobantes</p>
+                <p className="font-bold text-slate-800 dark:text-slate-100">{loadingHistory ? '…' : custSalesTotal} comprobantes</p>
               </div>
             </div>
 
@@ -438,7 +436,7 @@ export default function Customers() {
                 </div>
               ))}
 
-              {custSales.length === 0 && (
+              {!loadingHistory && custSales.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-center space-y-2">
                   <ShoppingBag className="w-10 h-10 stroke-1 text-slate-300" />
                   <p className="text-xs font-mono">Este cliente no registra compras históricas.</p>

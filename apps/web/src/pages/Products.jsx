@@ -2,17 +2,35 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 export default function Products() {
-  const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   // Search & Filters
   const [search, setSearch] = useState('');
   const [selectedCatId, setSelectedCatId] = useState('ALL');
   const [selectedStockStatus, setSelectedStockStatus] = useState('ALL');
+
+  // Lista paginada en el servidor (búsqueda, categoría y estado de stock también se filtran allí)
+  const {
+    rows: products,
+    total,
+    loading,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    reload,
+  } = usePagedList(api.products.page, {
+    q: search.trim() || undefined,
+    categoryId: selectedCatId === 'ALL' ? undefined : selectedCatId,
+    stockStatus: selectedStockStatus === 'ALL' ? undefined : selectedStockStatus,
+  });
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -32,28 +50,11 @@ export default function Products() {
 
   const [saving, setSaving] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [pList, cList] = await Promise.all([
-        api.products.list(),
-        api.categories.list()
-      ]);
-      console.log('Productos recibidos:', pList); // DEBUG
-      console.log('Categorías recibidas:', cList); // DEBUG
-      setProducts(Array.isArray(pList) ? pList : []);
-      setCategories(Array.isArray(cList) ? cList : []);
-    } catch (err) {
-      console.error('Error cargando datos:', err); // DEBUG
-      setError(err.message || 'Error al cargar productos');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
+    api.categories
+      .list({ limit: 100 })
+      .then(list => setCategories(Array.isArray(list) ? list : []))
+      .catch(() => setCategories([]));
   }, []);
 
   const openCreateModal = () => {
@@ -96,11 +97,11 @@ export default function Products() {
   const handleSaveProduct = async (e) => {
     e.preventDefault();
     if (!name || !categoryId || costPrice < 0 || salePrice < 0 || (!editingId && stock < 0)) {
-      alert('Por favor llene todos los campos obligatorios correctamente');
+      notify.warning('Por favor llene todos los campos obligatorios correctamente');
       return;
     }
     if (!editingId && !code) {
-      alert('El código del producto es obligatorio');
+      notify.warning('El código del producto es obligatorio');
       return;
     }
 
@@ -129,14 +130,16 @@ export default function Products() {
 
       if (editingId) {
         await api.products.update(editingId, payload);
+        notify.success('Producto actualizado');
       } else {
         await api.products.create(payload);
+        notify.success('Producto creado');
       }
 
       setIsFormOpen(false);
-      loadData();
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al guardar producto');
+      notify.error(err.message || 'Error al guardar producto');
     } finally {
       setSaving(false);
     }
@@ -147,9 +150,10 @@ export default function Products() {
 
     try {
       await api.products.delete(id);
-      loadData();
+      notify.success('Producto eliminado');
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al eliminar producto');
+      notify.error(err.message || 'Error al eliminar producto');
     }
   };
 
@@ -158,40 +162,7 @@ export default function Products() {
     return cats.find(c => c.id === id)?.name || 'Sin Categoría';
   };
 
-  const safeProducts = Array.isArray(products) ? products : [];
-  // Perform client side search and filters
-  const filteredProducts = safeProducts.filter(p => {
-    const pName = p.name || '';
-    const pCode = p.code || '';
-    const pDesc = p.description || '';
-    const searchLower = (search || '').toLowerCase();
-    const matchesSearch = pName.toLowerCase().includes(searchLower) ||
-      pCode.toLowerCase().includes(searchLower) ||
-      pDesc.toLowerCase().includes(searchLower);
-    const matchesCategory = selectedCatId === 'ALL' || p.categoryId === selectedCatId;
-    
-    let matchesStock = true;
-    const stockVal = Number(p.stock || 0);
-    const minStockVal = Number(p.minStock || 0);
-    if (selectedStockStatus === 'LOW') {
-      matchesStock = stockVal <= minStockVal && stockVal > 0;
-    } else if (selectedStockStatus === 'OUT') {
-      matchesStock = stockVal === 0;
-    } else if (selectedStockStatus === 'OK') {
-      matchesStock = stockVal > minStockVal;
-    }
-
-    return matchesSearch && matchesCategory && matchesStock;
-  });
-
-  if (loading && safeProducts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-mono">Cargando inventario de productos...</p>
-      </div>
-    );
-  }
+  const filteredProducts = products;
 
   return (
     <div className="space-y-6" id="products-view">
@@ -207,7 +178,7 @@ export default function Products() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition w-full sm:w-auto justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Agregar Producto
         </button>
@@ -216,7 +187,7 @@ export default function Products() {
       {/* Filters Toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 w-4.5 h-4.5 text-slate-400" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar por código, nombre..."
@@ -277,6 +248,7 @@ export default function Products() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading && filteredProducts.length === 0 && <TableSkeleton rows={pageSize} columns={8} />}
               {filteredProducts.map((p) => {
                 const isLow = p.stock <= p.minStock && p.stock > 0;
                 const isOut = p.stock === 0;
@@ -325,14 +297,14 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-1.5">
-                        <button
+                        <button aria-label="Editar"
                           onClick={() => openEditModal(p)}
                           className="text-slate-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           title="Editar"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
-                        <button
+                        <button aria-label="Eliminar / Desactivar"
                           onClick={() => handleDeleteProduct(p.id)}
                           className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                           title="Eliminar / Desactivar"
@@ -344,16 +316,24 @@ export default function Products() {
                   </tr>
                 );
               })}
-              {filteredProducts.length === 0 && (
+              {!loading && filteredProducts.length === 0 && (
                 <tr>
                   <td colSpan={8} className="text-center py-10 text-slate-400 font-mono">
-                    Ningún producto coincide con los filtros aplicados.
+                    {error || 'Ningún producto coincide con los filtros aplicados.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+          noun="productos"
+        />
       </div>
 
       {/* Form Dialog for Create / Edit */}

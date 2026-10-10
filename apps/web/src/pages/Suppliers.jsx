@@ -1,7 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Power, History } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 const EMPTY_FORM = {
   name: '',
@@ -30,11 +34,23 @@ const money = value =>
   `$${Number(value || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [showInactive, setShowInactive] = useState(false);
+
+  const {
+    rows: suppliers,
+    total,
+    loading,
+    error,
+    page,
+    pageSize,
+    setPage,
+    setPageSize,
+    reload: loadData,
+  } = usePagedList(api.suppliers.list, {
+    q: search.trim() || undefined,
+    active: showInactive ? undefined : 'true',
+  });
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -45,28 +61,6 @@ export default function Suppliers() {
   const [historySupplier, setHistorySupplier] = useState(null);
   const [history, setHistory] = useState({ data: [], totalSpent: 0 });
   const [loadingHistory, setLoadingHistory] = useState(false);
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const result = await api.suppliers.list({
-        q: search.trim() || undefined,
-        active: showInactive ? undefined : 'true',
-        limit: 100,
-      });
-      setSuppliers(result?.data || []);
-    } catch (err) {
-      setError(err.message || 'Error al cargar proveedores');
-    } finally {
-      setLoading(false);
-    }
-  }, [search, showInactive]);
-
-  useEffect(() => {
-    const timer = setTimeout(loadData, 250);
-    return () => clearTimeout(timer);
-  }, [loadData]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -89,6 +83,7 @@ export default function Suppliers() {
       setFormError('');
       if (editingId) await api.suppliers.update(editingId, form);
       else await api.suppliers.create(form);
+      notify.success(editingId ? 'Proveedor actualizado' : 'Proveedor creado');
       setIsFormOpen(false);
       loadData();
     } catch (err) {
@@ -103,9 +98,10 @@ export default function Suppliers() {
     if (!window.confirm(`¿Seguro que desea ${action} a ${supplier.name}?`)) return;
     try {
       await api.suppliers.update(supplier.id, { active: !supplier.active });
+      notify.success(supplier.active ? 'Proveedor desactivado' : 'Proveedor reactivado');
       loadData();
     } catch (err) {
-      alert(err.message || 'No se pudo actualizar el proveedor');
+      notify.error(err.message || 'No se pudo actualizar el proveedor');
     }
   };
 
@@ -116,7 +112,7 @@ export default function Suppliers() {
       setLoadingHistory(true);
       setHistory(await api.suppliers.purchases(supplier.id, { limit: 100 }));
     } catch (err) {
-      alert(err.message || 'No se pudo cargar el historial de compras');
+      notify.error(err.message || 'No se pudo cargar el historial de compras');
     } finally {
       setLoadingHistory(false);
     }
@@ -155,7 +151,8 @@ export default function Suppliers() {
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider">
             <tr>
@@ -168,13 +165,7 @@ export default function Suppliers() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
-                  <Loader2 className="w-5 h-5 animate-spin inline" />
-                </td>
-              </tr>
-            )}
+            {loading && suppliers.length === 0 && <TableSkeleton rows={pageSize} columns={6} />}
             {!loading && suppliers.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-slate-400">
@@ -198,21 +189,21 @@ export default function Suppliers() {
                   <td className="px-4 py-3 text-center font-mono">{s._count?.purchases ?? 0}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
-                      <button
+                      <button aria-label="Historial de compras"
                         onClick={() => openHistory(s)}
                         title="Historial de compras"
                         className="p-1.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                       >
                         <History className="w-4 h-4" />
                       </button>
-                      <button
+                      <button aria-label="Editar"
                         onClick={() => openEdit(s)}
                         title="Editar"
                         className="p-1.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button
+                      <button aria-label={s.active ? 'Desactivar' : 'Reactivar'}
                         onClick={() => toggleActive(s)}
                         title={s.active ? 'Desactivar' : 'Reactivar'}
                         className="p-1.5 rounded text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
@@ -225,6 +216,8 @@ export default function Suppliers() {
               ))}
           </tbody>
         </table>
+        </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} noun="proveedores" />
       </div>
 
       <Modal

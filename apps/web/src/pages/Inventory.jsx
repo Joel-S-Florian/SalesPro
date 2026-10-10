@@ -1,22 +1,41 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, ArrowUpRight, ArrowDownLeft, FileText, AlertTriangle, ListFilter, ShoppingCart } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import ProductPicker from '../components/ProductPicker';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 export default function Inventory() {
-  const [products, setProducts] = useState([]);
-  const [logs, setLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
   // Search & Filter state
   const [tab, setTab] = useState('STOCK');
   const [search, setSearch] = useState('');
   const [logTypeFilter, setLogTypeFilter] = useState('ALL');
 
+  const stock = usePagedList(
+    params => (tab === 'STOCK' ? api.products.page(params) : Promise.resolve({ data: [], pagination: { total: 0 } })),
+    { tab, q: tab === 'STOCK' ? search.trim() || undefined : undefined }
+  );
+  const history = usePagedList(
+    params => (tab === 'LOGS' ? api.inventory.logsPage(params) : Promise.resolve({ data: [], pagination: { total: 0 } })),
+    {
+      tab,
+      q: tab === 'LOGS' ? search.trim() || undefined : undefined,
+      type: tab === 'LOGS' && logTypeFilter !== 'ALL' ? logTypeFilter.toUpperCase() : undefined,
+    }
+  );
+  const current = tab === 'STOCK' ? stock : history;
+  const reload = () => {
+    stock.reload();
+    history.reload();
+  };
+
   // Adjustment Modal states
   const [isAdjustOpen, setIsAdjustOpen] = useState(false);
   const [selectedProdId, setSelectedProdId] = useState('');
+  const [selectedProd, setSelectedProd] = useState(null);
   const [adjustType, setAdjustType] = useState('Entrada');
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustReason, setAdjustReason] = useState('');
@@ -32,37 +51,9 @@ export default function Inventory() {
   const [purchaseInvoice, setPurchaseInvoice] = useState('');
   const [submittingPurchase, setSubmittingPurchase] = useState(false);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [pList, lList] = await Promise.all([
-        api.products.list(),
-        api.inventory.logs()
-      ]);
-      const safePList = Array.isArray(pList) ? pList : (pList?.data || []);
-      const safeLList = Array.isArray(lList) ? lList : (lList?.data || []);
-      setProducts(safePList);
-      setLogs(safeLList);
-      if (safePList.length > 0) {
-        setSelectedProdId(safePList[0].id);
-      }
-    } catch (err) {
-      setError(err.message || 'Error al cargar inventario');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
-
   const openAdjustmentModal = () => {
-    const activeProds = (Array.isArray(products) ? products : []).filter(p => p.active);
-    if (activeProds.length > 0) {
-      setSelectedProdId(activeProds[0].id);
-    }
+    setSelectedProdId('');
+    setSelectedProd(null);
     setAdjustType('Entrada');
     setAdjustQty(1);
     setAdjustReason('');
@@ -70,10 +61,7 @@ export default function Inventory() {
   };
 
   const openPurchaseModal = () => {
-    const activeProds = (Array.isArray(products) ? products : []).filter(p => p.active);
-    if (activeProds.length > 0) {
-      setPurchaseProdId(activeProds[0].id);
-    }
+    setPurchaseProdId('');
     setPurchaseQty(1);
     setPurchaseUnitCost(0);
     setPurchaseSupplier('');
@@ -88,7 +76,7 @@ export default function Inventory() {
   const handleRegisterPurchase = async (e) => {
     e.preventDefault();
     if (!purchaseProdId || purchaseQty <= 0 || purchaseUnitCost <= 0 || !purchaseSupplier) {
-      alert('Por favor complete proveedor, producto, cantidad y costo correctamente');
+      notify.warning('Por favor complete proveedor, producto, cantidad y costo correctamente');
       return;
     }
 
@@ -102,9 +90,10 @@ export default function Inventory() {
         invoiceNumber: purchaseInvoice.trim() || undefined,
       });
       setIsPurchaseOpen(false);
-      loadData();
+      notify.success('Compra registrada');
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al registrar compra');
+      notify.error(err.message || 'Error al registrar compra');
     } finally {
       setSubmittingPurchase(false);
     }
@@ -113,13 +102,13 @@ export default function Inventory() {
   const handleAdjustStock = async (e) => {
     e.preventDefault();
     if (!selectedProdId || adjustQty <= 0 || !adjustReason.trim()) {
-      alert('Por favor llene todos los campos correctamente');
+      notify.warning('Por favor llene todos los campos correctamente');
       return;
     }
 
-    const prod = (Array.isArray(products) ? products : []).find(p => p.id === selectedProdId);
+    const prod = selectedProd;
     if (adjustType === 'Salida' && prod && prod.stock < adjustQty) {
-      alert(`Error: El stock actual (${prod.stock}) es menor que la cantidad de salida solicitada (${adjustQty}).`);
+      notify.warning(`Error: El stock actual (${prod.stock}) es menor que la cantidad de salida solicitada (${adjustQty}).`);
       return;
     }
 
@@ -132,42 +121,17 @@ export default function Inventory() {
         reason: adjustReason
       });
       setIsAdjustOpen(false);
-      loadData();
+      notify.success('Ajuste de inventario registrado');
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al procesar ajuste de inventario');
+      notify.error(err.message || 'Error al procesar ajuste de inventario');
     } finally {
       setSubmittingAdjust(false);
     }
   };
 
-  const safeProducts = Array.isArray(products) ? products : [];
-  const safeLogs = Array.isArray(logs) ? logs : [];
-
-  // Filters
-  const filteredProducts = safeProducts.filter(p =>
-    (p.name || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (p.code || '').toLowerCase().includes((search || '').toLowerCase())
-  );
-
-  const filteredLogs = safeLogs.filter(l => {
-    const pName = l.productName || l.product?.name || '';
-    const reasonStr = l.reason || '';
-    const searchLower = (search || '').toLowerCase();
-    const matchesSearch = pName.toLowerCase().includes(searchLower) || reasonStr.toLowerCase().includes(searchLower);
-    const lType = (l.type || '').toUpperCase();
-    const fType = (logTypeFilter || '').toUpperCase();
-    const matchesType = fType === 'ALL' || lType === fType || (fType === 'ENTRADA' && lType.includes('ENTRADA')) || (fType === 'SALIDA' && lType.includes('SALIDA'));
-    return matchesSearch && matchesType;
-  });
-
-  if (loading && safeProducts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-mono">Cargando módulos de inventario...</p>
-      </div>
-    );
-  }
+  const filteredProducts = stock.rows;
+  const filteredLogs = history.rows;
 
   return (
     <div className="space-y-6" id="inventory-view">
@@ -184,13 +148,13 @@ export default function Inventory() {
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <button
             onClick={openPurchaseModal}
-            className="flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all w-full sm:w-auto justify-center cursor-pointer"
+            className="flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-4 py-2.5 rounded-lg text-sm font-semibold transition w-full sm:w-auto justify-center cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" /> Registrar Compra
           </button>
           <button
             onClick={openAdjustmentModal}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition w-full sm:w-auto justify-center cursor-pointer"
           >
             <Plus className="w-4 h-4" /> Ajustar Stock Manual
           </button>
@@ -201,7 +165,7 @@ export default function Inventory() {
       <div className="flex border-b border-slate-100 dark:border-slate-800 gap-4">
         <button
           onClick={() => { setTab('STOCK'); setSearch(''); }}
-          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+          className={`pb-3 text-sm font-bold transition relative cursor-pointer ${
             tab === 'STOCK' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 hover:text-slate-600'
           }`}
         >
@@ -210,7 +174,7 @@ export default function Inventory() {
         </button>
         <button
           onClick={() => { setTab('LOGS'); setSearch(''); }}
-          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+          className={`pb-3 text-sm font-bold transition relative cursor-pointer ${
             tab === 'LOGS' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 hover:text-slate-600'
           }`}
         >
@@ -222,7 +186,7 @@ export default function Inventory() {
       {/* Filter toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-3 w-4.5 h-4.5 text-slate-400" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder={tab === 'STOCK' ? 'Buscar productos por código o nombre...' : 'Buscar movimientos por producto, motivo...'}
@@ -263,6 +227,7 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {stock.loading && filteredProducts.length === 0 && <TableSkeleton rows={stock.pageSize} columns={5} />}
               {filteredProducts.map((p) => {
                 const isLow = p.stock <= p.minStock && p.stock > 0;
                 const isOut = p.stock === 0;
@@ -301,15 +266,16 @@ export default function Inventory() {
                   </tr>
                 );
               })}
-              {filteredProducts.length === 0 && (
+              {!stock.loading && filteredProducts.length === 0 && (
                 <tr>
                   <td colSpan={5} className="text-center py-10 text-slate-400 font-mono">
-                    Ningún producto disponible en almacén.
+                    {stock.error || 'Ningún producto disponible en almacén.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          <Pagination page={stock.page} pageSize={stock.pageSize} total={stock.total} onPageChange={stock.setPage} onPageSizeChange={stock.setPageSize} noun="productos" />
         </div>
       ) : (
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
@@ -325,6 +291,7 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {history.loading && filteredLogs.length === 0 && <TableSkeleton rows={history.pageSize} columns={6} />}
               {filteredLogs.map((log) => (
                 <tr key={log.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 font-mono text-slate-400">
@@ -353,15 +320,16 @@ export default function Inventory() {
                   <td className="px-6 py-4 text-slate-400">{log.userName || log.user?.fullName || 'Sistema'}</td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
+              {!history.loading && filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center py-10 text-slate-400 font-mono">
-                    No se registran movimientos en el historial.
+                    {history.error || 'No se registran movimientos en el historial.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          <Pagination page={history.page} pageSize={history.pageSize} total={history.total} onPageChange={history.setPage} onPageSizeChange={history.setPageSize} noun="movimientos" />
         </div>
       )}
 
@@ -378,18 +346,14 @@ export default function Inventory() {
               <label htmlFor="adjust-prod" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Seleccionar Producto *
               </label>
-              <select
+              <ProductPicker
                 id="adjust-prod"
                 value={selectedProdId}
-                onChange={(e) => setSelectedProdId(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
-              >
-                {products.filter(p => p.active).map(p => (
-                  <option key={p.id} value={p.id} className="dark:bg-slate-950">
-                    {p.name} (Stock: {p.stock})
-                  </option>
-                ))}
-              </select>
+                onChange={(id, product) => {
+                  setSelectedProdId(id);
+                  setSelectedProd(product || null);
+                }}
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -498,18 +462,7 @@ export default function Inventory() {
               <label htmlFor="purchase-prod" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Producto *
               </label>
-              <select
-                id="purchase-prod"
-                value={purchaseProdId}
-                onChange={(e) => setPurchaseProdId(e.target.value)}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
-              >
-                {products.filter(p => p.active).map(p => (
-                  <option key={p.id} value={p.id} className="dark:bg-slate-950">
-                    {p.name} (Stock: {p.stock})
-                  </option>
-                ))}
-              </select>
+              <ProductPicker id="purchase-prod" value={purchaseProdId} onChange={id => setPurchaseProdId(id)} />
             </div>
 
             <div className="space-y-1.5">

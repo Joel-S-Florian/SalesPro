@@ -1,15 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Shield, UserCheck, UserX, Key } from 'lucide-react';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
+import { notify } from '../utils/notify';
 
 export default function Users() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
   // Search filter
   const [search, setSearch] = useState('');
+
+  const { rows: users, total, loading, error, page, pageSize, setPage, setPageSize, reload } = usePagedList(
+    api.auth.getUsersPage,
+    { q: search.trim() || undefined }
+  );
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -20,23 +25,6 @@ export default function Users() {
   const [password, setPassword] = useState('');
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.auth.getUsers();
-      setUsers(Array.isArray(data) ? data : (data?.data || []));
-    } catch (err) {
-      setError(err.message || 'Error al cargar usuarios');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const openCreateModal = () => {
     setEditingId(null);
@@ -68,37 +56,26 @@ export default function Users() {
       if (editingId) {
         // Edit
         await api.auth.updateUser(editingId, { fullName, role, active, password });
+        notify.success('Usuario actualizado');
       } else {
         // Create
         if (!password) {
-          alert('La contraseña es obligatoria para nuevos usuarios');
+          notify.warning('La contraseña es obligatoria para nuevos usuarios');
           return;
         }
         await api.auth.createUser(payload);
+        notify.success('Usuario creado');
       }
       setIsFormOpen(false);
-      loadData();
+      reload();
     } catch (err) {
-      alert(err.message || 'Error al guardar usuario');
+      notify.error(err.message || 'Error al guardar usuario');
     } finally {
       setSaving(false);
     }
   };
 
-  const safeUsers = Array.isArray(users) ? users : [];
-  const filteredUsers = safeUsers.filter(u =>
-    (u.fullName || '').toLowerCase().includes((search || '').toLowerCase()) ||
-    (u.username || '').toLowerCase().includes((search || '').toLowerCase())
-  );
-
-  if (loading && safeUsers.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 space-y-4">
-        <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-mono">Cargando personal administrativo...</p>
-      </div>
-    );
-  }
+  const filteredUsers = users;
 
   return (
     <div className="space-y-6" id="users-view">
@@ -114,7 +91,7 @@ export default function Users() {
         </div>
         <button
           onClick={openCreateModal}
-          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition-all w-full sm:w-auto justify-center cursor-pointer"
+          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow transition w-full sm:w-auto justify-center cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Registrar Usuario
         </button>
@@ -123,7 +100,7 @@ export default function Users() {
       {/* Filter toolbar */}
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm">
         <div className="relative">
-          <Search className="absolute left-3 top-3 w-4.5 h-4.5 text-slate-400" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Buscar usuarios por nombre real o usuario de acceso..."
@@ -149,6 +126,7 @@ export default function Users() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {loading && filteredUsers.length === 0 && <TableSkeleton rows={pageSize} columns={6} />}
               {filteredUsers.map((u) => (
                 <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100">
@@ -176,7 +154,7 @@ export default function Users() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-1.5">
-                      <button
+                      <button aria-label="Modificar Credenciales"
                         onClick={() => openEditModal(u)}
                         disabled={u.username === 'admin'}
                         className="text-slate-400 hover:text-indigo-600 disabled:opacity-30 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -188,16 +166,17 @@ export default function Users() {
                   </td>
                 </tr>
               ))}
-              {filteredUsers.length === 0 && (
+              {!loading && filteredUsers.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-center py-10 text-slate-400 font-mono">
-                    Ningún usuario encontrado en el sistema.
+                    {error || 'Ningún usuario encontrado en el sistema.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} noun="usuarios" />
       </div>
 
       {/* Form modal */}

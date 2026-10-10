@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Printer } from 'lucide-react';
+import { Printer } from 'lucide-react';
+import Pagination from '../components/Pagination';
+import { TableSkeleton } from '../components/Skeleton';
+import { usePagedList } from '../hooks/usePagedList';
 import { printZReport } from '../utils/zReportPdf';
+import { notify } from '../utils/notify';
 
 const money = value =>
   `$${Number(value || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -18,41 +22,24 @@ const dateTime = value =>
     : '—';
 
 export default function CashierCloses() {
-  const [shifts, setShifts] = useState([]);
   const [terminals, setTerminals] = useState([]);
   const [terminalId, setTerminalId] = useState('');
   const [status, setStatus] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+
+  const { rows: shifts, total, loading, error, page, pageSize, setPage, setPageSize } = usePagedList(api.cashier.list, {
+    terminalId: terminalId || undefined,
+    status: status || undefined,
+  });
 
   useEffect(() => {
     api.terminals.list().then(setTerminals).catch(() => setTerminals([]));
   }, []);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await api.cashier.list({
-          terminalId: terminalId || undefined,
-          status: status || undefined,
-          limit: 100,
-        });
-        setShifts(result?.data || []);
-      } catch (err) {
-        setError(err.message || 'Error al cargar cierres de caja');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [terminalId, status]);
-
   const printShift = async shift => {
     try {
       printZReport(await api.cashier.get(shift.id));
     } catch (err) {
-      alert(err.message || 'No se pudo generar el reporte');
+      notify.error(err.message || 'No se pudo generar el reporte');
     }
   };
 
@@ -90,7 +77,8 @@ export default function CashierCloses() {
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
 
-      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider">
             <tr>
@@ -105,9 +93,7 @@ export default function CashierCloses() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && (
-              <tr><td colSpan={8} className="px-4 py-10 text-center"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
-            )}
+            {loading && shifts.length === 0 && <TableSkeleton rows={pageSize} columns={8} />}
             {!loading && shifts.length === 0 && (
               <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No hay turnos registrados.</td></tr>
             )}
@@ -126,7 +112,7 @@ export default function CashierCloses() {
                       {s.status === 'CLOSED' ? `${diff > 0 ? '+' : ''}${money(diff)}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => printShift(s)} title="Reporte Z" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
+                      <button aria-label="Reporte Z" onClick={() => printShift(s)} title="Reporte Z" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
                         <Printer className="w-4 h-4" />
                       </button>
                     </td>
@@ -135,6 +121,8 @@ export default function CashierCloses() {
               })}
           </tbody>
         </table>
+        </div>
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} noun="turnos" />
       </div>
     </div>
   );
