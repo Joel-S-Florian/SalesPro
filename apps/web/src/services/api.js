@@ -173,6 +173,7 @@ export const api = {
     },
 
     getMe: () => request('/auth/me'),
+    getUsersPage: (params = {}) => request(`/auth/users?${toQuery(params)}`),
     getUsers: async (params = {}) =>
       normalizeList(await request(`/auth/users?${toQuery(params)}`)),
     createUser: (payload) => request('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
@@ -183,6 +184,7 @@ export const api = {
   },
 
   categories: {
+    page: (params = {}) => request(`/categories?${toQuery(params)}`),
     list: async (params = {}) =>
       normalizeList(await request(`/categories?${toQuery(params)}`)),
     get: (id) => request(`/categories/${id}`),
@@ -194,6 +196,8 @@ export const api = {
   products: {
     list: async (params = {}) =>
       normalizeList(await request(`/products?${toQuery(params)}`)),
+    // Respuesta completa { data, pagination } (el POS pagina en el servidor)
+    page: (params = {}) => request(`/products?${toQuery(params)}`),
     get: (id) => request(`/products/${id}`),
     create: (payload) => request('/products', { method: 'POST', body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
@@ -203,6 +207,7 @@ export const api = {
   },
 
   customers: {
+    page: (params = {}) => request(`/customers?${toQuery(params)}`),
     list: async (params = {}) =>
       normalizeList(await request(`/customers?${toQuery(params)}`)),
     getForPOS: async () => normalizeList(await request('/customers/pos')),
@@ -287,6 +292,7 @@ export const api = {
   },
 
   inventory: {
+    logsPage: (params = {}) => request(`/inventory/logs?${toQuery(params)}`),
     logs: async (params = {}) =>
       normalizeList(await request(`/inventory/logs?${toQuery(params)}`)),
     getKardex: (productId, params = {}) => request(`/inventory/kardex/${productId}?${toQuery(params)}`),
