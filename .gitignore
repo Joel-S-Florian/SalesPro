@@ -13,3 +13,7 @@ coverage/
 Thumbs.db
 *.log
 !.npmrc
+
+# Skills de agentes: se instalan localmente (el bloqueo de versiones sí se versiona en skills-lock.json)
+.agents/
+.claude/

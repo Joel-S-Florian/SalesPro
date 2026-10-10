@@ -31,7 +31,7 @@ export default function Unauthorized() {
         <div className="flex flex-col gap-3 pt-2">
           <NavLink
             to="/"
-            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-sm hover:shadow transition cursor-pointer"
           >
             <Home className="w-4 h-4" />
             Volver al Inicio

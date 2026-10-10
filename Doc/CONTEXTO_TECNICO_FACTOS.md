@@ -47,12 +47,31 @@ Roles: `SUPERADMIN` (plataforma), `ADMINISTRADOR` y `VENDEDOR` (empresa).
 Utilidades clave: `shared/utils/ncf.js` (secuencias NCF por empresa), `shared/utils/dgii.js` (validación RNC/cédula),
 `shared/middleware/audit.js` (auditoría), `config/db.js` y `config/tenant.js` (aislamiento).
 
-## Pantallas (`apps/web/src/pages`)
+## Interfaz (`apps/web/src`)
 
-POS (`SalesPOS`) con barra de caja/turno, lectores de código (teclado, cámara, puerto serie), vista de caja
-ampliada y pantalla del cliente (`CustomerDisplay`, ventana aparte por `BroadcastChannel`); historial y reimpresión de
-facturas (A4 / ticket 80 mm); productos, categorías, clientes, proveedores, inventario, importación, etiquetas de
-código de barras, reportes, finanzas, cierres de caja, configuración, usuarios y (solo super-admin) empresas.
+Pantallas en `pages/` (cargadas de forma diferida con `React.lazy`): POS, historial y reimpresión de facturas (A4 / ticket
+80 mm), productos, categorías, clientes, proveedores, inventario, importación, etiquetas de código de barras, reportes,
+finanzas, cierres de caja, configuración, usuarios y (solo super-admin) empresas.
+
+### POS (`pages/SalesPOS.jsx` + `components/pos/` + hooks)
+- **Disposición:** catálogo a la izquierda y ticket fijo a la derecha; en móvil y tablet el ticket es una hoja inferior
+  arrastrable (`MobileTicketSheet`). *Vista de caja* es un modo inmersivo; `CustomerDisplay` es una ventana aparte que recibe
+  el ticket por `BroadcastChannel` (mismo equipo y navegador).
+- **Estado:** `usePosCart` (carrito y totales, con espejo síncrono para ráfagas de escáner) y `useProductCatalog` (búsqueda,
+  categoría y paginación **en el servidor**; busca el código exacto en el servidor si no está cargado).
+- **Entrada de productos:** teclado/HID (`useBarcodeScanner`), cámara (`CameraScannerModal`, BarcodeDetector o ZXing) y puerto
+  serie (`useSerialScanner`), con bloqueo de lecturas repetidas (`utils/scanDedupe.js`). Atajos: `/` o `F2` buscar, `F9` cobrar.
+- **Cobro:** un administrador autoriza quitar artículos (queda en `AuditLog`); turno de caja; confirmación con impresión
+  (`utils/receiptPdf.js`).
+
+### Sistema de diseño
+Resumido en [`Sistema_de_Diseno_UI.md`](Sistema_de_Diseno_UI.md): tipografía, movimiento, avisos, esqueletos, accesibilidad.
+
+### Paginación
+Todos los listados usan el mismo pie (`components/Pagination.jsx`, filas por página 10/20/50 recordado por equipo). Los grandes
+paginan en el servidor con `hooks/usePagedList.js` (vuelve a la página 1 al cambiar filtros y descarta respuestas viejas); las
+listas pequeñas que llegan completas usan `useClientPage`. El API devuelve `{ data, pagination }` y limita a 100 por página:
+**no cargue "todo" en el navegador**; use búsqueda y paginación del servidor (como `ProductPicker` y el catálogo del POS).
 
 ## Flujo de una venta
 
@@ -65,12 +84,12 @@ código de barras, reportes, finanzas, cierres de caja, configuración, usuarios
 
 | Comando | Qué hace |
 |---|---|
-| `npm run dev` | API (puerto 3000) y web (Vite) en paralelo |
+| `npm run dev` | API (puerto **4010**) y web (Vite, 5173 o el siguiente libre) en paralelo; el proxy `/api` apunta a 4010 (`API_PROXY_TARGET` lo cambia) |
 | `npm run db:migrate` / `npx prisma migrate deploy` | Crear/aplicar migraciones |
 | `npm run db:generate` | Regenerar el cliente Prisma (detener el servidor antes en Windows) |
 | `npm run db:seed` | Datos de ejemplo + usuarios `admin`, `vendedor`, `superadmin` (contraseña del superadmin: `SUPERADMIN_PASSWORD`) |
 | `npm test` | Pruebas unitarias (Vitest) |
-| `npm run lint` | ESLint |
+| `npm run lint` | ESLint (`.eslintrc.json`; requiere `eslint-config-prettier`) |
 | `node scripts/test-tenant-isolation.mjs` | Prueba de aislamiento entre empresas contra una API en marcha |
 | `node scripts/generate-sample-inventory.mjs` | Archivos de inventario de ejemplo en `Doc/ejemplos/` |
 

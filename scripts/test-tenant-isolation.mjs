@@ -1,13 +1,13 @@
 // Prueba de aislamiento multi-empresa contra una API en ejecución.
 //
-//   API_URL=http://localhost:3000/api node scripts/test-tenant-isolation.mjs
+//   API_URL=http://localhost:4010/api node scripts/test-tenant-isolation.mjs
 //
 // Variables: SUPERADMIN_USER / SUPERADMIN_PASSWORD (por defecto superadmin/superadmin).
 // Crea dos empresas "ZZTEST ..." con datos de prueba y las elimina al terminar (usa DATABASE_URL).
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
-const API = process.env.API_URL || 'http://localhost:3000/api';
+const API = process.env.API_URL || 'http://localhost:4010/api';
 const SUPER = {
   username: process.env.SUPERADMIN_USER || 'superadmin',
   password: process.env.SUPERADMIN_PASSWORD || 'superadmin',

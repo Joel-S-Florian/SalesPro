@@ -1,6 +1,10 @@
 # Factos
 
-Sistema de Gestión de Ventas moderno para pequeñas y medianas empresas, con gestión de inventario, clientes, ventas y reportes avanzados.
+Plataforma multi-empresa (SaaS) de punto de venta, inventario y facturación para pequeñas y medianas empresas.
+
+**Incluye:** POS con lector de códigos (teclado, cámara, puerto serie) y pantalla para el cliente, cajas y turnos con cierre
+(Reporte Z), inventario con importación masiva (CSV, Excel o JSON), proveedores, reportes, configuración por empresa y panel
+de plataforma (super-admin). La facturación electrónica DGII (e-CF) está planificada, aún no implementada.
 
 ## Arquitectura Monorepo
 
@@ -27,10 +31,13 @@ factos/
    cp .env.example .env
    ```
 
-3. Ejecutar en desarrollo:
+3. Preparar la base de datos (PostgreSQL) y ejecutar en desarrollo:
    ```bash
+   npx prisma migrate deploy && npm run db:seed
    npm run dev
    ```
+   La API usa el puerto **4010** y la web el 5173 (o el siguiente libre). Usuarios del seed: `admin`/`admin`,
+   `vendedor`/`vendedor` y `superadmin`/`superadmin` (**solo desarrollo**: cambie las contraseñas).
 
 ## Scripts
 
@@ -41,6 +48,8 @@ factos/
 - `npm run db:push` - Sincroniza el esquema con la base de datos
 - `npm run db:migrate` - Crea una migración
 - `npm run db:seed` - Ejecuta el seed de la base de datos
+- `npm test` - Pruebas unitarias (Vitest); con `API_URL=http://localhost:4010/api` corre también la prueba de aislamiento multi-empresa
+- `npm run lint` - ESLint
 
 ## Workspaces
 
@@ -57,6 +66,12 @@ Consulta `.env.example` para la lista completa de variables requeridas.
 - PostgreSQL (configurable en `.env` con `DATABASE_URL`)
 - Prisma ORM para el modelado de datos
 - Seed inicial con usuarios, categorías, productos y clientes
+
+## Documentación
+
+En [`Doc/`](Doc/): [contexto técnico](Doc/CONTEXTO_TECNICO_FACTOS.md), [arquitectura multi-cliente](Doc/Arquitectura_Multicliente.md),
+[sistema de diseño](Doc/Sistema_de_Diseno_UI.md), [formato de importación de inventario](Doc/Especificacion_Archivo_Importacion_Inventario.md),
+[plan de pruebas de escáneres y pantallas](Doc/Plan_Pruebas_Escaneres_y_Pantallas.md) y la [hoja de ruta](Doc/Propuesta%20de%20Renombramiento%20y%20Roadmap%20de%20Futuras%20Implementaciones.md).
 
 ## Licencia
 

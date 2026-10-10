@@ -1,26 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { api } from './services/api';
 import { useAuthStore } from './stores/authStore';
 import { useAuthMe } from './hooks/queries';
 import { useConfigStore } from './stores/configStore';
-import Dashboard from './pages/Dashboard';
-import SalesPOS from './pages/SalesPOS';
-import Products from './pages/Products';
-import Categories from './pages/Categories';
-import Customers from './pages/Customers';
-import Inventory from './pages/Inventory';
-import Suppliers from './pages/Suppliers';
-import Settings from './pages/Settings';
-import Companies from './pages/Companies';
-import ImportInventory from './pages/ImportInventory';
-import BarcodeLabels from './pages/BarcodeLabels';
-import CashierCloses from './pages/CashierCloses';
-import UsersPage from './pages/Users';
-import Reports from './pages/Reports';
-import SalesHistory from './pages/SalesHistory';
-import VendorDashboard from './pages/VendorDashboard';
-import Finance from './pages/Finance';
-import Unauthorized from './pages/Unauthorized';
+import { Skeleton } from './components/Skeleton';
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const SalesPOS = lazy(() => import('./pages/SalesPOS'));
+const Products = lazy(() => import('./pages/Products'));
+const Categories = lazy(() => import('./pages/Categories'));
+const Customers = lazy(() => import('./pages/Customers'));
+const Inventory = lazy(() => import('./pages/Inventory'));
+const Suppliers = lazy(() => import('./pages/Suppliers'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Companies = lazy(() => import('./pages/Companies'));
+const ImportInventory = lazy(() => import('./pages/ImportInventory'));
+const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'));
+const CashierCloses = lazy(() => import('./pages/CashierCloses'));
+const UsersPage = lazy(() => import('./pages/Users'));
+const Reports = lazy(() => import('./pages/Reports'));
+const SalesHistory = lazy(() => import('./pages/SalesHistory'));
+const VendorDashboard = lazy(() => import('./pages/VendorDashboard'));
+const Finance = lazy(() => import('./pages/Finance'));
+const Unauthorized = lazy(() => import('./pages/Unauthorized'));
 import ErrorBoundary from './components/ErrorBoundary';
 
 import {
@@ -54,6 +55,21 @@ const homeTabFor = role => {
   if (normalized === 'SUPERADMIN') return 'COMPANIES';
   return normalized === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD';
 };
+
+/** Marcador de carga mientras llega el código de una pantalla (mantiene el layout, sin saltos). */
+function PageFallback() {
+  return (
+    <div className="space-y-4" role="status" aria-label="Cargando pantalla">
+      <Skeleton className="h-8 w-56" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+        <Skeleton className="h-24" />
+      </div>
+      <Skeleton className="h-64" />
+    </div>
+  );
+}
 
 export default function App() {
   const { user, isAuthenticated, accessToken, refreshToken, login, logout, setUser } = useAuthStore();
@@ -197,6 +213,9 @@ export default function App() {
               <input
                 id="login-username"
                 type="text"
+                name="username"
+                autoComplete="username"
+                spellCheck={false}
                 required
                 placeholder="Ej. admin"
                 value={username}
@@ -212,6 +231,8 @@ export default function App() {
               <input
                 id="login-password"
                 type="password"
+                name="password"
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
                 value={password}
@@ -223,7 +244,7 @@ export default function App() {
             <button
               type="submit"
               disabled={loggingIn || !username || !password}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 uppercase tracking-wider cursor-pointer"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold text-xs py-3 rounded-xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 uppercase tracking-wider cursor-pointer"
             >
               {loggingIn ? (
                 <>
@@ -244,7 +265,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => handleQuickLogin('admin', 'admin')}
-                className="flex flex-col items-center bg-white/40 hover:bg-white/70 dark:bg-slate-800/20 dark:hover:bg-slate-800/40 p-2.5 rounded-xl border border-white/50 dark:border-slate-800/30 text-slate-700 dark:text-slate-300 shadow-sm transition-all cursor-pointer"
+                className="flex flex-col items-center bg-white/40 hover:bg-white/70 dark:bg-slate-800/20 dark:hover:bg-slate-800/40 p-2.5 rounded-xl border border-white/50 dark:border-slate-800/30 text-slate-700 dark:text-slate-300 shadow-sm transition cursor-pointer"
               >
                 <span className="text-[11px] font-bold">Administrador</span>
                 <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">admin / admin</span>
@@ -252,7 +273,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => handleQuickLogin('vendedor', 'vendedor')}
-                className="flex flex-col items-center bg-white/40 hover:bg-white/70 dark:bg-slate-800/20 dark:hover:bg-slate-800/40 p-2.5 rounded-xl border border-white/50 dark:border-slate-800/30 text-slate-700 dark:text-slate-300 shadow-sm transition-all cursor-pointer"
+                className="flex flex-col items-center bg-white/40 hover:bg-white/70 dark:bg-slate-800/20 dark:hover:bg-slate-800/40 p-2.5 rounded-xl border border-white/50 dark:border-slate-800/30 text-slate-700 dark:text-slate-300 shadow-sm transition cursor-pointer"
               >
                 <span className="text-[11px] font-bold">Vendedor POS</span>
                 <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">vendedor / vendedor</span>
@@ -351,6 +372,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="factos-app">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[110] focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-xs focus:font-semibold focus:text-white"
+      >
+        Saltar al contenido
+      </a>
       {/* Mesh Background */}
       <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden bg-[#f4f6fa] dark:bg-[#090d16]">
         <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-indigo-200/35 dark:bg-indigo-950/20 blur-[120px]"></div>
@@ -397,14 +424,22 @@ export default function App() {
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                aria-current={isActive ? 'page' : undefined}
+                className={`relative w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold cursor-pointer ${
                   isActive
-                    ? 'glass-nav-active text-indigo-700 dark:text-indigo-400'
+                    ? 'text-indigo-700 dark:text-indigo-400'
                     : 'hover:bg-white/35 dark:hover:bg-slate-800/30 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{item.label}</span>
+                {isActive && (
+                  <motion.span
+                    layoutId="nav-active-pill"
+                    className="absolute inset-0 rounded-xl glass-nav-active"
+                    transition={{ type: 'spring', stiffness: 520, damping: 40 }}
+                  />
+                )}
+                <Icon className="relative w-4 h-4 shrink-0" />
+                <span className="relative">{item.label}</span>
               </button>
             );
           })}
@@ -414,7 +449,7 @@ export default function App() {
         <div className="p-4 border-t border-white/20 dark:border-slate-800/40">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-white/30 dark:bg-slate-800/20 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-xs font-bold transition-all border border-white/30 dark:border-slate-800/40 hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-white/30 dark:bg-slate-800/20 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-xs font-bold transition border border-white/30 dark:border-slate-800/40 hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
             <span>Cerrar Sesión</span>
@@ -481,7 +516,7 @@ export default function App() {
                         setActiveTab(item.id);
                         setSidebarOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
                         isActive
                           ? 'glass-nav-active text-indigo-700 dark:text-indigo-400'
                           : 'hover:bg-white/35 dark:hover:bg-slate-800/30 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -500,7 +535,7 @@ export default function App() {
                     handleLogout();
                     setSidebarOpen(false);
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-white/30 dark:bg-slate-800/20 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-xs font-bold transition-all border border-white/30 dark:border-slate-800/40 cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-white/30 dark:bg-slate-800/20 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-xs font-bold transition border border-white/30 dark:border-slate-800/40 cursor-pointer"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Cerrar Sesión</span>
@@ -548,18 +583,18 @@ export default function App() {
         </header>
 
         {/* Scrollable Work Container */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-6 lg:p-8 focus:outline-none">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12, ease: 'easeOut' }}
               className="max-w-7xl mx-auto h-full"
             >
               <ErrorBoundary key={activeTab}>
-                {renderTabContent()}
+                <Suspense fallback={<PageFallback />}>{renderTabContent()}</Suspense>
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>

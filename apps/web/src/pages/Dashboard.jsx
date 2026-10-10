@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import { SalesTrendChart, TopProductsChart } from '../components/SVGCharts';
 import { DollarSign, TrendingUp, Package, AlertTriangle, ArrowRight, Loader2, RefreshCw, ShoppingCart } from 'lucide-react';
 import Modal from '../components/Modal';
+import { notify } from '../utils/notify';
 
 export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
   const [stats, setStats] = useState(null);
@@ -56,7 +57,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
       setAdjustmentQty(10);
       await fetchDashboardStats();
     } catch (err) {
-      alert(err.message || 'Error al reabastecer');
+      notify.error(err.message || 'Error al reabastecer');
     } finally {
       setSubmittingAdjust(false);
     }
@@ -100,16 +101,16 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </p>
         </div>
         <div className="flex gap-3">
-          <button
+          <button aria-label="Refrescar datos"
             onClick={fetchDashboardStats}
-            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer"
+            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-sm font-medium transition cursor-pointer"
             title="Refrescar datos"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={onNavigateToPOS}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-all cursor-pointer"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" /> Nueva Venta (POS)
           </button>
@@ -120,7 +121,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
       {stats && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" id="kpi-grid">
           {/* Card 1: Revenue Today */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-mono uppercase tracking-wider block">Ventas de Hoy</span>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-sans">
@@ -136,7 +137,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </div>
 
           {/* Card 2: Revenue Month */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-mono uppercase tracking-wider block">Ventas del Mes</span>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-sans">
@@ -152,7 +153,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </div>
 
           {/* Card 3: Active Products */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-mono uppercase tracking-wider block">Productos Activos</span>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-sans">
@@ -171,7 +172,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </div>
 
           {/* Card 4: Low Stock Warnings */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition-all flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl shadow-sm hover:shadow-md transition flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-xs text-slate-400 font-mono uppercase tracking-wider block">Alertas de Stock</span>
               <h3 className="text-2xl font-bold text-slate-800 dark:text-slate-100 font-sans flex items-center gap-2">

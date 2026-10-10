@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { useAuthStore } from '../stores/authStore';
+import {} from '../stores/authStore';
 import { DollarSign, TrendingUp, Receipt, Calculator, Loader2, AlertTriangle, RefreshCw, ShoppingCart } from 'lucide-react';
 
 export default function VendorDashboard({ onNavigateToPOS }) {
@@ -62,16 +62,16 @@ export default function VendorDashboard({ onNavigateToPOS }) {
           </p>
         </div>
         <div className="flex gap-3">
-          <button
+          <button aria-label="Refrescar datos"
             onClick={fetchStats}
-            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer"
+            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-sm font-medium transition cursor-pointer"
             title="Refrescar datos"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <button
             onClick={onNavigateToPOS}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-all cursor-pointer"
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm hover:shadow transition cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" /> Nueva Venta (POS)
           </button>

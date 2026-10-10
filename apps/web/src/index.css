@@ -1,13 +1,111 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* Curvas de easing (Emil Kowalski): salida enérgica y suave; entrada/salida simétrica para movimientos en pantalla */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+}
+
 @layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  /* Sin retardo de doble toque en controles; resalte táctil discreto */
+  button,
+  a,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: rgb(99 102 241 / 0.15);
+  }
+
   body {
     @apply bg-slate-50 text-slate-800 font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
   }
+
+  /* Cifras alineadas en columnas de importes, totales y códigos */
+  .font-mono,
+  table,
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  /* Foco visible y consistente solo para teclado */
+  :focus-visible {
+    outline: 2px solid rgb(99 102 241 / 0.7);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: none;
+  }
+
+  /* Microinteracciones: respuesta táctil inmediata en controles pulsables */
+  button,
+  [role='button'],
+  a,
+  select,
+  input[type='checkbox'] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: var(--duration-fast);
+    transition-timing-function: var(--ease-out);
+  }
+
+  button:not(:disabled):active,
+  [role='button']:not([aria-disabled='true']):active {
+    transform: scale(0.97);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  input,
+  textarea,
+  select {
+    transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out),
+      background-color var(--duration-fast) var(--ease-out);
+  }
+
+  input:focus,
+  textarea:focus,
+  select:focus {
+    border-color: rgb(99 102 241 / 0.8);
+    box-shadow: 0 0 0 3px rgb(99 102 241 / 0.12);
+  }
+
+  ::selection {
+    background: rgb(99 102 241 / 0.25);
+  }
+
+  /* Barras de desplazamiento discretas */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(148 163 184 / 0.4) transparent;
+  }
+
 
   .dark body {
     @apply bg-slate-950 text-slate-100;
@@ -71,7 +169,79 @@
 }
 
 @layer utilities {
+  /* Brillo de carga */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: rgb(148 163 184 / 0.18);
+  }
+
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+    animation: skeleton-shimmer 1.4s var(--ease-in-out) infinite;
+  }
+
+  .dark .skeleton::after {
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.07), transparent);
+  }
+
+  /* Entrada suave para contenido que aparece (listas, paneles) */
+  .animate-enter {
+    animation: enter var(--duration-base) var(--ease-out) both;
+  }
+
   .text-balance {
     text-wrap: balance;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Accesibilidad: movimiento reducido = sin desplazamientos ni brillos, pero se conservan los cambios de
+   color/opacidad que explican qué cambió (no se anula todo con duración 0). */
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active,
+  [role='button']:not([aria-disabled='true']):active {
+    transform: none;
+  }
+
+  .skeleton::after {
+    animation: none;
+  }
+
+  .animate-enter {
+    animation: enter-fade var(--duration-base) ease both;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@keyframes enter-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }

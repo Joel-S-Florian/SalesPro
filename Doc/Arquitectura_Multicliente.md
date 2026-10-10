@@ -66,7 +66,7 @@ configuración del negocio, o "Mi Empresa") y le asigna todos los datos existent
 ## Pruebas
 
 ```
-API_URL=http://localhost:3000/api node scripts/test-tenant-isolation.mjs
+API_URL=http://localhost:4010/api node scripts/test-tenant-isolation.mjs
 ```
 
 Crea dos empresas de prueba y verifica 30 comprobaciones: lectura aislada, acceso cruzado por id (productos,

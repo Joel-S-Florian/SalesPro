@@ -124,7 +124,7 @@ export function SalesTrendChart({ data }) {
                 cx={pt.x}
                 cy={pt.y}
                 r={hoveredIndex === idx ? 6 : 4}
-                className={`fill-white dark:fill-slate-900 stroke-indigo-500 dark:stroke-indigo-400 stroke-[2.5px] cursor-pointer transition-all duration-150`}
+                className={`fill-white dark:fill-slate-900 stroke-indigo-500 dark:stroke-indigo-400 stroke-[2.5px] cursor-pointer transition duration-150`}
                 onMouseEnter={() => setHoveredIndex(idx)}
                 onMouseLeave={() => setHoveredIndex(null)}
               />
@@ -144,7 +144,7 @@ export function SalesTrendChart({ data }) {
         {/* Dynamic Tooltip */}
         {hoveredIndex !== null && (
           <div
-            className="absolute z-10 bg-slate-900/95 dark:bg-slate-950 text-white p-2.5 rounded-lg text-xs shadow-xl border border-slate-800 backdrop-blur-sm pointer-events-none transition-all duration-150 font-mono"
+            className="absolute z-10 bg-slate-900/95 dark:bg-slate-950 text-white p-2.5 rounded-lg text-xs shadow-xl border border-slate-800 backdrop-blur-sm pointer-events-none transition duration-150 font-mono"
             style={{
               left: `${(points[hoveredIndex].x / width) * 100}%`,
               top: `${Math.max(0, (points[hoveredIndex].y / height) * 100 - 32)}%`,

@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { api } from '../services/api';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
+import { notify } from './notify';
 
 export const RECEIPT_FORMATS = { A4: 'A4', TICKET: 'TICKET', BOTH: 'BOTH' };
 const FORMAT_STORAGE_KEY = 'factos-receipt-format';
@@ -445,7 +446,7 @@ export function printReceipt(sale, format = getReceiptFormat()) {
     });
   } catch (err) {
     console.error('Error al generar PDF de factura:', err);
-    alert('Ocurrió un error al generar el PDF del comprobante.');
+    notify.error('Ocurrió un error al generar el PDF del comprobante.');
   }
 }
 
@@ -458,6 +459,6 @@ export async function reprintSaleById(saleId) {
     printReceipt(result?.data || result);
   } catch (err) {
     console.error('Error al reimprimir la factura:', err);
-    alert(err.message || 'No se pudo cargar la factura para reimprimir.');
+    notify.error(err.message || 'No se pudo cargar la factura para reimprimir.');
   }
 }

@@ -89,7 +89,7 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
           ))}
         </select>
         {terminalId && (
-          <button
+          <button aria-label={defaultTerminalId === terminalId ? 'Caja predeterminada' : 'Usar como predeterminada'}
             onClick={makeDefault}
             disabled={defaultTerminalId === terminalId}
             title={defaultTerminalId === terminalId ? 'Caja predeterminada' : 'Usar como predeterminada'}

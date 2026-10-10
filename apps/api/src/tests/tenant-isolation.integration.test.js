@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
-// Requiere una API en ejecución: API_URL=http://localhost:3000/api npm test
+// Requiere una API en ejecución: API_URL=http://localhost:4010/api npm test
 describe.skipIf(!process.env.API_URL)('aislamiento multi-empresa (integración)', () => {
   it('pasa las 30 comprobaciones de scripts/test-tenant-isolation.mjs', () => {
     const result = spawnSync('node', ['scripts/test-tenant-isolation.mjs'], {

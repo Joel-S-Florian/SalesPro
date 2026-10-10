@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { Loader2, Plus, Edit2, Power, Save } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
+import { notify } from '../utils/notify';
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs';
@@ -53,6 +54,7 @@ function GeneralSettings() {
       const saved = await api.config.update({ ...rest, taxRate: Number(taxPercent) / 100 });
       setConfig(saved);
       setMessage({ ok: true, text: 'Configuración guardada.' });
+      notify.success('Configuración guardada');
     } catch (err) {
       setMessage({ ok: false, text: err.message || 'No se pudo guardar la configuración' });
     } finally {
@@ -216,6 +218,7 @@ function TerminalsSettings() {
       const payload = { name: name.trim(), userIds };
       if (editingId) await api.terminals.update(editingId, payload);
       else await api.terminals.create(payload);
+      notify.success(editingId ? 'Caja actualizada' : 'Caja creada');
       setIsFormOpen(false);
       loadData();
     } catch (err) {
@@ -230,7 +233,7 @@ function TerminalsSettings() {
       await api.terminals.update(terminal.id, { active: !terminal.active });
       loadData();
     } catch (err) {
-      alert(err.message || 'No se pudo actualizar la caja');
+      notify.error(err.message || 'No se pudo actualizar la caja');
     }
   };
 
@@ -271,10 +274,10 @@ function TerminalsSettings() {
                 <td className="py-2.5">{t.users.map(u => u.fullName).join(', ') || 'Solo administradores'}</td>
                 <td className="py-2.5 text-center font-mono">{t._count?.sales ?? 0}</td>
                 <td className="py-2.5 text-right">
-                  <button onClick={() => openForm(t)} title="Editar" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
+                  <button aria-label="Editar" onClick={() => openForm(t)} title="Editar" className="p-1.5 text-slate-400 hover:text-indigo-600 cursor-pointer">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => toggleActive(t)} title={t.active ? 'Desactivar' : 'Reactivar'} className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer">
+                  <button aria-label={t.active ? 'Desactivar' : 'Reactivar'} onClick={() => toggleActive(t)} title={t.active ? 'Desactivar' : 'Reactivar'} className="p-1.5 text-slate-400 hover:text-rose-500 cursor-pointer">
                     <Power className="w-4 h-4" />
                   </button>
                 </td>

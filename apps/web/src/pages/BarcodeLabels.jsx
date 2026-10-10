@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import { api } from '../services/api';
 import { Loader2, Printer } from 'lucide-react';
+import { notify } from '../utils/notify';
 
 const inputClass =
   'px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent text-xs outline-none focus:ring-1 focus:ring-indigo-500';
@@ -85,7 +86,7 @@ export default function BarcodeLabels() {
   const handlePrint = () => {
     const win = window.open('', '_blank');
     if (!win) {
-      alert('El navegador bloqueó la ventana de impresión. Permita las ventanas emergentes.');
+      notify.warning('El navegador bloqueó la ventana de impresión. Permita las ventanas emergentes.');
       return;
     }
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas</title>
@@ -162,7 +163,7 @@ export default function BarcodeLabels() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map(p => (
                   <tr key={p.id} className="cursor-pointer" onClick={() => setSelected({ ...selected, [p.id]: !selected[p.id] })}>
-                    <td className="px-3 py-2"><input type="checkbox" readOnly checked={!!selected[p.id]} /></td>
+                    <td className="px-3 py-2"><input type="checkbox" aria-label={`Seleccionar ${p.name}`} checked={!!selected[p.id]} onClick={e => e.stopPropagation()} onChange={() => setSelected({ ...selected, [p.id]: !selected[p.id] })} /></td>
                     <td className="px-3 py-2 font-mono">{p.code}</td>
                     <td className="px-3 py-2">{p.name}</td>
                     <td className="px-3 py-2 text-slate-400">{isValidEan13(p.code) ? 'EAN-13' : 'Code 128'}</td>

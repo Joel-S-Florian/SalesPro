@@ -94,8 +94,17 @@ que las existencias bajaron, y en **Cierres de Caja** que la venta quedó en el 
    cliente, se vuelve a sincronizar sola.
 
 ### Vista de caja
-Botón **Vista de caja** del POS: agranda la interfaz (≈120 %) y cubre el menú lateral, dejando el POS ocupando toda la
-ventana. El botón de expandir (al lado) activa además la pantalla completa del navegador.
+Botón **Vista de caja** del POS: modo inmersivo (sin menú lateral ni cabecera) con tipografía y total más grandes. El botón de
+expandir (al lado) activa además la pantalla completa del navegador. En pantallas pequeñas los botones de pantalla del cliente
+y pantalla completa se ocultan; la vista de caja siempre muestra su botón de salida.
+
+### Atajos del POS
+| Tecla | Acción |
+|---|---|
+| `/` o `F2` | Enfocar el buscador (selecciona el texto) |
+| `Enter` en el buscador | Agrega el producto de código exacto, o el único resultado visible |
+| `Esc` en el buscador | Limpia la búsqueda |
+| `F9` | Cobrar |
 Para salir: **Salir de vista de caja**. La preferencia se recuerda en ese equipo.
 
 ## 6. Problemas conocidos / límites

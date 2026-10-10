@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MotionConfig } from 'motion/react';
+import ToastHost from './components/ToastHost.jsx';
 // import { ReactQueryDevtools } from '@tanstack/react-query-devtools'; // Comentado para ocultar
 import App from './App.jsx';
 import './index.css';
@@ -28,7 +30,10 @@ if (isCustomerDisplayMode()) {
 } else root.render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <MotionConfig reducedMotion="user">
+        <App />
+        <ToastHost />
+      </MotionConfig>
       {/* <ReactQueryDevtools initialIsOpen={false} /> */} {/* Comentado */}
     </QueryClientProvider>
   </StrictMode>,

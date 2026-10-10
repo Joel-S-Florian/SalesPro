@@ -1,20 +1,24 @@
 import React from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
+// ErrorBoundary: component que captura errores en el renderizado y permite reintentar la carga
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
     this.state = { hasError: false, error: null };
   }
 
+  // getDerivedStateFromError: actualiza el estado para renderizar un fallback UI
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
 
+  // componentDidCatch: registra información sobre el error
   componentDidCatch(error, errorInfo) {
     console.error('[ErrorBoundary] Error capturado:', error, errorInfo);
   }
 
+  // handleReset: reinicia el estado del error boundary y vuelve a intentar la carga
   handleReset = () => {
     this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
@@ -22,6 +26,7 @@ export default class ErrorBoundary extends React.Component {
     }
   };
 
+  // render: muestra el fallback UI si hay un error, o los hijos si todo está bien
   render() {
     if (this.state.hasError) {
       return (
@@ -37,7 +42,7 @@ export default class ErrorBoundary extends React.Component {
           </p>
           <button
             onClick={this.handleReset}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-sm transition cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" /> Reintentar Carga
           </button>
