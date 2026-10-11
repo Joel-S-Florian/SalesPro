@@ -28,6 +28,18 @@ export const saleIdParamSchema = z.object({
   }),
 });
 
+// Forma plana ({ params, body }): es la que `validate()` aplica de verdad (ver shared/middleware/validate.js)
+export const creditNoteSchema = {
+  params: z.object({ id: z.string().min(1).max(64) }),
+  body: z.object({
+    terminalId: z.string().min(1).max(64).optional(),
+    reason: z.string().trim().min(3, 'Indique el motivo de la devolución').max(200),
+    details: z
+      .array(z.object({ productId: z.string().min(1).max(64), quantity: z.number().int().positive('Cantidad debe ser positiva') }))
+      .min(1, 'Al menos un producto es requerido'),
+  }),
+};
+
 export const saleQuerySchema = z.object({
   query: z.object({
     customerId: z.string().cuid().optional(),

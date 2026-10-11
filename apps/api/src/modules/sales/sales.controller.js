@@ -52,8 +52,8 @@ export const createSale = asyncHandler(async (req, res) => {
 
 export const createCreditNote = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { details, reason } = req.body;
-  const creditNote = await salesService.createCreditNote(id, { details, reason }, req.user.userId, req.user.fullName);
+  const { details, reason, terminalId } = req.body;
+  const creditNote = await salesService.createCreditNote(id, { details, reason, terminalId }, req.user.userId, req.user.fullName, req.user);
   res.status(201).json(creditNote);
 });
 export const logCartRemoval = asyncHandler(async (req, res) => {

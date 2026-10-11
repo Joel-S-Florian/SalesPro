@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { api } from './services/api';
 import { useAuthStore } from './stores/authStore';
 import { useAuthMe } from './hooks/queries';
@@ -12,7 +12,10 @@ const Customers = lazy(() => import('./pages/Customers'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Suppliers = lazy(() => import('./pages/Suppliers'));
 const Settings = lazy(() => import('./pages/Settings'));
+const EcfDashboard = lazy(() => import('./pages/EcfDashboard'));
 const Companies = lazy(() => import('./pages/Companies'));
+const Leads = lazy(() => import('./pages/Leads'));
+const SignupWizard = lazy(() => import('./components/signup/SignupWizard'));
 const ImportInventory = lazy(() => import('./pages/ImportInventory'));
 const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'));
 const CashierCloses = lazy(() => import('./pages/CashierCloses'));
@@ -35,6 +38,8 @@ import {
   BarChart,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   X,
   Shield,
   Loader2,
@@ -46,7 +51,9 @@ import {
   Calculator,
   FileUp,
   Barcode,
-  Building2
+  Building2,
+  Inbox,
+  FileCheck2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -55,6 +62,31 @@ const homeTabFor = role => {
   if (normalized === 'SUPERADMIN') return 'COMPANIES';
   return normalized === 'VENDEDOR' ? 'VENDOR_DASHBOARD' : 'DASHBOARD';
 };
+
+const PLAN_NAMES = { FREE: 'Gratis', STARTER: 'Starter', BUSINESS: 'Business', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+
+/** Aviso del periodo de prueba gratuita para los usuarios de una empresa. */
+function TrialBanner({ company }) {
+  if (!company?.trialEndsAt) return null;
+  const days = Math.ceil((new Date(company.trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  const expired = days <= 0;
+  return (
+    <div
+      role="status"
+      className={`mx-auto mb-5 flex max-w-7xl items-center justify-between gap-3 rounded-xl border px-4 py-2.5 text-[13px] ${
+        expired || days <= 3
+          ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+          : 'border-indigo-100 bg-indigo-50 text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-950/30 dark:text-indigo-200'
+      }`}
+    >
+      <span>
+        {expired
+          ? 'Tu periodo de prueba terminó. Contáctanos para activar tu plan y seguir usando FACTOS sin interrupciones.'
+          : `Prueba gratuita del plan ${PLAN_NAMES[company.plan] || ''}: te ${days === 1 ? 'queda 1 día' : `quedan ${days} días`}.`}
+      </span>
+    </div>
+  );
+}
 
 /** Marcador de carga mientras llega el código de una pantalla (mantiene el layout, sin saltos). */
 function PageFallback() {
@@ -85,7 +117,69 @@ export default function App() {
   const [password, setPassword] = useState('');
 
   const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const [newLeads, setNewLeads] = useState(0);
+  // Vista previa al inicio de sesión: la dirección con ?registro abre el alta de cuenta nueva
+  const [authView, setAuthView] = useState(() =>
+    new URLSearchParams(window.location.search).has('registro') ? 'signup' : 'login'
+  );
+
+  const showAuthView = view => {
+    setAuthView(view);
+    setLoginError(null);
+    const url = new URL(window.location.href);
+    if (view === 'signup') url.searchParams.set('registro', '1');
+    else url.searchParams.delete('registro');
+    window.history.replaceState({}, '', url);
+  };
+
+  // La cuenta recién creada trae su sesión: se entra directo al sistema
+  const handleSignupDone = data => {
+    login(data.user, data.accessToken, data.refreshToken);
+    setActiveTab('DASHBOARD');
+    showAuthView('login');
+  };
+
+  // El equipo de plataforma ve cuántas solicitudes de acceso están pendientes
+  useEffect(() => {
+    if (user?.role !== 'SUPERADMIN') return undefined;
+    let cancelled = false;
+    const load = () => api.platform.stats().then(stats => !cancelled && setNewLeads(stats.newLeads || 0)).catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user?.role]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Barra lateral de escritorio: se puede esconder para ganar espacio (se recuerda por equipo; Ctrl+B)
+  const [sidebarHidden, setSidebarHidden] = useState(() => {
+    try {
+      return localStorage.getItem('factos-sidebar-hidden') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = useCallback(() => {
+    setSidebarHidden(prev => {
+      try {
+        localStorage.setItem('factos-sidebar-hidden', prev ? '0' : '1');
+      } catch {
+        // almacenamiento no disponible
+      }
+      return !prev;
+    });
+  }, []);
+  useEffect(() => {
+    const onKey = e => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [toggleSidebar]);
 
   // Sincroniza el usuario cuando useAuthMe responde (sin re-persistir tokens)
   useEffect(() => {
@@ -109,7 +203,7 @@ export default function App() {
     if (role === 'VENDEDOR' && activeTab === 'DASHBOARD') {
       setActiveTab('VENDOR_DASHBOARD');
     }
-    if (role === 'SUPERADMIN' && activeTab !== 'COMPANIES') {
+    if (role === 'SUPERADMIN' && !['COMPANIES', 'LEADS'].includes(activeTab)) {
       setActiveTab('COMPANIES');
     }
   }, [user?.role, activeTab, setActiveTab]);
@@ -171,6 +265,13 @@ export default function App() {
 
   // IF NOT LOGGED IN: Render Login view
   const isFullyAuthenticated = isAuthenticated && user && (accessToken || refreshToken);
+  if (!isFullyAuthenticated && authView === 'signup') {
+    return (
+      <Suspense fallback={<div className="min-h-screen bg-[#f4f6fa] dark:bg-[#090d16]" />}>
+        <SignupWizard onDone={handleSignupDone} onBackToLogin={() => showAuthView('login')} />
+      </Suspense>
+    );
+  }
   if (!isFullyAuthenticated) {
     return (
       <div className="min-h-screen relative flex flex-col justify-center items-center p-4 selection:bg-indigo-500 selection:text-white overflow-hidden" id="login-screen">
@@ -256,7 +357,15 @@ export default function App() {
             </button>
           </form>
 
-          {/* Demo shortcuts */}
+          <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+            ¿Aún no tienes cuenta?{' '}
+            <button type="button" onClick={() => showAuthView('signup')} className="font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 cursor-pointer">
+              Empieza gratis
+            </button>
+          </p>
+
+          {/* Accesos de demostración: solo en desarrollo (nunca en producción) */}
+          {import.meta.env.DEV && (
           <div className="border-t border-white/20 dark:border-slate-800/40 pt-5 space-y-3">
             <p className="text-[10px] text-center text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
               Acceso Rápido de Prueba (Demo):
@@ -280,6 +389,7 @@ export default function App() {
               </button>
             </div>
           </div>
+          )}
         </motion.div>
       </div>
     );
@@ -289,6 +399,7 @@ export default function App() {
 
   // NAVIGATION ITEM HELPER
   const navItems = [
+    { id: 'LEADS', label: 'Solicitudes', icon: Inbox, roles: ['SUPERADMIN'], badge: newLeads },
     { id: 'COMPANIES', label: 'Empresas', icon: Building2, roles: ['SUPERADMIN'] },
     { id: 'DASHBOARD', label: 'Dashboard', icon: LayoutDashboard, roles: ['ADMINISTRADOR'] },
     { id: 'VENDOR_DASHBOARD', label: 'Mi Dashboard', icon: LayoutDashboard, roles: ['VENDEDOR'] },
@@ -305,6 +416,7 @@ export default function App() {
     { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR'] },
     { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] },
     { id: 'CASHIER_CLOSES', label: 'Cierres de Caja', icon: Calculator, roles: ['ADMINISTRADOR'] },
+    { id: 'ECF', label: 'Facturación electrónica', icon: FileCheck2, roles: ['ADMINISTRADOR'] },
     { id: 'SETTINGS', label: 'Configuración', icon: SettingsIcon, roles: ['ADMINISTRADOR'] }
   ];
 
@@ -334,7 +446,7 @@ export default function App() {
       case 'VENDOR_DASHBOARD':
         return <VendorDashboard onNavigateToPOS={() => setActiveTab('POS')} />;
       case 'POS':
-        return <SalesPOS />;
+        return <SalesPOS onNavigate={setActiveTab} />;
       case 'SALES_HISTORY':
         return <SalesHistory />;
       case 'PRODUCTS':
@@ -359,8 +471,23 @@ export default function App() {
         return <Finance />;
       case 'CASHIER_CLOSES':
         return <CashierCloses />;
+      case 'ECF':
+        return (
+          <EcfDashboard
+            onOpenSettings={() => {
+              try {
+                sessionStorage.setItem('factos-settings-tab', 'ECF');
+              } catch {
+                // almacenamiento no disponible
+              }
+              setActiveTab('SETTINGS');
+            }}
+          />
+        );
       case 'COMPANIES':
         return <Companies />;
+      case 'LEADS':
+        return <Leads />;
       case 'SETTINGS':
         return <Settings />;
       case 'UNAUTHORIZED':
@@ -371,7 +498,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="factos-app">
+    <div className="h-dvh relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="factos-app">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[110] focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-xs focus:font-semibold focus:text-white"
@@ -386,7 +513,15 @@ export default function App() {
       </div>
 
       {/* 1. SIDEBAR NAVIGATION - DESKTOP */}
-      <aside className="hidden lg:flex flex-col w-64 glass-sidebar text-slate-600 dark:text-slate-400 shrink-0 select-none relative z-10">
+      <aside
+        id="factos-sidebar"
+        aria-hidden={sidebarHidden}
+        inert={sidebarHidden}
+        className={`hidden lg:flex flex-col glass-sidebar text-slate-600 dark:text-slate-400 shrink-0 select-none relative z-10 h-full overflow-hidden transition-[width,opacity] duration-300 ${
+          sidebarHidden ? 'lg:w-0 opacity-0 border-r-0' : 'lg:w-64 opacity-100'
+        }`}
+        style={{ transitionTimingFunction: 'cubic-bezier(0.22,1,0.36,1)' }}
+      >
         {/* Sidebar Header */}
         <div className="p-6 border-b border-white/20 dark:border-slate-800/40 flex items-center justify-between">
           <div className="space-y-1">
@@ -440,6 +575,11 @@ export default function App() {
                 )}
                 <Icon className="relative w-4 h-4 shrink-0" />
                 <span className="relative">{item.label}</span>
+                {item.badge > 0 && (
+                  <span className="relative ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
+                    {item.badge}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -563,6 +703,17 @@ export default function App() {
           </div>
 
           <div className="hidden lg:flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              aria-controls="factos-sidebar"
+              aria-expanded={!sidebarHidden}
+              aria-label={sidebarHidden ? 'Mostrar menú lateral' : 'Ocultar menú lateral'}
+              title={`${sidebarHidden ? 'Mostrar' : 'Ocultar'} menú (Ctrl+B)`}
+              className="mr-1 flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/60 active:scale-[0.95] dark:text-slate-400 dark:hover:bg-slate-800/50 cursor-pointer"
+            >
+              {sidebarHidden ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+            </button>
             <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono uppercase bg-white/50 dark:bg-slate-800/30 border border-white/30 dark:border-slate-700/20 px-2.5 py-0.5 rounded-full">
               Status: En Línea
             </span>
@@ -584,6 +735,7 @@ export default function App() {
 
         {/* Scrollable Work Container */}
         <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-6 lg:p-8 focus:outline-none">
+          <TrialBanner company={authData?.user?.company} />
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

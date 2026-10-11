@@ -17,7 +17,12 @@ export const DEFAULT_CONFIG = {
 };
 
 /** Porcentaje de impuesto para mostrar en etiquetas, ej. 0.18 -> "18". */
-export const formatTaxPercent = rate => String(Number((Number(rate) * 100).toFixed(2)));
+export const formatTaxPercent = rate => {
+  const percent = Number(rate) * 100;
+  const whole = Math.round(percent);
+  // La tasa que se muestra se deduce de ITBIS/base de la venta; el redondeo de centavos la deja en 18.01 en lugar de 18
+  return String(Math.abs(percent - whole) < 0.2 ? whole : Number(percent.toFixed(2)));
+};
 
 /**
  * Configuración global del sistema (ITBIS, datos del negocio, métodos de pago...).

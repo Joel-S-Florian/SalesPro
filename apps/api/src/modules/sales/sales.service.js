@@ -3,11 +3,14 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { buildPaginationQuery, getPaginationMeta, round2, applyCreatedAtRange, cleanFilterString, cleanPaymentMethod } from '../../shared/utils/helpers.js';
 import { getNextNCF, determineNCFType } from '../../shared/utils/ncf.js';
+import { CREDIT_NOTE_NCF } from '../../../../../packages/shared/constants.js';
 import { comparePassword } from '../../shared/utils/crypto.js';
 import { createAuditLog } from '../../shared/middleware/audit.js';
 import { getTenantId } from '../../config/tenant.js';
 import { getConfig } from '../config/config.service.js';
 import { resolveShiftForSale } from '../cashier/cashier.service.js';
+import { ecfTypeForCustomer, issueEcf, loadIssuingContext, saleEcfFields, saveEcfDocuments } from '../ecf/ecf.issue.js';
+import { kickEcfWorker } from '../ecf/ecf.outbox.js';
 
 function applyDateRange(where, startDate, endDate) {
   applyCreatedAtRange(where, startDate, endDate);
@@ -287,17 +290,35 @@ export async function createSale(data, userId, userName, requester = { userId, r
     throw AppError.badRequest('Método de pago no habilitado');
   }
 
-  // Determine NCF type
-  const ncfType = determineNCFType(customer, total);
-  const invoiceNumber = await getNextNCF(ncfType);
+  // Con facturación electrónica activa el comprobante es un e-CF (se asigna dentro de la transacción);
+  // si no, se usa el NCF de papel (serie B)
+  const ecfContext = await loadIssuingContext();
+  const ncfType = determineNCFType(customer);
+  let invoiceNumber = ecfContext ? null : await getNextNCF(ncfType);
 
   // Create sale in transaction
   const sale = await prisma.$transaction(async (tx) => {
+    let ecf = null;
+    if (ecfContext) {
+      ecf = await issueEcf(tx, ecfContext, {
+        ecfType: ecfTypeForCustomer(customer),
+        customer,
+        lines: saleDetails.map(d => ({ name: d.productName, quantity: d.quantity, unitPrice: d.unitPrice })),
+        discount: finalDiscount,
+        tax,
+        total,
+        taxRate: config.taxRate,
+        paymentMethod: normalizedPaymentMethod,
+      });
+      invoiceNumber = ecf.eNcf;
+    }
+
     // Create sale
     const newSale = await tx.sale.create({
       data: {
         invoiceNumber,
         ncfType,
+        ...(ecf ? saleEcfFields(ecf) : {}),
         customerId: customer.id,
         customerName: customer.name,
         userId,
@@ -356,46 +377,165 @@ export async function createSale(data, userId, userName, requester = { userId, r
       });
     }
 
+    if (ecf) await saveEcfDocuments(tx, newSale.id, ecf);
+
     return newSale;
   });
+
+  // Envía a la DGII en segundo plano; la venta ya quedó registrada y firmada
+  if (ecfContext) kickEcfWorker();
 
   return sale;
 }
 
 /**
- * Create credit note (nota de crédito)
+ * Crea una nota de crédito (B04) por devolución de productos de una venta.
+ * - Se guarda con montos y cantidades **negativos**, así los totales de ventas, caja y reportes restan solos.
+ * - Devuelve el stock y deja un movimiento DEVOLUCION en el inventario.
+ * - Solo se puede acreditar lo vendido y aún no devuelto; el impuesto y el descuento van en la misma proporción
+ *   que la venta original.
  */
-export async function createCreditNote(originalSaleId, data, userId, userName) {
-  const originalSale = await prisma.sale.findUnique({
-    where: { id: originalSaleId },
-    include: { details: true },
-  });
+export async function createCreditNote(originalSaleId, data, userId, userName, requester = { userId, role: 'VENDEDOR' }) {
+  const { details, reason, terminalId } = data;
+  const config = await getConfig();
 
-  if (!originalSale) {
-    throw AppError.notFound('Venta original no encontrada');
+  const original = await prisma.sale.findUnique({
+    where: { id: originalSaleId },
+    include: { details: true, creditNotes: { include: { details: true } } },
+  });
+  if (!original) throw AppError.notFound('Venta original no encontrada');
+  if (original.ncfType === CREDIT_NOTE_NCF) throw AppError.badRequest('No se puede crear una nota de crédito sobre otra nota de crédito');
+
+  const shift = await resolveShiftForSale(requester, terminalId, config);
+
+  // Cantidad vendida y ya devuelta por producto
+  const sold = new Map();
+  original.details.forEach(d => {
+    const e = sold.get(d.productId) || { quantity: 0, name: d.productName, unitPrice: Number(d.unitPrice), unitCost: Number(d.unitCost), lineDiscount: 0 };
+    e.quantity += d.quantity;
+    e.lineDiscount += Number(d.discount) || 0;
+    sold.set(d.productId, e);
+  });
+  const credited = new Map();
+  original.creditNotes.forEach(note =>
+    note.details.forEach(d => credited.set(d.productId, (credited.get(d.productId) || 0) + Math.abs(d.quantity)))
+  );
+
+  const requested = new Map();
+  details.forEach(d => requested.set(d.productId, (requested.get(d.productId) || 0) + d.quantity));
+
+  const lines = [];
+  let gross = 0;
+  for (const [productId, quantity] of requested) {
+    const line = sold.get(productId);
+    if (!line) throw AppError.badRequest('Uno de los productos no pertenece a la venta original');
+    const available = line.quantity - (credited.get(productId) || 0);
+    if (quantity > available) {
+      throw AppError.badRequest(`Solo se pueden devolver ${available} unidad(es) de ${line.name}`);
+    }
+    const lineDiscount = line.quantity > 0 ? round2((line.lineDiscount * quantity) / line.quantity) : 0;
+    const lineGross = line.unitPrice * quantity;
+    gross += lineGross;
+    lines.push({ productId, name: line.name, quantity, unitPrice: line.unitPrice, unitCost: line.unitCost, discount: lineDiscount, subtotal: round2(lineGross - lineDiscount) });
   }
 
-  // For now, create a negative sale (credit note)
-  // In future: proper B16 NCF type
-  const creditNote = await createSale({
-    customerId: originalSale.customerId,
-    details: data.details.map(d => ({
-      productId: d.productId,
-      quantity: d.quantity,
-      discount: d.discount || 0,
-    })),
-    discount: 0,
-    paymentMethod: 'EFECTIVO', // Credit notes don't have payment method
-    notes: `NOTA DE CRÉDITO - Ref: ${originalSale.invoiceNumber} - ${data.reason}`,
-  }, userId, userName);
+  const originalSubtotal = Number(original.subtotal) || 0;
+  const discountShare = originalSubtotal > 0 ? round2(Number(original.discount) * (gross / originalSubtotal)) : 0;
+  const taxable = Math.max(0, gross - discountShare);
+  const originalBase = originalSubtotal - Number(original.discount);
+  const rate = originalBase > 0 ? Number(original.tax) / originalBase : config.taxRate;
+  const tax = round2(taxable * rate);
+  const total = round2(taxable + tax);
 
-  // Update NCF type to B16 (Nota de Crédito)
-  await prisma.sale.update({
-    where: { id: creditNote.id },
-    data: { ncfType: 'B16' },
+  // Devolución de una venta electrónica -> nota de crédito electrónica (E34) que referencia el e-CF original
+  const ecfContext = await loadIssuingContext();
+  if (original.eNcf && !ecfContext) {
+    throw AppError.badRequest('La venta original es un comprobante electrónico: active la facturación electrónica para emitir su nota de crédito');
+  }
+  const useEcf = Boolean(ecfContext && original.eNcf);
+  let invoiceNumber = useEcf ? null : await getNextNCF(CREDIT_NOTE_NCF);
+  const buyer = useEcf ? await prisma.customer.findUnique({ where: { id: original.customerId } }) : null;
+  const fullyReturned = [...sold.entries()].every(([productId, line]) => (credited.get(productId) || 0) + (requested.get(productId) || 0) >= line.quantity);
+
+  return prisma.$transaction(async tx => {
+    let ecf = null;
+    if (useEcf) {
+      ecf = await issueEcf(tx, ecfContext, {
+        ecfType: 'E34',
+        customer: buyer,
+        lines: lines.map(l => ({ name: l.name, quantity: l.quantity, unitPrice: l.unitPrice })),
+        discount: discountShare,
+        tax,
+        total,
+        taxRate: Math.round(rate * 100) / 100,
+        paymentMethod: original.paymentMethod,
+        reference: {
+          eNcf: original.eNcf,
+          issuedAt: original.createdAt,
+          // 1 = anula el comprobante original (devolución total); 3 = corrige montos (devolución parcial)
+          modificationCode: fullyReturned ? 1 : 3,
+          afterThirtyDays: Date.now() - new Date(original.createdAt).getTime() > 30 * 86400000,
+        },
+      });
+      invoiceNumber = ecf.eNcf;
+    }
+
+    const note = await tx.sale.create({
+      data: {
+        invoiceNumber,
+        ncfType: CREDIT_NOTE_NCF,
+        ...(ecf ? saleEcfFields(ecf) : {}),
+        relatedSaleId: original.id,
+        customerId: original.customerId,
+        customerName: original.customerName,
+        userId,
+        userName,
+        subtotal: -round2(gross),
+        tax: -tax,
+        discount: -discountShare,
+        total: -total,
+        paymentMethod: original.paymentMethod,
+        notes: `NOTA DE CRÉDITO - Ref: ${original.invoiceNumber} - ${reason}`,
+        terminalId: shift.terminalId,
+        cashierCloseId: shift.cashierCloseId,
+        details: {
+          create: lines.map(l => ({
+            companyId: getTenantId(),
+            productId: l.productId,
+            productName: l.name,
+            quantity: -l.quantity,
+            unitPrice: l.unitPrice,
+            unitCost: l.unitCost,
+            discount: l.discount,
+            subtotal: -l.subtotal,
+          })),
+        },
+      },
+      include: { details: true },
+    });
+
+    for (const l of lines) {
+      await tx.product.update({ where: { id: l.productId }, data: { stock: { increment: l.quantity } } });
+      await tx.inventoryLog.create({
+        data: {
+          productId: l.productId,
+          productName: l.name,
+          type: 'DEVOLUCION',
+          quantity: l.quantity,
+          reason: `Nota de crédito ${invoiceNumber} (venta ${original.invoiceNumber})`,
+          userId,
+          userName,
+        },
+      });
+    }
+
+    if (ecf) await saveEcfDocuments(tx, note.id, ecf);
+
+    return note;
+  }).then(note => {
+    if (useEcf) kickEcfWorker();
+    return note;
   });
-
-  return creditNote;
 }
 
 /**

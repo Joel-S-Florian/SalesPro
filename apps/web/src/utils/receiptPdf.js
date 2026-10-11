@@ -1,8 +1,62 @@
 import jsPDF from 'jspdf';
+import QRCode from 'qrcode';
 import autoTable from 'jspdf-autotable';
 import { api } from '../services/api';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
 import { notify } from './notify';
+
+
+const NCF_LABELS = {
+  B01: 'Crédito Fiscal (B01)',
+  B02: 'Consumo (B02)',
+  B03: 'Nota de Débito (B03)',
+  B04: 'Nota de Crédito (B04)',
+  B11: 'Comprobante de Compras (B11)',
+  B12: 'Registro Único de Ingresos (B12)',
+  B13: 'Gastos Menores (B13)',
+  B14: 'Regímenes Especiales (B14)',
+  B15: 'Gubernamental (B15)',
+  B16: 'Exportaciones (B16)',
+  E31: 'Factura de Crédito Fiscal Electrónica (E31)',
+  E32: 'Factura de Consumo Electrónica (E32)',
+  E34: 'Nota de Crédito Electrónica (E34)',
+};
+
+/** Fecha y hora de firma del e-CF como la exige la DGII: dd-MM-yyyy HH:mm:ss (hora dominicana). */
+function ecfSignDate(sale) {
+  if (!sale.ecfSignedAt) return '';
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Santo_Domingo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(new Date(sale.ecfSignedAt))
+      .map(part => [part.type, part.value])
+  );
+  return `${parts.day}-${parts.month}-${parts.year} ${parts.hour === '24' ? '00' : parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+/** Imagen del código QR del timbre electrónico (o null si la venta no es electrónica). */
+async function buildStampQr(sale) {
+  if (!sale?.ecfStampUrl) return null;
+  try {
+    return await QRCode.toDataURL(sale.ecfStampUrl, { margin: 1, width: 360, errorCorrectionLevel: 'M' });
+  } catch (err) {
+    console.error('No se pudo generar el código QR del e-CF:', err);
+    return null;
+  }
+}
+
+/** Etiqueta del tipo de comprobante (catálogo de la DGII). */
+function ncfLabelOf(type) {
+  return NCF_LABELS[type] || `Tipo NCF: ${type || 'B02'}`;
+}
 
 export const RECEIPT_FORMATS = { A4: 'A4', TICKET: 'TICKET', BOTH: 'BOTH' };
 const FORMAT_STORAGE_KEY = 'factos-receipt-format';
@@ -37,8 +91,8 @@ function taxLabel(sale) {
 
 const money = value => `$${Number(value || 0).toFixed(2)}`;
 
-/** Plantilla A: carta / A4 con todos los detalles legales (B01). */
-function buildA4Receipt(sale) {
+/** Plantilla A: carta / A4 con todos los detalles legales (B01/B02). */
+function buildA4Receipt(sale, qr = null) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -82,7 +136,7 @@ function buildA4Receipt(sale) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(79, 70, 229); // Indigo 600
-  doc.text('FACTURA / COMPROBANTE FISCAL', badgeX + badgeWidth / 2, badgeY + 6, {
+  doc.text(sale.eNcf ? 'COMPROBANTE FISCAL ELECTRÓNICO' : 'FACTURA / COMPROBANTE FISCAL', badgeX + badgeWidth / 2, badgeY + 6, {
     align: 'center',
   });
 
@@ -95,12 +149,7 @@ function buildA4Receipt(sale) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(100, 116, 139);
-  const ncfLabel =
-    sale.ncfType === 'B01'
-      ? 'Crédito Fiscal (B01)'
-      : sale.ncfType === 'B02'
-        ? 'Consumo Final (B02)'
-        : `Tipo NCF: ${sale.ncfType || 'B02'}`;
+  const ncfLabel = ncfLabelOf(sale.ecfType || sale.ncfType);
   doc.text(ncfLabel, badgeX + badgeWidth / 2, badgeY + 19, { align: 'center' });
   doc.text('Válido para fines tributarios', badgeX + badgeWidth / 2, badgeY + 23.5, {
     align: 'center',
@@ -221,7 +270,7 @@ function buildA4Receipt(sale) {
 
   // Totals Calculations Box
   let finalY = doc.lastAutoTable?.finalY ? doc.lastAutoTable.finalY + 6 : 120;
-  if (finalY > 235) {
+  if (finalY > (qr ? 205 : 235)) {
     doc.addPage();
     finalY = 20;
   }
@@ -254,6 +303,21 @@ function buildA4Receipt(sale) {
     finalY + 13.5
   );
   doc.text('• ¡Gracias por su compra y preferir nuestros servicios!', 14, finalY + 18);
+
+  // Timbre electrónico del e-CF: QR + código de seguridad + fecha de firma (requisitos de la representación impresa)
+  if (qr) {
+    doc.addImage(qr, 'PNG', 14, finalY + 24, 30, 30);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`e-NCF: ${sale.eNcf}`, 48, finalY + 32);
+    doc.text(`Código de seguridad: ${sale.ecfSecurityCode || ''}`, 48, finalY + 37);
+    doc.text(`Fecha de firma digital: ${ecfSignDate(sale)}`, 48, finalY + 42);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Verifique este comprobante escaneando el código QR.', 48, finalY + 47);
+  }
 
   // Right column: Financial Summary
   doc.setFont('helvetica', 'normal');
@@ -319,7 +383,7 @@ function splitName(text, max) {
 }
 
 /** Plantilla B: ticket de 80 mm para impresoras térmicas. */
-function buildTicketReceipt(sale) {
+function buildTicketReceipt(sale, qr = null) {
   const width = 80;
   const margin = 4;
   const right = width - margin;
@@ -333,7 +397,7 @@ function buildTicketReceipt(sale) {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [width, 85 + rows * 3.6 + 30],
+    format: [width, 85 + rows * 3.6 + 30 + (qr ? 48 : 0)],
   });
   let y = 8;
   const line = (text, x = margin, opts) => {
@@ -361,12 +425,7 @@ function buildTicketReceipt(sale) {
   doc.setFont('courier', 'bold');
   line(sale.invoiceNumber || '', center, { align: 'center' });
   doc.setFont('courier', 'normal');
-  const ncfLabel =
-    sale.ncfType === 'B01'
-      ? 'Crédito Fiscal (B01)'
-      : sale.ncfType === 'B02'
-        ? 'Consumo Final (B02)'
-        : `NCF ${sale.ncfType || ''}`;
+  const ncfLabel = ncfLabelOf(sale.ecfType || sale.ncfType);
   line(ncfLabel, center, { align: 'center' });
   rule();
 
@@ -422,6 +481,15 @@ function buildTicketReceipt(sale) {
   y += 1;
   line('¡Gracias por su compra!', center, { align: 'center' });
   line('Conserve este comprobante', center, { align: 'center' });
+  if (qr) {
+    y += 1;
+    doc.addImage(qr, 'PNG', center - 14, y, 28, 28);
+    y += 31;
+    line(`e-NCF: ${sale.eNcf}`, center, { align: 'center' });
+    line(`Código de seguridad: ${sale.ecfSecurityCode || ''}`, center, { align: 'center' });
+    line(`Fecha de firma:`, center, { align: 'center' });
+    line(ecfSignDate(sale), center, { align: 'center' });
+  }
   return doc;
 }
 
@@ -429,16 +497,17 @@ function buildTicketReceipt(sale) {
  * Genera el comprobante de una venta (respuesta de POST /sales o GET /sales/:id), lo descarga y
  * lo abre en una pestaña nueva. Reutilizado por el POS y por el historial de ventas.
  */
-export function printReceipt(sale, format = getReceiptFormat()) {
+export async function printReceipt(sale, format = getReceiptFormat()) {
   if (!sale) return;
   try {
+    const qr = await buildStampQr(sale);
     const invoice = sale.invoiceNumber || 'POS';
     const outputs = [];
     if (format !== RECEIPT_FORMATS.TICKET) {
-      outputs.push({ doc: buildA4Receipt(sale), name: `Factura_${invoice}.pdf` });
+      outputs.push({ doc: buildA4Receipt(sale, qr), name: `Factura_${invoice}.pdf` });
     }
     if (format !== RECEIPT_FORMATS.A4) {
-      outputs.push({ doc: buildTicketReceipt(sale), name: `Factura_${invoice}_ticket.pdf` });
+      outputs.push({ doc: buildTicketReceipt(sale, qr), name: `Factura_${invoice}_ticket.pdf` });
     }
     outputs.forEach(({ doc, name }) => {
       doc.save(name);
@@ -456,7 +525,7 @@ export function printReceipt(sale, format = getReceiptFormat()) {
 export async function reprintSaleById(saleId) {
   try {
     const result = await api.sales.get(saleId);
-    printReceipt(result?.data || result);
+    await printReceipt(result?.data || result);
   } catch (err) {
     console.error('Error al reimprimir la factura:', err);
     notify.error(err.message || 'No se pudo cargar la factura para reimprimir.');

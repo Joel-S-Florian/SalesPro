@@ -10,6 +10,7 @@
     "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:web": "npm run dev --workspace @factos/web",
     "dev:api": "npm run dev --workspace @factos/api",
+    "dev:landing": "npm run dev --workspace @factos/landing",
     "build": "npm run build --workspaces --if-present",
     "start": "npm run start --workspaces --if-present",
     "clean": "rm -rf apps/web/dist dist",

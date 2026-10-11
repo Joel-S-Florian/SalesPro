@@ -2,6 +2,8 @@ import { prisma, basePrisma } from '../../config/db.js';
 import { getTenantId } from '../../config/tenant.js';
 import { NCF_PREFIXES } from '../../../../../packages/shared/constants.js';
 
+export { determineNCFType } from './dgii.js';
+
 /**
  * Get next NCF sequence number for a given type
  * @param {string} ncfType - NCF type (B01, B02, etc.)
@@ -52,23 +54,6 @@ export function validateNCFFormat(ncf) {
   if (!ncf || typeof ncf !== 'string') return false;
   const regex = /^B(0[1-9]|1[0-6])\d{8}$/;
   return regex.test(ncf);
-}
-
-/**
- * Determine NCF type based on customer and amount
- * @param {Object} customer - Customer object
- * @param {number} amount - Sale amount
- * @returns {string} NCF type
- */
-export function determineNCFType(customer, amount) {
-  // Consumidor Final (RNC: 000000000 or generic)
-  if (!customer.rnc || customer.rnc === '000000000' || customer.documentId === '000000000') {
-    return 'B01';
-  }
-
-  // For now default to B02 (Crédito Fiscal) for registered taxpayers
-  // In future: check DGII taxpayer status, amount thresholds, etc.
-  return 'B02';
 }
 
 /**

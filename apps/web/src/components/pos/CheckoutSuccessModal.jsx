@@ -1,12 +1,49 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { ChevronDown, Printer } from 'lucide-react';
 import Modal from '../Modal';
 import ReceiptFormatSelect from '../ReceiptFormatSelect';
 import { money, dateTime } from '../../utils/format';
 import { formatTaxPercent } from '../../stores/configStore';
+import { api } from '../../services/api';
+import EcfStatusBadge from '../ecf/EcfStatusBadge';
 
-const NCF_LABELS = { B01: 'Crédito fiscal', B02: 'Consumo' };
+const NCF_LABELS = {
+  B01: 'Crédito fiscal',
+  B02: 'Consumo',
+  B04: 'Nota de crédito',
+  E31: 'Crédito fiscal electrónico',
+  E32: 'Consumo electrónico',
+  E34: 'Nota de crédito electrónica',
+};
+
+/** Sigue el estado del comprobante electrónico unos segundos (la DGII suele responder en menos de 2 s). */
+function useEcfStatus(sale) {
+  const [state, setState] = useState({ status: sale?.ecfStatus || null, message: null });
+  useEffect(() => {
+    if (!sale?.eNcf) return undefined;
+    let cancelled = false;
+    let attempts = 0;
+    const tick = async () => {
+      attempts += 1;
+      try {
+        const result = await api.ecf.saleStatus(sale.id);
+        if (cancelled) return;
+        setState({ status: result.status, message: result.message });
+        if (result.final || attempts >= 12) return;
+      } catch {
+        if (attempts >= 3) return;
+      }
+      if (!cancelled) setTimeout(tick, 1500);
+    };
+    const first = setTimeout(tick, 600);
+    return () => {
+      cancelled = true;
+      clearTimeout(first);
+    };
+  }, [sale?.id, sale?.eNcf]);
+  return state;
+}
 
 function AnimatedCheck() {
   return (
@@ -36,6 +73,7 @@ function AnimatedCheck() {
  */
 export default function CheckoutSuccessModal({ sale, onPrint, onNewSale }) {
   const [showDetail, setShowDetail] = useState(false);
+  const ecf = useEcfStatus(sale);
   if (!sale) return null;
 
   const taxBase = sale.subtotal - sale.discount;
@@ -60,7 +98,7 @@ export default function CheckoutSuccessModal({ sale, onPrint, onNewSale }) {
           </div>
           <div>
             <dt className="text-xs text-slate-500 dark:text-slate-400">Tipo</dt>
-            <dd className="font-medium text-slate-800 dark:text-slate-100">{NCF_LABELS[sale.ncfType] || sale.ncfType}</dd>
+            <dd className="font-medium text-slate-800 dark:text-slate-100">{NCF_LABELS[sale.ecfType || sale.ncfType] || sale.ecfType || sale.ncfType}</dd>
           </div>
           <div>
             <dt className="text-xs text-slate-500 dark:text-slate-400">Fecha</dt>
@@ -71,6 +109,18 @@ export default function CheckoutSuccessModal({ sale, onPrint, onNewSale }) {
             <dd className="text-slate-800 dark:text-slate-100">{sale.userName}</dd>
           </div>
         </dl>
+
+        {sale.eNcf && (
+          <div aria-live="polite" className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm dark:border-slate-700">
+            <div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Comprobante electrónico</p>
+              <p className="text-xs text-slate-500">Código de seguridad <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">{sale.ecfSecurityCode}</span></p>
+              {ecf.message && <p className="mt-1 max-w-[18rem] text-xs text-rose-600">{ecf.message}</p>}
+            </div>
+            <EcfStatusBadge status={ecf.status || sale.ecfStatus} />
+          </div>
+        )}
+
 
         <div>
           <button

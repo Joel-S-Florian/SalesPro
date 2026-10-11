@@ -31,6 +31,10 @@ const TENANT_MODELS = new Set([
   'InventoryImport',
   'NCFSequence',
   'AuditLog',
+  'EcfConfig',
+  'EcfSequence',
+  'EcfDocument',
+  'EcfInbox',
 ]);
 
 const FILTERED = new Set([

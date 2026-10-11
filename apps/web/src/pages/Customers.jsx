@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Edit2, Trash2, History, Calendar, FileText, ShoppingBag } from 'lucide-react';
+import { Loader2, Plus, Search, Edit2, Trash2, History, Calendar, FileText, ShoppingBag, Radar } from 'lucide-react';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
@@ -24,6 +24,21 @@ export default function Customers() {
     setPageSize,
     reload,
   } = usePagedList(api.customers.page, { q: search.trim() || undefined });
+
+  // Directorio de contribuyentes electrónicos de la DGII
+  const [checkingId, setCheckingId] = useState(null);
+  const checkEcf = async customer => {
+    try {
+      setCheckingId(customer.id);
+      const result = await api.ecf.checkCustomer(customer.id, true);
+      notify.success(result.ecfIssuer ? `${customer.name} es emisor electrónico: se le enviarán sus e-CF` : `${customer.name} no es emisor electrónico: recibirá la representación impresa`);
+      reload();
+    } catch (err) {
+      notify.error(err.message || 'No se pudo consultar la DGII');
+    } finally {
+      setCheckingId(null);
+    }
+  };
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -187,6 +202,9 @@ export default function Customers() {
                     {c.id === 'cust_final' && (
                       <span className="ml-2 text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded font-mono uppercase font-bold">Comodín</span>
                     )}
+                    {c.ecfIssuer === true && (
+                      <span title={`Consultado el ${c.ecfDirectoryCheckedAt ? new Date(c.ecfDirectoryCheckedAt).toLocaleDateString('es-DO') : ''}`} className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">Emisor electrónico</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 space-y-0.5">
                     <p className="text-slate-700 dark:text-slate-300 font-medium">{c.email || '-'}</p>
@@ -202,6 +220,16 @@ export default function Customers() {
                       >
                         <History className="w-4 h-4" />
                       </button>
+                      {c.id !== 'cust_final' && (
+                        <button aria-label="Consultar en la DGII si es emisor electrónico"
+                          onClick={() => checkEcf(c)}
+                          disabled={checkingId === c.id}
+                          className="text-slate-400 hover:text-emerald-600 disabled:opacity-40 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="Consultar en la DGII si es emisor electrónico"
+                        >
+                          {checkingId === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radar className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                       <button aria-label="Editar"
                         onClick={() => openEditModal(c)}
                         disabled={c.id === 'cust_final'}

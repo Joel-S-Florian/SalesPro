@@ -7,7 +7,6 @@ import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 export async function authenticate(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
-    console.log('🔍 [DEBUG AUTH] 1. Header recibido:', authHeader);
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.log('❌ [DEBUG AUTH] 2. Falta token o no empieza con "Bearer "');

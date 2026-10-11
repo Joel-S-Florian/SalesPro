@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import EcfStatusBadge from '../components/ecf/EcfStatusBadge';
 import { useAuthStore } from '../stores/authStore';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { api } from '../services/api';
@@ -163,6 +164,7 @@ export default function SalesHistory() {
                   >
                     <td className="px-6 py-4 font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
                       {sale.invoiceNumber}
+                      {sale.ecfStatus && <div className="mt-1"><EcfStatusBadge status={sale.ecfStatus} /></div>}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-700 dark:text-slate-300">
                       {sale.customer?.name || sale.customerName || 'Consumidor Final'}

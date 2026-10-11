@@ -21,7 +21,10 @@ import configRoutes from './modules/config/config.routes.js';
 import terminalsRoutes from './modules/terminals/terminals.routes.js';
 import cashierRoutes from './modules/cashier/cashier.routes.js';
 import inventoryImportRoutes from './modules/inventory-import/inventory-import.routes.js';
+import publicRoutes from './modules/public/public.routes.js';
 import platformRoutes from './modules/platform/platform.routes.js';
+import ecfRoutes from './modules/ecf/ecf.routes.js';
+import ecfReceiverRoutes from './modules/ecf/ecf.receiver.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
 
 const app = express();
@@ -37,7 +40,8 @@ app.use(helmet({
 
 // CORS
 app.use(cors({
-  origin: env.CORS_ORIGIN,
+  // CORS_ORIGIN admite varios orígenes separados por coma (sistema y página de promoción)
+  origin: env.CORS_ORIGIN.split(',').map(origin => origin.trim()).filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -81,6 +85,9 @@ app.use('/terminals', terminalsRoutes);
 app.use('/cashier', cashierRoutes);
 app.use('/inventory-import', inventoryImportRoutes);
 app.use('/platform', platformRoutes);
+app.use('/ecf', ecfRoutes);
+app.use('/ecf-receptor', ecfReceiverRoutes); // servicios públicos de recepción (sin sesión)
+app.use('/public', publicRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

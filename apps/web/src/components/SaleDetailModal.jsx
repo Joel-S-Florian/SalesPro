@@ -5,6 +5,7 @@ import { printReceipt } from '../utils/receiptPdf';
 import ReceiptFormatSelect from './ReceiptFormatSelect';
 import { formatTaxPercent } from '../stores/configStore';
 import { api } from '../services/api';
+import SaleEcfPanel from './ecf/SaleEcfPanel';
 
 export default function SaleDetailModal({ isOpen, onClose, saleId }) {
   const { data: queryResult, isLoading, error } = useQuery({
@@ -182,7 +183,7 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
                       Tipo NCF
                     </p>
                     <p className="text-sm font-bold text-slate-800 dark:text-slate-200 font-mono">
-                      {sale.ncfType}
+                      {sale.ecfType || sale.ncfType}
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -194,6 +195,8 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
                     </p>
                   </div>
                 </div>
+
+                <SaleEcfPanel sale={sale} />
 
                 <div className="border-t border-slate-200 dark:border-slate-700 pt-4"></div>
 

@@ -4,6 +4,7 @@ import { generateTokenPair, generateRefreshToken, verifyRefreshToken } from '../
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { env } from '../../config/env.js';
+import { prewarmToken } from '../ecf/ecf.token.service.js';
 
 /**
  * Authenticate user with username and password
@@ -54,6 +55,9 @@ export async function login(username, password) {
     where: { id: user.id },
     data: { updatedAt: new Date() },
   });
+
+  // Si la empresa factura electrónicamente, deja listo el token de la DGII para que la primera venta no espere
+  prewarmToken(user.companyId);
 
   return {
     user: {
@@ -186,7 +190,7 @@ export async function getProfile(userId) {
     where: { id: userId },
     select: {
       companyId: true,
-      company: { select: { name: true } },
+      company: { select: { name: true, plan: true, trialEndsAt: true } },
       id: true,
       username: true,
       fullName: true,

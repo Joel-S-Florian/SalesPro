@@ -3,7 +3,7 @@ import * as salesController from './sales.controller.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { createSaleSchema, saleIdParamSchema, saleQuerySchema, cartRemovalSchema } from './validators.js';
+import { createSaleSchema, saleIdParamSchema, saleQuerySchema, cartRemovalSchema, creditNoteSchema } from './validators.js';
 import { auditLog } from '../../shared/middleware/audit.js';
 import { salesRateLimiter } from '../../shared/middleware/rateLimiter.js';
 
@@ -56,6 +56,6 @@ router.post('/cart-removal', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'
  * @description Create credit note for a sale
  * @access Private (Admin, Vendedor)
  */
-router.post('/:id/credit-note', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), validate(saleIdParamSchema), auditLog('CREATE_CREDIT_NOTE', 'sale'), salesController.createCreditNote);
+router.post('/:id/credit-note', authenticate, authorize('ADMINISTRADOR', 'VENDEDOR'), validate(creditNoteSchema), auditLog('CREATE_CREDIT_NOTE', 'sale'), salesController.createCreditNote);
 
 export default router;

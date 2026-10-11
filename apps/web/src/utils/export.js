@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { api } from '../services/api';
 
 export function generateFilename(reportType, filters = {}) {
   const from = filters.from || 'all';
@@ -39,6 +40,17 @@ export function exportToCSV(data, filename, columns) {
     ...flat.map((row) => headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')),
   ].join('\n');
   downloadBlob(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }), `${filename}.csv`);
+}
+
+/** Excel real (.xlsx) generado en el servidor, con formato de moneda y encabezado de la empresa. */
+export async function exportToXLSX({ title, subtitle, columns, rows, filename }) {
+  const blob = await api.reports.exportXlsx({
+    title,
+    subtitle,
+    columns: columns.map((c) => ({ key: c.key, label: c.label, type: c.type || 'text' })),
+    rows,
+  });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 export function exportToJSON(data, filename) {

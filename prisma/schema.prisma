@@ -15,6 +15,8 @@ model Company {
   phone         String?
   address       String?
   active        Boolean           @default(true)
+  plan          PlanType          @default(STARTER)
+  trialEndsAt   DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   users         User[]
@@ -31,8 +33,43 @@ model Company {
   imports       InventoryImport[]
   ncfSequences  NCFSequence[]
   auditLogs     AuditLog[]
+  ecfConfig     EcfConfig?
+  ecfSequences  EcfSequence[]
+  ecfDocuments  EcfDocument[]
+  ecfInbox      EcfInbox[]
 
   @@map("companies")
+}
+
+model Lead {
+  id           String     @id @default(cuid())
+  name         String
+  business     String
+  businessType String?
+  contact      String
+  note         String?
+  status       LeadStatus @default(NEW)
+  companyId    String? // empresa creada al aprobar la solicitud
+  ipAddress    String?
+  createdAt    DateTime   @default(now())
+  handledAt    DateTime?
+
+  @@index([status, createdAt])
+  @@map("leads")
+}
+
+enum LeadStatus {
+  NEW
+  APPROVED
+  REJECTED
+}
+
+enum PlanType {
+  FREE
+  STARTER
+  BUSINESS
+  PRO
+  ENTERPRISE
 }
 
 model User {
@@ -110,18 +147,22 @@ model Product {
 }
 
 model Customer {
-  id         String   @id @default(cuid())
-  documentId String
-  name       String
-  email      String?
-  phone      String?
-  address    String?
-  rnc        String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  sales      Sale[]
-  companyId  String
-  company    Company  @relation(fields: [companyId], references: [id])
+  id                    String    @id @default(cuid())
+  documentId            String
+  name                  String
+  email                 String?
+  phone                 String?
+  address               String?
+  rnc                   String?
+  ecfIssuer             Boolean? // ¿es emisor electrónico? (directorio DGII)
+  ecfReceptionUrl       String?
+  ecfApprovalUrl        String?
+  ecfDirectoryCheckedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  sales                 Sale[]
+  companyId             String
+  company               Company   @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, documentId])
   @@index([companyId])
@@ -129,32 +170,45 @@ model Customer {
 }
 
 model Sale {
-  id             String        @id @default(cuid())
-  invoiceNumber  String
-  ncfType        NCFType       @default(B01)
-  customerId     String
-  customerName   String
-  userId         String
-  userName       String
-  subtotal       Float
-  tax            Float
-  discount       Float         @default(0)
-  total          Float
-  paymentMethod  PaymentMethod
-  notes          String?
-  createdAt      DateTime      @default(now())
-  terminalId     String?
-  cashierCloseId String?
-  details        SaleDetail[]
-  terminal       Terminal?     @relation(fields: [terminalId], references: [id])
-  cashierClose   CashierClose? @relation(fields: [cashierCloseId], references: [id])
-  customer       Customer      @relation(fields: [customerId], references: [id])
-  user           User          @relation("SaleUser", fields: [userId], references: [id])
-  companyId      String
-  company        Company       @relation(fields: [companyId], references: [id])
+  id              String        @id @default(cuid())
+  invoiceNumber   String
+  ncfType         NCFType       @default(B02)
+  customerId      String
+  customerName    String
+  userId          String
+  userName        String
+  subtotal        Float
+  tax             Float
+  discount        Float         @default(0)
+  total           Float
+  paymentMethod   PaymentMethod
+  notes           String?
+  relatedSaleId   String? // nota de crédito -> venta original
+  ecfType         EcfType?
+  eNcf            String?
+  ecfStatus       EcfStatus?
+  ecfTrackId      String?
+  ecfSecurityCode String?
+  ecfSignedAt     DateTime?
+  ecfStampUrl     String? // enlace del QR (timbre) de la representación impresa
+  ecfDocuments    EcfDocument[]
+  createdAt       DateTime      @default(now())
+  terminalId      String?
+  cashierCloseId  String?
+  details         SaleDetail[]
+  terminal        Terminal?     @relation(fields: [terminalId], references: [id])
+  cashierClose    CashierClose? @relation(fields: [cashierCloseId], references: [id])
+  customer        Customer      @relation(fields: [customerId], references: [id])
+  user            User          @relation("SaleUser", fields: [userId], references: [id])
+  relatedSale     Sale?         @relation("CreditNotes", fields: [relatedSaleId], references: [id])
+  creditNotes     Sale[]        @relation("CreditNotes")
+  companyId       String
+  company         Company       @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, invoiceNumber])
+  @@unique([companyId, eNcf])
   @@index([companyId])
+  @@index([relatedSaleId])
   @@map("sales")
 }
 
@@ -395,4 +449,145 @@ enum NCFType {
   B14
   B15
   B16
+}
+
+// ---------------------------------------------------------------------------
+// Facturación electrónica (e-CF, DGII)
+// ---------------------------------------------------------------------------
+
+enum EcfMode {
+  OFF // solo comprobantes de papel (serie B)
+  PRECERT // ambiente de pre-certificación (testecf)
+  CERT // ambiente de certificación (certecf)
+  PROD // producción (ecf): validez fiscal
+}
+
+enum EcfType {
+  E31 // Factura de crédito fiscal
+  E32 // Factura de consumo
+  E33 // Nota de débito
+  E34 // Nota de crédito
+  E41 // Comprobante de compras
+  E43 // Gastos menores
+  E44 // Regímenes especiales
+  E45 // Gubernamental
+  E46 // Exportaciones
+  E47 // Pagos al exterior
+}
+
+/// Configuración de facturación electrónica de una empresa. El certificado y su contraseña se guardan cifrados (AES-256-GCM).
+model EcfConfig {
+  id                 String    @id @default(cuid())
+  companyId          String    @unique
+  company            Company   @relation(fields: [companyId], references: [id])
+  mode               EcfMode   @default(OFF)
+  legalName          String?
+  tradeName          String?
+  address            String?
+  municipalityCode   String?
+  provinceCode       String?
+  economicActivity   String?
+  certificateEnc     String?   @db.Text
+  certificatePassEnc String?   @db.Text
+  keyVersion         Int       @default(1)
+  certSubject        String?
+  certSerial         String?
+  certIssuer         String?
+  certNotBefore      DateTime?
+  certNotAfter       DateTime?
+  certFingerprint    String?
+  certRncMatch       Boolean?
+  lastConnectionAt   DateTime?
+  lastConnectionOk   Boolean?
+  lastConnectionNote String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("ecf_configs")
+}
+
+/// Rango de e-NCF autorizado por la DGII para un tipo de comprobante.
+model EcfSequence {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id])
+  ecfType    EcfType
+  rangeFrom  Int       @default(1)
+  rangeTo    Int
+  current    Int       @default(0) // último número usado
+  validUntil DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([companyId, ecfType, rangeFrom])
+  @@index([companyId])
+  @@map("ecf_sequences")
+}
+
+enum EcfStatus {
+  PENDING // firmado, aún sin enviar
+  SENT // enviado, esperando resultado
+  ACCEPTED
+  CONDITIONAL // aceptado condicional (válido)
+  REJECTED
+  ERROR // error de envío; se reintenta
+  CONTINGENCY // no se pudo enviar a tiempo
+  STORED // guardado localmente; no se envía por sí mismo (E32 < RD$250,000: se informa con su resumen RFCE)
+}
+
+enum EcfDocKind {
+  ECF
+  RFCE // resumen de factura de consumo < RD$250,000
+  ARECF // acuse de recibo
+  ACECF // aprobación comercial
+  ANULACION // anulación de rangos de e-NCF
+  DELIVERY // copia del e-CF aceptado, enviada al comprador cuando también es emisor electrónico
+}
+
+/// Documento electrónico firmado y su ciclo de envío a la DGII (también funciona como cola con reintentos).
+model EcfDocument {
+  id            String     @id @default(cuid())
+  companyId     String
+  company       Company    @relation(fields: [companyId], references: [id])
+  saleId        String?
+  sale          Sale?      @relation(fields: [saleId], references: [id])
+  kind          EcfDocKind
+  eNcf          String?
+  xml           String     @db.Text
+  status        EcfStatus  @default(PENDING)
+  trackId       String?
+  dgiiCode      Int?
+  dgiiMessages  Json?
+  attempts      Int        @default(0)
+  nextAttemptAt DateTime?
+  target        String? // destino de una entrega (URL del comprador)
+  lastError     String?    @db.Text
+  sentAt        DateTime?
+  resolvedAt    DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@unique([saleId, kind])
+  @@index([companyId, status, nextAttemptAt])
+  @@index([saleId])
+  @@map("ecf_documents")
+}
+
+/// e-CF recibidos de otros emisores (la empresa actúa como receptor electrónico).
+model EcfInbox {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+  rncEmisor  String
+  eNcf       String
+  total      Float?
+  xml        String   @db.Text
+  arecfXml   String?  @db.Text
+  status     String   @default("RECIBIDO")
+  receivedAt DateTime @default(now())
+
+  @@unique([companyId, rncEmisor, eNcf])
+  @@index([companyId])
+  @@map("ecf_inbox")
 }

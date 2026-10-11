@@ -141,6 +141,8 @@ async function request(path, options = {}, { isRetry = false } = {}) {
     }
   }
 
+  // Descargas (p. ej. Excel): devuelve el archivo en vez de JSON
+  if (options.responseType === 'blob' && res.ok) return res.blob();
   return handleResponse(res);
 }
 
@@ -217,10 +219,19 @@ export const api = {
     delete: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
   },
 
+  public: {
+    // Registro autónomo: devuelve la sesión iniciada de la cuenta recién creada
+    signup: (payload) => request('/public/signup', { method: 'POST', body: JSON.stringify(payload) }),
+  },
+
   platform: {
     stats: () => request('/platform/stats'),
+    analytics: () => request('/platform/analytics'),
     companies: (params = {}) => request(`/platform/companies?${toQuery(params)}`),
     company: (id) => request(`/platform/companies/${id}`),
+    leads: (params = {}) => request(`/platform/leads?${toQuery(params)}`),
+    approveLead: (id, payload) => request(`/platform/leads/${id}/approve`, { method: 'POST', body: JSON.stringify(payload) }),
+    rejectLead: (id) => request(`/platform/leads/${id}/reject`, { method: 'POST' }),
     createCompany: (payload) => request('/platform/companies', { method: 'POST', body: JSON.stringify(payload) }),
     updateCompany: (id, payload) =>
       request(`/platform/companies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
@@ -317,6 +328,40 @@ export const api = {
     customerHistory: (id, params = {}) => request(`/reports/customers/${id}/history?${toQuery(params)}`),
     staffPerformance: (params = {}) => request(`/reports/staff/performance?${toQuery(params)}`),
     staffPaymentMethods: (params = {}) => request(`/reports/staff/payment-methods?${toQuery(params)}`),
+    overview: (params = {}) => request(`/reports/overview?${toQuery(params)}`),
+    salesBreakdown: (params = {}) => request(`/reports/sales-breakdown?${toQuery(params)}`),
+    profitability: (params = {}) => request(`/reports/profitability?${toQuery(params)}`),
+    fiscal: (params = {}) => request(`/reports/fiscal?${toQuery(params)}`),
+    inventory: (params = {}) => request(`/reports/inventory?${toQuery(params)}`),
+    kardex: (productId, params = {}) => request(`/reports/kardex/${productId}?${toQuery(params)}`),
+    purchases: (params = {}) => request(`/reports/purchases?${toQuery(params)}`),
+    cash: (params = {}) => request(`/reports/cash?${toQuery(params)}`),
+    customerInsights: (params = {}) => request(`/reports/customer-insights?${toQuery(params)}`),
+    exportXlsx: payload =>
+      request('/reports/export/xlsx', { method: 'POST', body: JSON.stringify(payload), responseType: 'blob' }),
+  },
+
+  ecf: {
+    config: () => request('/ecf/config'),
+    saveConfig: payload => request('/ecf/config', { method: 'PUT', body: JSON.stringify(payload) }),
+    uploadCertificate: payload => request('/ecf/certificate', { method: 'POST', body: JSON.stringify(payload) }),
+    removeCertificate: () => request('/ecf/certificate', { method: 'DELETE' }),
+    testConnection: () => request('/ecf/test-connection', { method: 'POST' }),
+    sequences: () => request('/ecf/sequences'),
+    createSequence: payload => request('/ecf/sequences', { method: 'POST', body: JSON.stringify(payload) }),
+    updateSequence: (id, payload) => request(`/ecf/sequences/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    deleteSequence: id => request(`/ecf/sequences/${id}`, { method: 'DELETE' }),
+    summary: () => request('/ecf/summary'),
+    inbox: (params = {}) => request(`/ecf/inbox?${toQuery(params)}`),
+    inboxXml: id => request(`/ecf/inbox/${id}/xml`, { responseType: 'blob' }),
+    respondInbox: (id, payload) => request(`/ecf/inbox/${id}/respond`, { method: 'POST', body: JSON.stringify(payload) }),
+    voidRanges: ranges => request('/ecf/void-ranges', { method: 'POST', body: JSON.stringify({ ranges }) }),
+    checkCustomer: (id, force = false) => request(`/ecf/customers/${id}/check`, { method: 'POST', body: JSON.stringify({ force }) }),
+    documents: (params = {}) => request(`/ecf/documents?${toQuery(params)}`),
+    saleStatus: id => request(`/ecf/sales/${id}/status`),
+    saleDetail: id => request(`/ecf/sales/${id}`),
+    retry: id => request(`/ecf/sales/${id}/retry`, { method: 'POST' }),
+    downloadXml: (id, kind = 'ECF') => request(`/ecf/sales/${id}/xml?kind=${kind}`, { responseType: 'blob' }),
   },
 
   finance: {

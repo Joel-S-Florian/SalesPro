@@ -4,6 +4,7 @@ import app from './app.js';
 import { env } from './config/env.js';
 import { initializeNCFSequences } from './shared/utils/ncf.js';
 import { basePrisma as prisma } from './config/db.js';
+import { startEcfWorker, stopEcfWorker } from './modules/ecf/ecf.outbox.js';
 
 const PORT = env.PORT;
 
@@ -30,17 +31,21 @@ async function startServer() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[Factos] Servidor ejecutándose en http://0.0.0.0:${PORT}`);
     console.log(`[Factos] Environment: ${env.NODE_ENV}`);
+    // Cola de envío de comprobantes electrónicos a la DGII (reintentos y consulta de resultados)
+    startEcfWorker();
   });
 }
 
 process.on('SIGTERM', async () => {
   console.log('[Factos] SIGTERM received, shutting down gracefully...');
+  stopEcfWorker();
   await prisma.$disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('[Factos] SIGINT received, shutting down gracefully...');
+  stopEcfWorker();
   await prisma.$disconnect();
   process.exit(0);
 });

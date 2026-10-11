@@ -149,24 +149,13 @@ export function formatCedula(cedula) {
 }
 
 /**
- * Determine NCF type for a sale based on customer
- * @param {Object} customer - Customer object
- * @param {number} amount - Sale amount
- * @returns {string} NCF type
+ * Tipo de comprobante de una venta según el cliente (DGII):
+ * - cliente con RNC -> B01 (factura de crédito fiscal, permite al comprador deducir ITBIS);
+ * - consumidor final (sin RNC) -> B02 (factura de consumo).
+ * @param {Object} customer - Cliente
+ * @returns {string} 'B01' | 'B02'
  */
-export function determineNCFType(customer, amount) {
-  // Consumidor Final
-  if (!customer.rnc || customer.rnc === '000000000' || customer.documentId === '000000000') {
-    return 'B01';
-  }
-  
-  // TODO: Add logic for other NCF types based on:
-  // - Customer taxpayer status (DGII API)
-  // - Amount thresholds
-  // - Export sales
-  // - Government sales
-  // - Special regimes
-  
-  // Default to Crédito Fiscal for registered taxpayers
-  return 'B02';
+export function determineNCFType(customer) {
+  const isFinalConsumer = !customer?.rnc || customer.rnc === '000000000' || customer.documentId === '000000000';
+  return isFinalConsumer ? 'B02' : 'B01';
 }

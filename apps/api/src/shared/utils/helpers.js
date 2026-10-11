@@ -134,7 +134,8 @@ export function round2(num) {
  */
 export function parseStartOfDay(value) {
   if (!value || typeof value !== 'string') return null;
-  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  // Día sin hora: medianoche de República Dominicana (UTC-4 fijo), no la del servidor
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00-04:00` : value);
   return isNaN(d.getTime()) ? null : d;
 }
 
@@ -147,6 +148,7 @@ export function parseStartOfDay(value) {
 export function parseEndOfDay(value) {
   const d = parseStartOfDay(value);
   if (!d) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(d.getTime() + 86400000 - 1);
   d.setHours(23, 59, 59, 999);
   return d;
 }

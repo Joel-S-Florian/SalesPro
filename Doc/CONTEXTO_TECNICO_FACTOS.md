@@ -11,7 +11,8 @@ Monorepo con `npm workspaces`:
 factos/
 ├── apps/
 │   ├── api/          Node.js + Express + Prisma  (@factos/api)
-│   └── web/          React 19 + Vite + Tailwind + Zustand + TanStack Query  (@factos/web)
+│   ├── web/          React 19 + Vite + Tailwind + Zustand + TanStack Query  (@factos/web)
+│   └── landing/      Página de promoción: sitio estático Vite + React + Tailwind  (@factos/landing)
 ├── packages/shared/  Constantes y roles compartidos  (@factos/shared)
 ├── prisma/           schema.prisma, migraciones y seed
 ├── scripts/          Generador de datos de ejemplo, prueba de aislamiento multi-empresa
@@ -41,8 +42,13 @@ Roles: `SUPERADMIN` (plataforma), `ADMINISTRADOR` y `VENDEDOR` (empresa).
 | `sales` | Ventas (POS), notas de crédito preliminares, autorización de retiro del carrito |
 | `terminals`, `cashier` | Cajas, turnos, cierre (Reporte Z) |
 | `config` | Configuración por empresa: datos del negocio, ITBIS, métodos de pago, descuentos, formato de comprobante |
-| `reports`, `finance` | Reportes y flujo de caja |
-| `platform` | Super-admin: empresas, suspensión, contraseñas, estadísticas |
+| `reports`, `finance` | Reportes (ver «Reportes» abajo) y flujo de caja |
+| `ecf` | Facturación electrónica DGII: configuración, certificado cifrado, token, emisión y firma de e-CF, cola de envío, receptor, directorio, tablero (ver [`Facturacion_Electronica.md`](Facturacion_Electronica.md)) |
+| `platform` | Super-admin: empresas, planes y prueba, suspensión, contraseñas, estadísticas |
+| `public`, `leads` | Endpoints sin sesión: registro autónomo (`/public/signup`) y solicitudes de contacto (`/public/leads`, con bandeja de aprobación) |
+
+**Comprobantes:** serie B de la DGII (B01 crédito fiscal con RNC, B02 consumo, B04 nota de crédito). Las notas de crédito se guardan en
+negativo y devuelven stock; ver `Facturacion_Electronica.md`.
 
 Utilidades clave: `shared/utils/ncf.js` (secuencias NCF por empresa), `shared/utils/dgii.js` (validación RNC/cédula),
 `shared/middleware/audit.js` (auditoría), `config/db.js` y `config/tenant.js` (aislamiento).
@@ -64,6 +70,28 @@ finanzas, cierres de caja, configuración, usuarios y (solo super-admin) empresa
 - **Cobro:** un administrador autoriza quitar artículos (queda en `AuditLog`); turno de caja; confirmación con impresión
   (`utils/receiptPdf.js`).
 
+### Reportes (`pages/Reports.jsx` + `pages/reports/`)
+Once áreas con un solo selector de período (hoy, 7/30 días, mes, mes pasado, trimestre, año, personalizado):
+**Resumen** (con variación frente al período anterior de igual duración, mapa de calor día × hora), **Ventas**,
+**Rentabilidad**, **Inventario** (valor, reposición sugerida, productos sin movimiento, kárdex, mermas), **Compras**,
+**Cajas** (faltantes y sobrantes por cajero y caja), **Fiscal** (ITBIS, comprobantes, números saltados), **Clientes**
+(nuevos, recurrentes, inactivos) y los clásicos **Productos**, **Mejores clientes** y **Personal** (`LegacyReports.jsx`).
+El super-admin ve además *Métricas de la plataforma* dentro de Empresas (`components/PlatformInsights.jsx`).
+
+- **API:** `modules/reports/analytics.service.js` (rutas `/reports/overview`, `sales-breakdown`, `profitability`, `fiscal`,
+  `inventory`, `kardex/:productId`, `purchases`, `cash`, `customer-insights`) y `modules/platform/analytics.js`
+  (`/platform/analytics`). Todo pasa por `prisma`, así que el aislamiento por empresa es automático.
+- **Zona horaria:** `shared/utils/tz.js` agrupa por día, semana (lunes) y mes en hora dominicana (UTC-4 fijo, sin horario de
+  verano), no en la del servidor. `parseStartOfDay/EndOfDay` también interpretan los días en UTC-4.
+- **Notas de crédito:** tipo `B04`, guardadas con montos y cantidades negativos; los reportes y la caja las restan sin lógica extra.
+- **Costo:** se usa `SaleDetail.unitCost`; si es 0 se recurre al costo actual del producto y se avisa de las líneas sin costo.
+- **Exportación:** Excel real (`POST /reports/export/xlsx`, `exceljs` en el servidor, con encabezado de empresa y formato de
+  moneda), PDF y CSV desde `pages/reports/shared.jsx` (`ExportBar`, `ReportTable`).
+- **Para añadir un reporte:** servicio en `analytics.service.js` + ruta + método en `services/api.js` + componente que use
+  `useReport` y `ReportState`/`ReportTable`.
+- Los datos se agregan en memoria sobre el período pedido (consultas livianas, no toda la historia). Para volúmenes muy
+  grandes conviene pasar los totales diarios a SQL.
+
 ### Sistema de diseño
 Resumido en [`Sistema_de_Diseno_UI.md`](Sistema_de_Diseno_UI.md): tipografía, movimiento, avisos, esqueletos, accesibilidad.
 
@@ -84,7 +112,8 @@ listas pequeñas que llegan completas usan `useClientPage`. El API devuelve `{ d
 
 | Comando | Qué hace |
 |---|---|
-| `npm run dev` | API (puerto **4010**) y web (Vite, 5173 o el siguiente libre) en paralelo; el proxy `/api` apunta a 4010 (`API_PROXY_TARGET` lo cambia) |
+| `npm run dev` | API (puerto **4010**) y web (Vite, puerto **5180**, fijo) en paralelo; la página de promoción usa el **5190**; el proxy `/api` apunta a 4010 (`API_PROXY_TARGET` lo cambia) |
+| `npm run dev:landing` | Página de promoción en http://localhost:5190 |
 | `npm run db:migrate` / `npx prisma migrate deploy` | Crear/aplicar migraciones |
 | `npm run db:generate` | Regenerar el cliente Prisma (detener el servidor antes en Windows) |
 | `npm run db:seed` | Datos de ejemplo + usuarios `admin`, `vendedor`, `superadmin` (contraseña del superadmin: `SUPERADMIN_PASSWORD`) |
@@ -95,9 +124,8 @@ listas pequeñas que llegan completas usan `useClientPage`. El API devuelve `{ d
 
 ## Pendiente técnico relevante
 
-- **Facturación electrónica DGII (e-CF):** sin implementar (firma XAdES, UBL 2.1, cliente DGII, contingencia,
-  conciliación). Diferida hasta tener clientes; debe ser por empresa (certificado y secuencias propios).
-- **Notas de crédito (B16):** la lógica actual es preliminar y no tiene interfaz.
+- **Facturación electrónica DGII (e-CF):** base completa (emisión, firma, cola, receptor, directorio, aprobaciones, anulación, tablero) probada con simulador; falta la fase 5 con la DGII real (ver `Facturacion_Electronica.md`).
+- **Notas de crédito:** B04 (papel) o E34 (electrónica), con interfaz en el historial de ventas.
 - **SaaS:** planes, suscripciones, registro autónomo, Row-Level Security.
 - Hoja de ruta completa: [`Propuesta de Renombramiento y Roadmap de Futuras Implementaciones.md`](Propuesta%20de%20Renombramiento%20y%20Roadmap%20de%20Futuras%20Implementaciones.md).
 

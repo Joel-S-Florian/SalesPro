@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Edit2, Power, Save } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
 import { notify } from '../utils/notify';
+
+const EcfSettings = lazy(() => import('../components/ecf/EcfSettings'));
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs';
@@ -319,10 +321,19 @@ function TerminalsSettings() {
 }
 
 export default function Settings() {
-  const [tab, setTab] = useState('GENERAL');
+  const [tab, setTab] = useState(() => {
+    try {
+      const requested = sessionStorage.getItem('factos-settings-tab');
+      sessionStorage.removeItem('factos-settings-tab');
+      return requested === 'ECF' ? 'ECF' : 'GENERAL';
+    } catch {
+      return 'GENERAL';
+    }
+  });
   const tabs = [
     { id: 'GENERAL', label: 'General' },
     { id: 'TERMINALS', label: 'Cajas' },
+    { id: 'ECF', label: 'Facturación electrónica' },
   ];
 
   return (
@@ -340,7 +351,13 @@ export default function Settings() {
           </button>
         ))}
       </div>
-      {tab === 'GENERAL' ? <GeneralSettings /> : <TerminalsSettings />}
+      {tab === 'GENERAL' && <GeneralSettings />}
+      {tab === 'TERMINALS' && <TerminalsSettings />}
+      {tab === 'ECF' && (
+        <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />}>
+          <EcfSettings />
+        </Suspense>
+      )}
     </div>
   );
 }

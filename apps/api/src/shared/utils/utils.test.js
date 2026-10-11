@@ -26,10 +26,10 @@ describe('NCF', () => {
     expect(getNCFType('basura')).toBeNull();
   });
 
-  it('consumidor final -> B01; contribuyente con RNC -> B02', () => {
-    expect(determineNCFType({ rnc: null, documentId: '123' }, 100)).toBe('B01');
-    expect(determineNCFType({ rnc: '000000000', documentId: '000000000' }, 100)).toBe('B01');
-    expect(determineNCFType({ rnc: '131889421', documentId: '131889421' }, 100)).toBe('B02');
+  it('consumidor final -> B02 (consumo); contribuyente con RNC -> B01 (crédito fiscal)', () => {
+    expect(determineNCFType({ rnc: null, documentId: '123' })).toBe('B02');
+    expect(determineNCFType({ rnc: '000000000', documentId: '000000000' })).toBe('B02');
+    expect(determineNCFType({ rnc: '131889421', documentId: '131889421' })).toBe('B01');
   });
 });
 
