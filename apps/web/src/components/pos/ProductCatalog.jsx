@@ -1,5 +1,5 @@
 import React, { forwardRef } from 'react';
-import { Camera, Loader2, Plug, Search, SearchX, X } from 'lucide-react';
+import { Camera, FileUp, Loader2, PackagePlus, Plug, Search, SearchX, X } from 'lucide-react';
 import ProductCard from './ProductCard';
 import { Skeleton } from '../Skeleton';
 
@@ -12,7 +12,7 @@ const iconButton =
  * Columna del catálogo: búsqueda (con lectura de códigos), filtro por categoría y cuadrícula de productos.
  */
 const ProductCatalog = forwardRef(function ProductCatalog(
-  { catalog, categories, quantities, shakeId, onAdd, onSubmitSearch, onOpenCamera, serialScanner, large },
+  { catalog, categories, quantities, shakeId, onAdd, onSubmitSearch, onOpenCamera, serialScanner, large, onNavigate },
   searchRef
 ) {
   const { search, setSearch, categoryId, setCategoryId, products, loading, loadingMore, hasNext, error, total } = catalog;
@@ -118,6 +118,32 @@ const ProductCatalog = forwardRef(function ProductCatalog(
             {Array.from({ length: 12 }, (_, i) => (
               <Skeleton key={i} className="h-[7.5rem] rounded-xl" />
             ))}
+          </div>
+        ) : products.length === 0 && !error && !catalog.isFiltering && onNavigate ? (
+          <div className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center">
+            <PackagePlus className="h-10 w-10 text-indigo-300 dark:text-indigo-700" strokeWidth={1.5} />
+            <div>
+              <p className="text-base font-semibold text-slate-800 dark:text-slate-100">Aún no tienes productos</p>
+              <p className="mx-auto mt-1 max-w-xs text-sm text-slate-500 dark:text-slate-400">
+                Agrega tu primer producto o importa tu lista completa para empezar a vender.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate('PRODUCTS')}
+                className="inline-flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 cursor-pointer"
+              >
+                <PackagePlus className="h-4 w-4" /> Crear producto
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate('IMPORT_INVENTORY')}
+                className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 cursor-pointer"
+              >
+                <FileUp className="h-4 w-4" /> Importar inventario
+              </button>
+            </div>
           </div>
         ) : products.length === 0 && !error ? (
           <div className="flex h-full min-h-48 flex-col items-center justify-center gap-2 text-center">

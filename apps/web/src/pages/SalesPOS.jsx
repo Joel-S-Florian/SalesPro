@@ -45,7 +45,7 @@ function ToolbarButton({ icon: Icon, label, active, onClick, iconOnly }) {
   );
 }
 
-export default function SalesPOS() {
+export default function SalesPOS({ onNavigate }) {
   const { isVendedor } = useAuthorization();
   const config = useConfigStore(state => state.config);
   const shiftState = useShift();
@@ -305,6 +305,7 @@ export default function SalesPOS() {
             onOpenCamera={() => setCameraOpen(true)}
             serialScanner={serialScanner}
             large={cashierMode}
+            onNavigate={onNavigate}
           />
 
           <aside

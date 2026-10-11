@@ -67,7 +67,7 @@ Escribir el código completo en el buscador del POS y pulsar **Enter**. **Espera
 > (Enter agrega el producto) o prueba la cámara (prueba 4). Ver "Problemas conocidos".
 
 ### Prueba 4: Cámara
-1. Abrir FACTOS desde `http://localhost:5173` en la computadora (la cámara exige HTTPS o localhost).
+1. Abrir FACTOS desde `http://localhost:5180` en la computadora (la cámara exige HTTPS o localhost).
 2. Botón de **cámara** junto al buscador → permitir el acceso.
 3. Apuntar a una etiqueta (pantalla o impresa). **Esperado:** el carrito crece y
    aparece "Último: <código>" en la ventana de la cámara. Se pueden escanear varios seguidos.

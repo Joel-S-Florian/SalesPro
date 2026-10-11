@@ -30,7 +30,8 @@ export default defineConfig(() => {
       },
     },
     server: {
-      port: 5173,
+      port: 5180,
+      strictPort: true, // puerto propio de FACTOS: no se mueve a otro si está ocupado
       proxy: {
         '/api': {
           target: process.env.API_PROXY_TARGET || 'http://localhost:4010',
