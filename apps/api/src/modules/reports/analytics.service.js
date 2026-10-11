@@ -423,10 +423,10 @@ export async function getInventoryReport({ deadDays = 60, from, to }) {
     prisma.inventoryLog.findMany({
       where: {
         createdAt: { gte: range.gte, lte: range.lte },
-        type: { in: ['SALIDA', 'AJUSTE', 'DEVOLUCION'] },
+        type: { in: ['SALIDA', 'AJUSTE', 'DEVOLUCION', 'MERMA'] },
         NOT: { reason: { startsWith: 'Venta' } },
       },
-      select: { id: true, productId: true, productName: true, type: true, quantity: true, reason: true, userName: true, createdAt: true, product: { select: { costPrice: true } } },
+      select: { id: true, productId: true, productName: true, type: true, quantity: true, totalCost: true, reason: true, userName: true, createdAt: true, product: { select: { costPrice: true } } },
       orderBy: { createdAt: 'desc' },
       take: 300,
     }),
@@ -515,7 +515,7 @@ export async function getInventoryReport({ deadDays = 60, from, to }) {
       quantity: a.quantity,
       reason: a.reason.replace(/^Ajuste:\s*/, ''),
       userName: a.userName,
-      cost: a.type === 'SALIDA' ? round2(a.quantity * (Number(a.product?.costPrice) || 0)) : null,
+      cost: a.type === 'MERMA' && a.totalCost != null ? round2(a.totalCost) : a.type === 'SALIDA' || a.type === 'MERMA' ? round2(a.quantity * (Number(a.product?.costPrice) || 0)) : null,
     })),
     range: { from: range.from, to: range.to },
   };

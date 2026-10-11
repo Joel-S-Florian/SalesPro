@@ -8,7 +8,7 @@ import { BarList, Callout, Kpi, Panel, ReportState, ReportTable, TrendChart, num
 const selectClass =
   'h-9 rounded-lg border border-slate-200 bg-transparent px-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:text-slate-300';
 
-const MOVEMENT_LABELS = { ENTRADA: 'Entrada', SALIDA: 'Salida', AJUSTE: 'Ajuste', DEVOLUCION: 'Devolución' };
+const MOVEMENT_LABELS = { ENTRADA: 'Entrada', SALIDA: 'Salida', AJUSTE: 'Ajuste', DEVOLUCION: 'Devolución', MERMA: 'Merma' };
 
 function KardexModal({ product, range, onClose }) {
   const report = useReport(p => api.reports.kardex(p.productId, { from: p.from, to: p.to }), { productId: product.id, ...range });

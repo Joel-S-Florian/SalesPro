@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  BarChart3, Boxes, CalendarRange, Crown, Landmark, LayoutDashboard, Package, Receipt, Truck, UserCheck, Users, Wallet, TrendingUp,
+  BarChart3, Boxes, CalendarClock, CalendarRange, Scale, Crown, Landmark, LayoutDashboard, Package, Receipt, Truck, UserCheck, Users, Wallet, TrendingUp,
 } from 'lucide-react';
 import { CustomersArea, CashArea } from './reports/PeopleAreas';
 import { FiscalArea, Overview, ProfitArea, SalesArea } from './reports/SalesAreas';
 import { InventoryArea, PurchasesArea } from './reports/StockAreas';
+import { BulkArea, ExpiryArea } from './reports/FoodAreas';
+import { useConfigStore } from '../stores/configStore';
 import LegacyReports from './reports/LegacyReports';
 import { PRESETS, presetRange, periodText } from './reports/shared';
 
@@ -13,6 +15,8 @@ const AREAS = [
   { id: 'SALES', label: 'Ventas', icon: Receipt, hint: 'Ventas por período, pago, comprobante y caja' },
   { id: 'PROFIT', label: 'Rentabilidad', icon: TrendingUp, hint: 'Cuánto ganas por producto y categoría' },
   { id: 'INVENTORY', label: 'Inventario', icon: Boxes, hint: 'Valor, reposición y productos sin movimiento' },
+  { id: 'EXPIRY', label: 'Vencimientos', icon: CalendarClock, hint: 'Lotes por vencer, mermas y descuentos por vencimiento', needsPerishable: true },
+  { id: 'BULK', label: 'Granel y presentaciones', icon: Scale, hint: 'Ventas por peso, paquetes y cajas' },
   { id: 'PURCHASES', label: 'Compras', icon: Truck, hint: 'Qué compras, a quién y a qué costo' },
   { id: 'CASH', label: 'Cajas', icon: Wallet, hint: 'Cierres de caja y diferencias por cajero' },
   { id: 'FISCAL', label: 'Fiscal', icon: Landmark, hint: 'ITBIS y comprobantes emitidos' },
@@ -42,6 +46,9 @@ const dateInput =
 export default function Reports() {
   const [{ area, preset }, setView] = useState(readStored);
   const [custom, setCustom] = useState(() => presetRange('month'));
+  const perishableEnabled = useConfigStore(state => state.config.perishable?.enabled);
+  // Vencimientos solo aparece si la empresa activó perecederos (si ya estaba abierto, se mantiene)
+  const areas = AREAS.filter(a => !a.needsPerishable || perishableEnabled || a.id === area);
 
   useEffect(() => {
     try {
@@ -68,6 +75,10 @@ export default function Reports() {
         return <ProfitArea range={range} />;
       case 'INVENTORY':
         return <InventoryArea range={range} />;
+      case 'EXPIRY':
+        return <ExpiryArea range={range} />;
+      case 'BULK':
+        return <BulkArea range={range} />;
       case 'PURCHASES':
         return <PurchasesArea range={range} />;
       case 'CASH':
@@ -118,7 +129,7 @@ export default function Reports() {
       </div>
 
       <div role="tablist" aria-label="Áreas de reportes" className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
-        {AREAS.map(a => {
+        {areas.map(a => {
           const selected = a.id === area;
           return (
             <button

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import ExcelJS from 'exceljs';
 import * as reportsController from './reports.controller.js';
 import * as analytics from './analytics.service.js';
+import * as food from './food.service.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
@@ -142,6 +143,14 @@ router.get('/fiscal', ...admin, validate({ query: rangeQuery }), asyncHandler(as
 
 router.get('/inventory', ...admin, validate({ query: rangeQuery.extend({ deadDays: z.coerce.number().int().min(7).max(365).default(60) }) }), asyncHandler(async (req, res) => {
   res.json(await analytics.getInventoryReport(req.query));
+}));
+
+router.get('/expiry', ...admin, validate({ query: rangeQuery }), asyncHandler(async (req, res) => {
+  res.json(await food.getExpiryReport(req.query));
+}));
+
+router.get('/bulk', ...admin, validate({ query: rangeQuery }), asyncHandler(async (req, res) => {
+  res.json(await food.getBulkReport(req.query));
 }));
 
 router.get('/kardex/:productId', ...admin, validate({ query: rangeQuery }), asyncHandler(async (req, res) => {

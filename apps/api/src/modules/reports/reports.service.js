@@ -1,3 +1,4 @@
+import { getExpiringSummary } from '../inventory/batches.service.js';
 import { prisma } from '../../config/db.js';
 import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 import { getConfig } from '../config/config.service.js';
@@ -128,6 +129,8 @@ export async function getDashboardStats() {
     };
   });
 
+  const expiring = await getExpiringSummary();
+
   return {
     salesToday,
     salesMonth,
@@ -137,6 +140,7 @@ export async function getDashboardStats() {
     totalCustomers: allCustomers,
     lowStockCount: lowStockProducts.length,
     lowStockProducts,
+    expiring,
     topSellingProducts,
     recentSales,
     salesByDay,
