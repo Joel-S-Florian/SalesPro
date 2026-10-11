@@ -245,3 +245,55 @@
     opacity: 1;
   }
 }
+
+/* Alertas de vencimiento: ámbar = pulso suave de aviso; rojo/vencido = entrada con énfasis y anillo discreto */
+@keyframes expiry-soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(245 158 11 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgb(245 158 11 / 0);
+  }
+}
+
+@keyframes expiry-attention {
+  0% {
+    transform: scale(0.88);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes expiry-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(244 63 94 / 0.4);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgb(244 63 94 / 0);
+  }
+}
+
+.expiry-warn {
+  animation: expiry-soft-pulse 2.4s ease-in-out infinite;
+}
+
+.expiry-critical {
+  animation:
+    expiry-attention 0.45s cubic-bezier(0.22, 1, 0.36, 1) both,
+    expiry-ring 1.8s ease-out 0.45s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expiry-warn,
+  .expiry-critical {
+    animation: none;
+  }
+}

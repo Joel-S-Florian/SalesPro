@@ -93,6 +93,7 @@ export function computeAmounts({ lines, discount = 0, taxRate, expectedTax, expe
     name: clip(line.name, 80) || 'Producto',
     quantity: Number(line.quantity),
     unitPrice: Number(line.unitPrice),
+    unitCode: line.unitCode || null,
     discount: allocated[index],
     amount: round2(gross[index] - allocated[index]),
   }));
@@ -214,6 +215,7 @@ export function buildEcfXml(input) {
           tag('NombreItem', item.name) +
           tag('IndicadorBienoServicio', 1) +
           tag('CantidadItem', item.quantity.toFixed(2)) +
+          (item.unitCode ? tag('UnidadMedida', item.unitCode) : '') +
           tag('PrecioUnitarioItem', unitPriceText(item.unitPrice)) +
           (item.discount > 0 ? tag('DescuentoMonto', money(item.discount)) : '') +
           tag('MontoItem', money(item.amount)) +

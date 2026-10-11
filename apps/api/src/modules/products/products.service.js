@@ -1,7 +1,48 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
+import { getTenantId } from '../../config/tenant.js';
+import { getConfig } from '../config/config.service.js';
+import { adjustStock as adjustInventoryStock } from '../inventory/inventory.service.js';
+import { addBatchStock, addUnbatchedStock, attachNearestBatch, requireBatchFields } from '../inventory/batches.service.js';
+import { DEFAULT_UNIT, isFractional, isValidUnit, quantityError, roundQty } from '../../shared/utils/units.js';
 import { buildPaginationQuery, getPaginationMeta, round2, cleanFilterString } from '../../shared/utils/helpers.js';
+
+/** Valida y normaliza las presentaciones recibidas (paquete, caja...). */
+function normalizePresentations(list) {
+  if (!Array.isArray(list)) return [];
+  const names = new Set();
+  const barcodes = new Set();
+  return list.map(raw => {
+    const name = String(raw.name || '').trim();
+    const factor = Number(raw.factor);
+    const salePrice = Number(raw.salePrice);
+    const barcode = String(raw.barcode || '').trim() || null;
+    if (!name || name.length > 40) throw AppError.badRequest('Cada presentación necesita un nombre (máx. 40 caracteres)');
+    if (!(factor > 0) || Math.abs(factor * 100 - Math.round(factor * 100)) > 1e-6) throw AppError.badRequest(`Presentación «${name}»: la cantidad que contiene debe ser mayor que cero (máx. 2 decimales)`);
+    if (!(salePrice >= 0)) throw AppError.badRequest(`Presentación «${name}»: precio inválido`);
+    if (names.has(name.toLowerCase())) throw AppError.badRequest(`Presentación repetida: ${name}`);
+    names.add(name.toLowerCase());
+    if (barcode) {
+      if (barcodes.has(barcode)) throw AppError.badRequest(`Código de barras repetido: ${barcode}`);
+      barcodes.add(barcode);
+    }
+    return { name, factor, salePrice, barcode, active: raw.active !== false };
+  });
+}
+
+/** Reemplaza las presentaciones de un producto (dentro de una transacción). */
+async function savePresentations(tx, productId, presentations) {
+  await tx.productPresentation.deleteMany({ where: { productId } });
+  for (const p of presentations) {
+    try {
+      await tx.productPresentation.create({ data: { ...p, productId, companyId: getTenantId() } });
+    } catch (err) {
+      if (err.code === 'P2002') throw AppError.conflict(`El código de barras ${p.barcode || ''} ya lo usa otra presentación`, ERROR_CODES.DUPLICATE_ENTRY);
+      throw err;
+    }
+  }
+}
 
 /**
  * Get all products with pagination, search, and filters
@@ -17,6 +58,7 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
       { name: { contains: cleanQ, mode: 'insensitive' } },
       { code: { contains: cleanQ, mode: 'insensitive' } },
       { description: { contains: cleanQ, mode: 'insensitive' } },
+      { presentations: { some: { barcode: { contains: cleanQ, mode: 'insensitive' } } } }, // escanear el código de un paquete
     ];
   }
 
@@ -49,6 +91,7 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
       orderBy,
       include: {
         category: { select: { id: true, name: true } },
+        presentations: { where: { active: true }, orderBy: { factor: 'asc' } },
       },
     }),
     prisma.product.count({ where }),
@@ -67,7 +110,7 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
   }));
 
   return {
-    data: productsWithMargin,
+    data: await attachNearestBatch(productsWithMargin),
     pagination: getPaginationMeta(page, limit, finalTotal),
   };
 }
@@ -80,6 +123,7 @@ export async function getProductById(id) {
     where: { id },
     include: {
       category: { select: { id: true, name: true } },
+      presentations: { orderBy: { factor: 'asc' } },
     },
   });
 
@@ -99,7 +143,17 @@ export async function getProductById(id) {
  * Create new product
  */
 export async function createProduct(data, userId, userName) {
-  const { code, name, description, categoryId, costPrice, salePrice, stock, minStock, active } = data;
+  const { code, name, description, categoryId, costPrice, salePrice, stock, minStock, active, isPerishable } = data;
+  const unit = data.unit || DEFAULT_UNIT;
+  if (!isValidUnit(unit)) throw AppError.badRequest('Unidad de medida no válida');
+  if (stock > 0) {
+    const stockError = quantityError(stock, unit);
+    if (stockError) throw AppError.badRequest(`Stock inicial: ${stockError}`);
+  }
+  const presentations = normalizePresentations(data.presentations);
+  if (isPerishable) await assertPerishableEnabled();
+  // Perecedero con stock inicial: lote y vencimiento; sin ellos entra como stock sin lote
+  const initialBatch = isPerishable && stock > 0 && (data.batchNumber || data.expirationDate) ? requireBatchFields(data) : null;
 
   // Check category exists
   const category = await prisma.category.findUnique({ where: { id: categoryId } });
@@ -115,19 +169,29 @@ export async function createProduct(data, userId, userName) {
     throw AppError.conflict('El código de producto ya existe', ERROR_CODES.DUPLICATE_ENTRY);
   }
 
-  const product = await prisma.product.create({
-    data: {
-      code: code.toUpperCase(),
-      name,
-      description,
-      categoryId,
-      costPrice,
-      salePrice,
-      stock: stock || 0,
-      minStock: minStock || 0,
-      active: active ?? true,
-    },
-    include: { category: { select: { id: true, name: true } } },
+  const product = await prisma.$transaction(async tx => {
+    const created = await tx.product.create({
+      data: {
+        code: code.toUpperCase(),
+        name,
+        description,
+        categoryId,
+        costPrice,
+        salePrice,
+        stock: stock || 0,
+        minStock: minStock || 0,
+        active: active ?? true,
+        isPerishable: Boolean(isPerishable),
+        unit,
+      },
+      include: { category: { select: { id: true, name: true } } },
+    });
+    await savePresentations(tx, created.id, presentations);
+    if (isPerishable && stock > 0) {
+      if (initialBatch) await addBatchStock(tx, { productId: created.id, ...initialBatch, quantity: stock, costPrice });
+      else await addUnbatchedStock(tx, { productId: created.id, quantity: stock, costPrice });
+    }
+    return created;
   });
 
   // Create initial inventory log if stock > 0
@@ -157,7 +221,7 @@ export async function createProduct(data, userId, userName) {
  * Update product
  */
 export async function updateProduct(id, data, userId, userName) {
-  const { name, description, costPrice, salePrice, minStock, active } = data;
+  const { name, description, costPrice, salePrice, minStock, active, isPerishable } = data;
 
   const product = await prisma.product.findUnique({ where: { id } });
   if (!product) {
@@ -172,10 +236,37 @@ export async function updateProduct(id, data, userId, userName) {
   if (minStock !== undefined) updateData.minStock = minStock;
   if (active !== undefined) updateData.active = active;
 
-  const updated = await prisma.product.update({
-    where: { id },
-    data: updateData,
-    include: { category: { select: { id: true, name: true } } },
+  if (data.unit !== undefined && data.unit !== product.unit) {
+    if (!isValidUnit(data.unit)) throw AppError.badRequest('Unidad de medida no válida');
+    // Pasar a una unidad entera con existencias fraccionarias dejaría decimales sueltos
+    if (!isFractional(data.unit) && Math.abs(product.stock - Math.round(product.stock)) > 0.004) {
+      throw AppError.badRequest('El producto tiene existencias con decimales; ajústelas a enteros antes de cambiar a una unidad entera');
+    }
+    updateData.unit = data.unit;
+  }
+  const presentations = data.presentations !== undefined ? normalizePresentations(data.presentations) : null;
+
+  if (isPerishable !== undefined && isPerishable !== product.isPerishable) {
+    if (isPerishable) await assertPerishableEnabled();
+    else {
+      const dated = await prisma.productBatch.count({ where: { productId: id, currentStock: { gt: 0 }, expirationDate: { not: null } } });
+      if (dated > 0) throw AppError.badRequest('El producto tiene lotes con vencimiento y existencias; venda o dé de baja esos lotes primero');
+    }
+    updateData.isPerishable = isPerishable;
+  }
+
+  const updated = await prisma.$transaction(async tx => {
+    const result = await tx.product.update({
+      where: { id },
+      data: updateData,
+      include: { category: { select: { id: true, name: true } } },
+    });
+    if (presentations) await savePresentations(tx, id, presentations);
+    // Al pasar a perecedero, el stock actual queda en un lote genérico (SIN-LOTE, sin vencimiento)
+    if (isPerishable && !product.isPerishable && product.stock > 0) {
+      await addUnbatchedStock(tx, { productId: id, quantity: product.stock, costPrice: Number(product.costPrice) });
+    }
+    return result;
   });
 
   return {
@@ -214,44 +305,13 @@ export async function deleteProduct(id) {
 /**
  * Adjust stock (entrada/salida/ajuste/devolucion)
  */
-export async function adjustStock(data, userId, userName) {
-  const { productId, type, quantity, reason } = data;
+export function adjustStock(data, userId, userName) {
+  return adjustInventoryStock(data, userId, userName);
+}
 
-  const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) {
-    throw AppError.notFound('Producto no encontrado');
-  }
-
-  if (type === 'SALIDA' && product.stock < quantity) {
-    throw AppError.badRequest('El stock disponible no cubre la salida', ERROR_CODES.INSUFFICIENT_STOCK);
-  }
-
-  return prisma.$transaction(async (tx) => {
-    let newStock = product.stock;
-    if (type === 'ENTRADA') newStock += quantity;
-    else if (type === 'SALIDA') newStock -= quantity;
-    else if (type === 'AJUSTE') newStock = quantity; // Set exact quantity
-    else if (type === 'DEVOLUCION') newStock += quantity;
-
-    const updated = await tx.product.update({
-      where: { id: productId },
-      data: { stock: newStock },
-    });
-
-    const log = await tx.inventoryLog.create({
-      data: {
-        productId,
-        productName: product.name,
-        type,
-        quantity,
-        reason: `Ajuste: ${reason}`,
-        userId,
-        userName,
-      },
-    });
-
-    return { success: true, updatedStock: newStock, log };
-  });
+async function assertPerishableEnabled() {
+  const { perishable } = await getConfig();
+  if (!perishable.enabled) throw AppError.badRequest('Active la gestión de perecederos en Configuración para marcar productos como perecederos');
 }
 
 /**

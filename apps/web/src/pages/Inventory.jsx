@@ -7,10 +7,17 @@ import ProductPicker from '../components/ProductPicker';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import { useConfigStore } from '../stores/configStore';
+import { formatQty, isFractional, unitInfo } from '../utils/units';
+import BatchFields from '../components/inventory/BatchFields';
+import ExpiringBatches from '../components/inventory/ExpiringBatches';
+import ExpiryBadge from '../components/inventory/ExpiryBadge';
 
 export default function Inventory() {
   // Search & Filter state
+  const perishableEnabled = useConfigStore(state => state.config.perishable?.enabled);
   const [tab, setTab] = useState('STOCK');
+  const [batchesReload, setBatchesReload] = useState(0);
   const [search, setSearch] = useState('');
   const [logTypeFilter, setLogTypeFilter] = useState('ALL');
 
@@ -30,6 +37,7 @@ export default function Inventory() {
   const reload = () => {
     stock.reload();
     history.reload();
+    setBatchesReload(n => n + 1);
   };
 
   // Adjustment Modal states
@@ -40,6 +48,8 @@ export default function Inventory() {
   const [adjustQty, setAdjustQty] = useState(1);
   const [adjustReason, setAdjustReason] = useState('');
   const [submittingAdjust, setSubmittingAdjust] = useState(false);
+  const [adjustBatch, setAdjustBatch] = useState({ batchNumber: '', expirationDate: '' });
+  const [adjustBatchId, setAdjustBatchId] = useState(null); // baja de un lote concreto
 
   // Purchase Modal states
   const [isPurchaseOpen, setIsPurchaseOpen] = useState(false);
@@ -49,6 +59,8 @@ export default function Inventory() {
   const [purchaseSupplier, setPurchaseSupplier] = useState('');
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseInvoice, setPurchaseInvoice] = useState('');
+  const [purchaseProd, setPurchaseProd] = useState(null);
+  const [purchaseBatch, setPurchaseBatch] = useState({ batchNumber: '', expirationDate: '' });
   const [submittingPurchase, setSubmittingPurchase] = useState(false);
 
   const openAdjustmentModal = () => {
@@ -57,6 +69,20 @@ export default function Inventory() {
     setAdjustType('Entrada');
     setAdjustQty(1);
     setAdjustReason('');
+    setAdjustBatch({ batchNumber: '', expirationDate: '' });
+    setAdjustBatchId(null);
+    setIsAdjustOpen(true);
+  };
+
+  // Baja rápida de un lote desde la pestaña de vencimientos
+  const openWriteOff = batch => {
+    setSelectedProdId(batch.product.id);
+    setSelectedProd(batch.product);
+    setAdjustType('Merma');
+    setAdjustQty(batch.currentStock);
+    setAdjustReason(`Baja del lote ${batch.batchNumber}${batch.status === 'EXPIRED' ? ' por vencimiento' : ''}`);
+    setAdjustBatch({ batchNumber: '', expirationDate: '' });
+    setAdjustBatchId(batch.id);
     setIsAdjustOpen(true);
   };
 
@@ -66,6 +92,8 @@ export default function Inventory() {
     setPurchaseUnitCost(0);
     setPurchaseSupplier('');
     setPurchaseInvoice('');
+    setPurchaseProd(null);
+    setPurchaseBatch({ batchNumber: '', expirationDate: '' });
     setIsPurchaseOpen(true);
     api.suppliers
       .list({ active: 'true', limit: 100 })
@@ -88,6 +116,7 @@ export default function Inventory() {
         unitCost: Number(purchaseUnitCost),
         supplierId: purchaseSupplier,
         invoiceNumber: purchaseInvoice.trim() || undefined,
+        ...(purchaseProd?.isPerishable ? { batchNumber: purchaseBatch.batchNumber.trim(), expirationDate: purchaseBatch.expirationDate } : {}),
       });
       setIsPurchaseOpen(false);
       notify.success('Compra registrada');
@@ -107,7 +136,7 @@ export default function Inventory() {
     }
 
     const prod = selectedProd;
-    if (adjustType === 'Salida' && prod && prod.stock < adjustQty) {
+    if ((adjustType === 'Salida' || adjustType === 'Merma') && prod && prod.stock < adjustQty) {
       notify.warning(`Error: El stock actual (${prod.stock}) es menor que la cantidad de salida solicitada (${adjustQty}).`);
       return;
     }
@@ -118,7 +147,9 @@ export default function Inventory() {
         productId: selectedProdId,
         type: adjustType.toUpperCase(),
         quantity: Number(adjustQty),
-        reason: adjustReason
+        reason: adjustReason,
+        ...(adjustBatchId ? { batchId: adjustBatchId } : {}),
+        ...(selectedProd?.isPerishable && adjustType === 'Entrada' ? { batchNumber: adjustBatch.batchNumber.trim(), expirationDate: adjustBatch.expirationDate } : {}),
       });
       setIsAdjustOpen(false);
       notify.success('Ajuste de inventario registrado');
@@ -181,9 +212,21 @@ export default function Inventory() {
           Historial de Movimientos
           {tab === 'LOGS' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
         </button>
+        {perishableEnabled && (
+          <button
+            onClick={() => { setTab('EXPIRING'); setSearch(''); }}
+            className={`pb-3 text-sm font-bold transition relative cursor-pointer ${
+              tab === 'EXPIRING' ? 'text-indigo-600 dark:text-indigo-400 font-extrabold' : 'text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            Lotes y Vencimientos
+            {tab === 'EXPIRING' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+          </button>
+        )}
       </div>
 
       {/* Filter toolbar */}
+      {tab !== 'EXPIRING' && (
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
@@ -212,9 +255,12 @@ export default function Inventory() {
           </div>
         )}
       </div>
+      )}
 
       {/* Main tables tab router */}
-      {tab === 'STOCK' ? (
+      {tab === 'EXPIRING' ? (
+        <ExpiringBatches reloadKey={batchesReload} onWriteOff={openWriteOff} />
+      ) : tab === 'STOCK' ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
           <table className="w-full text-left text-xs text-slate-600 dark:text-slate-400">
             <thead className="bg-slate-50 dark:bg-slate-800/40 text-slate-400 uppercase font-mono tracking-wider">
@@ -238,7 +284,13 @@ export default function Inventory() {
                       {p.code}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{p.name}</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{p.name}</span>
+                        {p.isPerishable && p.nearestBatch && <ExpiryBadge status={p.nearestBatch.status} daysLeft={p.nearestBatch.daysLeft} />}
+                      </div>
+                      {p.isPerishable && p.nearestBatch && (
+                        <div className="font-mono text-[10px] text-slate-400">Próximo lote: {p.nearestBatch.batchNumber}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center font-mono font-semibold text-slate-400">{p.minStock}</td>
                     <td className="px-6 py-4 text-center">
@@ -247,7 +299,7 @@ export default function Inventory() {
                         isLow ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600' :
                         'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600'
                       }`}>
-                        {p.stock} unidades
+                        {p.unit && p.unit !== 'UND' ? formatQty(p.stock, p.unit) : `${p.stock} unidades`}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -307,11 +359,11 @@ export default function Inventory() {
                       (log.type || '').toUpperCase().includes('ENTRADA') ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600' : 'bg-rose-50 dark:bg-rose-950/20 text-rose-600'
                     }`}>
                       {(log.type || '').toUpperCase().includes('ENTRADA') ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownLeft className="w-3.5 h-3.5" />}
-                      {(log.type || '').toUpperCase().includes('ENTRADA') ? 'Entrada' : 'Salida'}
+                      {(log.type || '').toUpperCase().includes('ENTRADA') ? 'Entrada' : (log.type || '').toUpperCase() === 'MERMA' ? 'Merma' : 'Salida'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center font-bold font-mono text-slate-950 dark:text-slate-50">
-                    {log.quantity} uds.
+                    {Number(log.quantity) % 1 ? Math.round(log.quantity * 100) / 100 : log.quantity} uds.
                   </td>
                   <td className="px-6 py-4 text-slate-500 font-mono text-[11px] flex items-center gap-1">
                     <FileText className="w-3.5 h-3.5 text-slate-300" />
@@ -352,6 +404,7 @@ export default function Inventory() {
                 onChange={(id, product) => {
                   setSelectedProdId(id);
                   setSelectedProd(product || null);
+                  setAdjustBatchId(null);
                 }}
               />
             </div>
@@ -367,24 +420,33 @@ export default function Inventory() {
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
               >
                 <option value="Entrada" className="dark:bg-slate-950">Entrada (+) Reabastecimiento / Compra</option>
-                <option value="Salida" className="dark:bg-slate-950">Salida (-) Retiro / Mermas / Ajustes</option>
+                <option value="Salida" className="dark:bg-slate-950">Salida (-) Retiro / Ajustes</option>
+                <option value="Merma" className="dark:bg-slate-950">Merma (-) Vencido, dañado o perdido (con costo)</option>
               </select>
             </div>
 
             <div className="space-y-1.5">
               <label htmlFor="adjust-qty" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Cantidad de Unidades *
+                Cantidad ({unitInfo(selectedProd?.unit).short}) *
               </label>
               <input
                 id="adjust-qty"
                 type="number"
-                min="1"
+                min={isFractional(selectedProd?.unit) ? '0.01' : '1'}
+                step={isFractional(selectedProd?.unit) ? '0.01' : '1'}
                 required
                 value={adjustQty}
-                onChange={(e) => setAdjustQty(Math.max(1, parseInt(e.target.value) || 0))}
+                onChange={(e) => setAdjustQty(isFractional(selectedProd?.unit) ? Math.max(0.01, Math.round((parseFloat(e.target.value) || 0) * 100) / 100) : Math.max(1, parseInt(e.target.value) || 0))}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
             </div>
+
+            {selectedProd?.isPerishable && adjustType === 'Entrada' && (
+              <BatchFields idPrefix="adjust" {...adjustBatch} onChange={patch => setAdjustBatch(prev => ({ ...prev, ...patch }))} />
+            )}
+            {selectedProd?.isPerishable && (adjustType === 'Salida' || adjustType === 'Merma') && !adjustBatchId && (
+              <p className="col-span-1 text-[11px] text-slate-400 md:col-span-2">Perecedero: la salida descuenta primero los lotes que vencen antes (FEFO). Para dar de baja un lote concreto use la pestaña «Lotes y Vencimientos».</p>
+            )}
 
             <div className="col-span-1 md:col-span-2 space-y-1.5">
               <label htmlFor="adjust-reason" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -462,20 +524,25 @@ export default function Inventory() {
               <label htmlFor="purchase-prod" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Producto *
               </label>
-              <ProductPicker id="purchase-prod" value={purchaseProdId} onChange={id => setPurchaseProdId(id)} />
+              <ProductPicker id="purchase-prod" value={purchaseProdId} onChange={(id, product) => { setPurchaseProdId(id); setPurchaseProd(product || null); }} />
             </div>
+
+            {purchaseProd?.isPerishable && (
+              <BatchFields idPrefix="purchase" {...purchaseBatch} onChange={patch => setPurchaseBatch(prev => ({ ...prev, ...patch }))} />
+            )}
 
             <div className="space-y-1.5">
               <label htmlFor="purchase-qty" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Cantidad *
+                Cantidad ({unitInfo(purchaseProd?.unit).short}) *
               </label>
               <input
                 id="purchase-qty"
                 type="number"
-                min="1"
+                min={isFractional(purchaseProd?.unit) ? '0.01' : '1'}
+                step={isFractional(purchaseProd?.unit) ? '0.01' : '1'}
                 required
                 value={purchaseQty}
-                onChange={(e) => setPurchaseQty(Math.max(1, parseInt(e.target.value) || 0))}
+                onChange={(e) => setPurchaseQty(isFractional(purchaseProd?.unit) ? Math.max(0.01, Math.round((parseFloat(e.target.value) || 0) * 100) / 100) : Math.max(1, parseInt(e.target.value) || 0))}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
             </div>

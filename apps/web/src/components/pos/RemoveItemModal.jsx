@@ -37,7 +37,7 @@ export default function RemoveItemModal({ item, requiresAdmin, onConfirm, onClos
       <form onSubmit={submit} className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-300">
           ¿Quitar <strong className="font-semibold text-slate-900 dark:text-white">{item?.product.name}</strong>
-          {item ? ` (${item.quantity} ${item.quantity === 1 ? 'unidad' : 'unidades'})` : ''} del ticket?
+          {item ? ` (${item.presentation ? `${item.quantity} × ${item.presentation.name}` : `${item.quantity} ${item.product.unit && item.product.unit !== 'UND' ? item.product.unit.toLowerCase() : item.quantity === 1 ? 'unidad' : 'unidades'}`})` : ''} del ticket?
         </p>
 
         {requiresAdmin && (

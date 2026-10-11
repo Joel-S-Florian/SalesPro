@@ -3,7 +3,7 @@ import { Expand, Maximize2, Minimize2, Monitor } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuthorization } from '../hooks/useAuthorization';
 import { useShift } from '../hooks/useShift';
-import { usePosCart } from '../hooks/usePosCart';
+import { baseQuantityOf, expiryOf, grossOf, lineTotalOf, usePosCart } from '../hooks/usePosCart';
 import { useProductCatalog } from '../hooks/useProductCatalog';
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import { useSerialScanner } from '../hooks/useSerialScanner';
@@ -20,6 +20,9 @@ import MobileTicketSheet from '../components/pos/MobileTicketSheet';
 import CheckoutSuccessModal from '../components/pos/CheckoutSuccessModal';
 import RemoveItemModal from '../components/pos/RemoveItemModal';
 import NewCustomerModal from '../components/pos/NewCustomerModal';
+import { expiryPercentFor } from '../utils/expiry';
+import { isFractional, trimQty, unitInfo } from '../utils/units';
+import ProductOptionsModal from '../components/pos/ProductOptionsModal';
 
 const CASHIER_MODE_KEY = 'factos-pos-large';
 
@@ -100,8 +103,15 @@ export default function SalesPOS({ onNavigate }) {
   }, []);
 
   // ---- Agregar productos ----
-  const handleAdd = product => {
-    const added = cart.add(product);
+  // Productos a granel o con presentaciones piden primero el peso / la presentación
+  const [optionsFor, setOptionsFor] = useState(null);
+
+  const handleAdd = (product, presentation = null, quantity = 1) => {
+    if (!presentation && (isFractional(product.unit) || product.presentations?.length > 0)) {
+      setOptionsFor(product);
+      return true;
+    }
+    const added = cart.add(product, { presentation, quantity });
     if (!added) {
       setShakeId(product.id);
       setTimeout(() => setShakeId(null), 450);
@@ -109,13 +119,22 @@ export default function SalesPOS({ onNavigate }) {
     return added;
   };
 
+  const confirmOptions = ({ presentation, quantity }) => {
+    const product = optionsFor;
+    setOptionsFor(null);
+    if (!cart.add(product, { presentation, quantity })) {
+      setShakeId(product.id);
+      setTimeout(() => setShakeId(null), 450);
+    }
+  };
+
   const addByCode = async code => {
-    const product = await catalog.findByCode(code);
-    if (!product) {
+    const found = await catalog.findByCode(code);
+    if (!found) {
       notify.warning(`No hay ningún producto con el código ${code}.`);
       return;
     }
-    handleAdd(product);
+    handleAdd(found.product, found.presentation);
     catalog.setSearch('');
   };
 
@@ -124,13 +143,13 @@ export default function SalesPOS({ onNavigate }) {
     const query = text.trim();
     if (!query) return;
     const exact = await catalog.findByCode(query);
-    const only = catalog.products.length === 1 ? catalog.products[0] : null;
-    const product = exact || only;
-    if (!product) {
+    const only = catalog.products.length === 1 ? { product: catalog.products[0], presentation: null } : null;
+    const found = exact || only;
+    if (!found) {
       notify.warning(`No hay un producto único para “${query}”.`);
       return;
     }
-    handleAdd(product);
+    handleAdd(found.product, found.presentation);
     catalog.setSearch('');
   };
 
@@ -138,18 +157,18 @@ export default function SalesPOS({ onNavigate }) {
   useBarcodeScanner(addByCode, { enabled: !recentSale && !removeTarget && !newCustomerOpen });
 
   // ---- Quitar artículos (con autorización y auditoría) ----
-  const requestRemove = productId => {
-    const item = cart.find(productId);
+  const requestRemove = lineId => {
+    const item = cart.find(lineId);
     if (item) setRemoveTarget(item);
   };
 
   const confirmRemove = async credentials => {
     await api.sales.logCartRemoval({
       productId: removeTarget.product.id,
-      quantity: removeTarget.quantity,
+      quantity: baseQuantityOf(removeTarget),
       ...credentials,
     });
-    cart.remove(removeTarget.product.id);
+    cart.remove(removeTarget.lineId);
     setRemoveTarget(null);
   };
 
@@ -168,12 +187,13 @@ export default function SalesPOS({ onNavigate }) {
         details: cart.items.map(item => ({
           productId: item.product.id,
           quantity: item.quantity,
+          ...(item.presentation ? { presentationId: item.presentation.id } : {}),
           discount: Number(item.discount || 0),
         })),
         discount: Number(cart.globalDiscount || 0),
         paymentMethod: activePayment,
       });
-      catalog.applySale(cart.items);
+      catalog.applySale(cart.items.map(item => ({ product: item.product, quantity: baseQuantityOf(item) })));
       setRecentSale(sale);
       cart.clear();
       setPaymentMethod(config.paymentMethods[0]);
@@ -220,14 +240,25 @@ export default function SalesPOS({ onNavigate }) {
     () => ({
       business: { name: config.business.name },
       taxPercent,
-      items: cart.items.map(item => ({
-        id: item.product.id,
-        name: item.product.name,
-        quantity: item.quantity,
-        unitPrice: Number(item.product.salePrice || 0),
-        discount: Number(item.discount || 0),
-        total: Number(item.product.salePrice || 0) * item.quantity - Number(item.discount || 0),
-      })),
+      items: cart.items.map(item => {
+        const fractional = !item.presentation && isFractional(item.product.unit);
+        const unit = unitInfo(item.product.unit).short;
+        return {
+          id: item.lineId,
+          name: item.product.name,
+          // "1.25 lb", "2 × Paquete x12" o "3"
+          quantityText: item.presentation ? `${trimQty(item.quantity)} × ${item.presentation.name}` : fractional ? `${trimQty(item.quantity)} ${unit}` : trimQty(item.quantity),
+          quantity: item.quantity,
+          // precio por unidad de venta (por lb, por paquete o por unidad)
+          unitPrice: Number(item.presentation ? item.presentation.salePrice : item.product.salePrice || 0),
+          unitLabel: item.presentation ? item.presentation.name : fractional ? unit : '',
+          discount: Number(item.discount || 0) + expiryOf(item),
+          expiryDiscount: expiryOf(item),
+          expiryPercent: expiryPercentFor(item.product, baseQuantityOf(item)),
+          gross: grossOf(item),
+          total: lineTotalOf(item),
+        };
+      }),
       totals: cart.totals,
     }),
     [cart.items, cart.totals, config.business.name, taxPercent]
@@ -330,6 +361,8 @@ export default function SalesPOS({ onNavigate }) {
       </MobileTicketSheet>
 
       <CameraScannerModal isOpen={cameraOpen} onClose={() => setCameraOpen(false)} onScan={addByCode} />
+
+      <ProductOptionsModal product={optionsFor} onConfirm={confirmOptions} onClose={() => setOptionsFor(null)} />
 
       <RemoveItemModal
         item={removeTarget}

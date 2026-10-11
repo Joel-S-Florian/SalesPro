@@ -1,3 +1,6 @@
+import { consumeFefo, previewSaleLine, restoreToBatches } from '../inventory/batches.service.js';
+import { daysLeft, discountPercentFor } from '../inventory/batches.logic.js';
+import { QTY_EPS, quantityError, roundQty, unitInfo } from '../../shared/utils/units.js';
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
@@ -246,11 +249,13 @@ export async function createSale(data, userId, userName, requester = { userId, r
 
   // Validate products and calculate totals
   let subtotal = 0;
+  let lineDiscounts = 0;
   const saleDetails = [];
 
   for (const item of details) {
     const product = await prisma.product.findUnique({
       where: { id: item.productId },
+      include: { presentations: true },
     });
 
     if (!product) {
@@ -261,25 +266,55 @@ export async function createSale(data, userId, userName, requester = { userId, r
       throw AppError.badRequest(`El producto ${product.name} se encuentra inactivo`, ERROR_CODES.PRODUCT_INACTIVE);
     }
 
-    if (product.stock < item.quantity) {
-      throw AppError.badRequest(`Stock insuficiente para ${product.name}. Stock disponible: ${product.stock}`, ERROR_CODES.INSUFFICIENT_STOCK);
+    // Presentación (paquete, caja): la cantidad enviada es de presentaciones y se descuentan `factor` unidades base cada una
+    const presentation = item.presentationId ? product.presentations.find(p => p.id === item.presentationId && p.active) : null;
+    if (item.presentationId && !presentation) {
+      throw AppError.badRequest(`La presentación elegida de ${product.name} no existe o está inactiva`);
+    }
+    const factor = presentation ? Number(presentation.factor) : 1;
+    const qtyError = quantityError(item.quantity, presentation ? 'UND' : product.unit);
+    if (qtyError) throw AppError.badRequest(`${product.name}: ${qtyError}`);
+    const quantity = roundQty(item.quantity * factor); // en unidades base del producto
+    const lineGross = round2(presentation ? Number(presentation.salePrice) * item.quantity : Number(product.salePrice) * quantity);
+    const unitPrice = lineGross / quantity; // precio por unidad base (sin redondear para que la línea cuadre al centavo)
+
+    // Perecederos: la asignación por lotes (FEFO) y el descuento por vencimiento los decide el servidor
+    let preview = null;
+    if (product.isPerishable) {
+      preview = await previewSaleLine(product, quantity, unitPrice, config.perishable);
+    } else if (product.stock + QTY_EPS < quantity) {
+      throw AppError.badRequest(`Stock insuficiente para ${product.name}. Stock disponible: ${roundQty(product.stock)}`, ERROR_CODES.INSUFFICIENT_STOCK);
     }
 
-    const itemSubtotal = (Number(product.salePrice) * item.quantity) - (item.discount || 0);
+    const expiryDiscount = preview?.autoDiscount || 0;
+    const manualDiscount = round2(Number(item.discount) || 0);
+    if (manualDiscount + expiryDiscount > round2(lineGross)) {
+      throw AppError.badRequest(`El descuento de ${product.name} no puede superar el valor de la línea`);
+    }
+    const lineDiscount = round2(manualDiscount + expiryDiscount);
+    const itemSubtotal = lineGross - lineDiscount;
+    lineDiscounts += lineDiscount;
     saleDetails.push({
       productId: product.id,
       productName: product.name,
-      quantity: item.quantity,
-      unitPrice: Number(product.salePrice),
+      quantity,
+      unit: product.unit,
+      presentationName: presentation?.name || null,
+      presentationQty: presentation ? item.quantity : null,
+      unitPrice,
       unitCost: Number(product.costPrice),
-      discount: item.discount || 0,
+      discount: lineDiscount,
+      expiryDiscount,
+      allocations: preview?.allocations || null,
+      product,
       subtotal: Math.max(0, round2(itemSubtotal)),
     });
 
-    subtotal += Number(product.salePrice) * item.quantity;
+    subtotal += lineGross;
   }
 
-  const finalDiscount = Number(discount || 0);
+  // Sale.discount reúne los descuentos de línea y el global: subtotal - discount + tax = total
+  const finalDiscount = round2(lineDiscounts + Number(discount || 0));
   const taxableAmount = Math.max(0, subtotal - finalDiscount);
   const tax = round2(taxableAmount * config.taxRate);
   const total = round2(taxableAmount + tax);
@@ -303,7 +338,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
       ecf = await issueEcf(tx, ecfContext, {
         ecfType: ecfTypeForCustomer(customer),
         customer,
-        lines: saleDetails.map(d => ({ name: d.productName, quantity: d.quantity, unitPrice: d.unitPrice })),
+        lines: saleDetails.map(d => ({ name: d.productName, quantity: d.quantity, unitPrice: d.unitPrice, unitCode: unitInfo(d.unit).ecf })),
         discount: finalDiscount,
         tax,
         total,
@@ -337,6 +372,9 @@ export async function createSale(data, userId, userName, requester = { userId, r
             productId: d.productId,
             productName: d.productName,
             quantity: d.quantity,
+            unit: d.unit,
+            presentationName: d.presentationName,
+            presentationQty: d.presentationQty,
             unitPrice: d.unitPrice,
             unitCost: d.unitCost,
             discount: d.discount,
@@ -356,13 +394,36 @@ export async function createSale(data, userId, userName, requester = { userId, r
     });
 
     // Update product stock and create inventory logs
+    const usedDetails = new Set();
     for (const item of saleDetails) {
-      const product = await tx.product.findUnique({ where: { id: item.productId } });
-      
-      await tx.product.update({
-        where: { id: item.productId },
+      // Perecederos: descuenta los lotes de forma atómica (FEFO) y deja la trazabilidad por lote vendido
+      if (item.product.isPerishable) {
+        const allocations = await consumeFefo(tx, item.product, item.quantity, config.perishable);
+        const created = newSale.details.find(
+          d => !usedDetails.has(d.id) && d.productId === item.productId && d.quantity === item.quantity && Number(d.discount) === item.discount
+        );
+        usedDetails.add(created.id);
+        await tx.saleBatchDetail.createMany({
+          data: allocations.map(a => ({
+            companyId: getTenantId(),
+            saleDetailId: created.id,
+            batchId: a.batchId,
+            quantity: a.quantity,
+            // descuento por vencimiento de esta porción (para el reporte de vencimientos)
+            discountAmount: round2((item.unitPrice * a.quantity * discountPercentFor(daysLeft(a.expirationDate), config.perishable)) / 100),
+          })),
+        });
+      }
+
+      // Descuento atómico: si otra venta se llevó el stock mientras tanto, esta se rechaza (no queda stock negativo)
+      const { count } = await tx.product.updateMany({
+        where: { id: item.productId, stock: { gte: item.quantity - QTY_EPS } },
         data: { stock: { decrement: item.quantity } },
       });
+      if (count !== 1) {
+        throw AppError.badRequest(`Stock insuficiente para ${item.productName}`, ERROR_CODES.INSUFFICIENT_STOCK);
+      }
+      await tx.product.updateMany({ where: { id: item.productId, stock: { lt: QTY_EPS, gt: -QTY_EPS } }, data: { stock: 0 } });
 
       await tx.inventoryLog.create({
         data: {
@@ -411,7 +472,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
   // Cantidad vendida y ya devuelta por producto
   const sold = new Map();
   original.details.forEach(d => {
-    const e = sold.get(d.productId) || { quantity: 0, name: d.productName, unitPrice: Number(d.unitPrice), unitCost: Number(d.unitCost), lineDiscount: 0 };
+    const e = sold.get(d.productId) || { quantity: 0, name: d.productName, unit: d.unit, unitPrice: Number(d.unitPrice), unitCost: Number(d.unitCost), lineDiscount: 0 };
     e.quantity += d.quantity;
     e.lineDiscount += Number(d.discount) || 0;
     sold.set(d.productId, e);
@@ -429,18 +490,24 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
   for (const [productId, quantity] of requested) {
     const line = sold.get(productId);
     if (!line) throw AppError.badRequest('Uno de los productos no pertenece a la venta original');
-    const available = line.quantity - (credited.get(productId) || 0);
-    if (quantity > available) {
-      throw AppError.badRequest(`Solo se pueden devolver ${available} unidad(es) de ${line.name}`);
+    const available = roundQty(line.quantity - (credited.get(productId) || 0));
+    const qtyError = quantityError(quantity, line.unit);
+    if (qtyError) throw AppError.badRequest(`${line.name}: ${qtyError}`);
+    if (quantity > available + QTY_EPS) {
+      throw AppError.badRequest(`Solo se pueden devolver ${available} ${unitInfo(line.unit).short} de ${line.name}`);
     }
     const lineDiscount = line.quantity > 0 ? round2((line.lineDiscount * quantity) / line.quantity) : 0;
-    const lineGross = line.unitPrice * quantity;
+    const lineGross = round2(line.unitPrice * quantity);
     gross += lineGross;
-    lines.push({ productId, name: line.name, quantity, unitPrice: line.unitPrice, unitCost: line.unitCost, discount: lineDiscount, subtotal: round2(lineGross - lineDiscount) });
+    lines.push({ productId, name: line.name, unit: line.unit, quantity, unitPrice: line.unitPrice, unitCost: line.unitCost, discount: lineDiscount, subtotal: round2(lineGross - lineDiscount) });
   }
 
   const originalSubtotal = Number(original.subtotal) || 0;
-  const discountShare = originalSubtotal > 0 ? round2(Number(original.discount) * (gross / originalSubtotal)) : 0;
+  // El descuento original reúne líneas y global: las líneas se devuelven exactas y el global en proporción
+  const originalLineDiscounts = original.details.reduce((a, d) => a + (Number(d.discount) || 0), 0);
+  const originalGlobal = Math.max(0, Number(original.discount) - originalLineDiscounts);
+  const returnedLineDiscounts = lines.reduce((a, l) => a + l.discount, 0);
+  const discountShare = originalSubtotal > 0 ? round2(returnedLineDiscounts + originalGlobal * (gross / originalSubtotal)) : 0;
   const taxable = Math.max(0, gross - discountShare);
   const originalBase = originalSubtotal - Number(original.discount);
   const rate = originalBase > 0 ? Number(original.tax) / originalBase : config.taxRate;
@@ -455,7 +522,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
   const useEcf = Boolean(ecfContext && original.eNcf);
   let invoiceNumber = useEcf ? null : await getNextNCF(CREDIT_NOTE_NCF);
   const buyer = useEcf ? await prisma.customer.findUnique({ where: { id: original.customerId } }) : null;
-  const fullyReturned = [...sold.entries()].every(([productId, line]) => (credited.get(productId) || 0) + (requested.get(productId) || 0) >= line.quantity);
+  const fullyReturned = [...sold.entries()].every(([productId, line]) => (credited.get(productId) || 0) + (requested.get(productId) || 0) >= line.quantity - QTY_EPS);
 
   return prisma.$transaction(async tx => {
     let ecf = null;
@@ -463,7 +530,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
       ecf = await issueEcf(tx, ecfContext, {
         ecfType: 'E34',
         customer: buyer,
-        lines: lines.map(l => ({ name: l.name, quantity: l.quantity, unitPrice: l.unitPrice })),
+        lines: lines.map(l => ({ name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, unitCode: unitInfo(l.unit).ecf })),
         discount: discountShare,
         tax,
         total,
@@ -503,6 +570,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
             companyId: getTenantId(),
             productId: l.productId,
             productName: l.name,
+            unit: l.unit,
             quantity: -l.quantity,
             unitPrice: l.unitPrice,
             unitCost: l.unitCost,
@@ -515,6 +583,15 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
     });
 
     for (const l of lines) {
+      // Perecederos: la devolución vuelve a los lotes de donde salió y queda registrada (cantidad negativa)
+      const product = await tx.product.findUnique({ where: { id: l.productId }, select: { isPerishable: true, costPrice: true } });
+      if (product?.isPerishable) {
+        const restored = await restoreToBatches(tx, { originalSaleId: original.id, productId: l.productId, quantity: l.quantity, costPrice: Number(product.costPrice) });
+        const noteDetail = note.details.find(d => d.productId === l.productId);
+        await tx.saleBatchDetail.createMany({
+          data: restored.map(r => ({ companyId: getTenantId(), saleDetailId: noteDetail.id, batchId: r.batchId, quantity: -r.quantity })),
+        });
+      }
       await tx.product.update({ where: { id: l.productId }, data: { stock: { increment: l.quantity } } });
       await tx.inventoryLog.create({
         data: {

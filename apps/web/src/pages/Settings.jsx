@@ -26,6 +26,106 @@ const PAYMENT_OPTIONS = [
   { id: 'TARJETA', label: 'Tarjeta' },
 ];
 
+function Switch({ id, checked, onToggle, label, hint, disabled }){
+  return (
+  <div className={`flex items-start justify-between gap-4 ${disabled ? 'opacity-50' : ''}`}>
+    <div>
+      <label htmlFor={id} className="text-xs font-medium text-slate-700 dark:text-slate-200">{label}</label>
+      {hint && <p className="text-[11px] text-slate-400">{hint}</p>}
+    </div>
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onToggle(!checked)}
+      className={`relative mt-0.5 h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200 disabled:cursor-not-allowed ${checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+    >
+      <span className={`absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-4' : ''}`} />
+    </button>
+  </div>
+  );
+}
+
+/** Gestión de perecederos y lotes: umbrales de alerta y reglas de descuento por vencimiento. */
+function PerishableCard({ value, onChange }) {
+  const set = patch => onChange({ ...value, ...patch });
+  const rules = value.discountRules || [];
+  const setRule = (index, patch) => set({ discountRules: rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)) });
+  const num = raw => (raw === '' ? '' : Number(raw));
+  const invalidThresholds = Number(value.redThresholdDays) >= Number(value.yellowThresholdDays);
+
+  return (
+    <div className={cardClass} id="perishable-settings">
+      <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Gestión de perecederos y lotes</h4>
+      <p className="text-xs text-slate-400">Lotes con fecha de vencimiento, venta por FEFO (primero vence, primero sale), alertas y descuentos por cercanía de vencimiento.</p>
+
+      <Switch
+        id="perishable-enabled"
+        checked={value.enabled}
+        onToggle={enabled => set({ enabled })}
+        label="Activar perecederos y lotes"
+        hint="Permite marcar productos como perecederos y registrar lotes al recibir mercancía."
+      />
+
+      <fieldset disabled={!value.enabled} className={`space-y-4 border-t border-slate-100 pt-4 dark:border-slate-700 ${value.enabled ? '' : 'opacity-50'}`}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <label htmlFor="per-yellow" className={labelClass}>Alerta amarilla (días antes)</label>
+            <input id="per-yellow" type="number" min="1" max="3650" required value={value.yellowThresholdDays} onChange={e => set({ yellowThresholdDays: num(e.target.value) })} className={inputClass} />
+            <p className="text-[11px] text-slate-400">Próximo a vencer.</p>
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="per-red" className={labelClass}>Alerta roja / crítico (días antes)</label>
+            <input id="per-red" type="number" min="1" max="3650" required value={value.redThresholdDays} onChange={e => set({ redThresholdDays: num(e.target.value) })} className={inputClass} aria-invalid={invalidThresholds} />
+            <p className={`text-[11px] ${invalidThresholds ? 'text-rose-500' : 'text-slate-400'}`}>
+              {invalidThresholds ? 'Debe ser menor que el umbral amarillo.' : 'Retiro o liquidación urgente.'}
+            </p>
+          </div>
+        </div>
+
+        <Switch
+          id="per-block"
+          checked={value.blockExpiredSales}
+          onToggle={blockExpiredSales => set({ blockExpiredSales })}
+          label="Bloquear la venta de lotes vencidos"
+          hint="Los lotes vencidos no se venden; se dan de baja desde Inventario."
+        />
+
+        <Switch
+          id="per-discount"
+          checked={value.autoDiscountEnabled}
+          onToggle={autoDiscountEnabled => set({ autoDiscountEnabled })}
+          label="Descuento automático por vencimiento"
+          hint="El sistema lo aplica al vender, sin intervención del vendedor."
+        />
+
+        {value.autoDiscountEnabled && (
+          <div className="space-y-2">
+            <span className={labelClass}>Reglas (se aplica la más cercana al vencimiento)</span>
+            {rules.map((rule, index) => (
+              <div key={index} className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                Si faltan
+                <input aria-label={`Días de la regla ${index + 1}`} type="number" min="0" max="3650" value={rule.daysRemaining} onChange={e => setRule(index, { daysRemaining: num(e.target.value) })} className={`${inputClass} !w-20`} />
+                días o menos, descuento de
+                <input aria-label={`Porcentaje de la regla ${index + 1}`} type="number" min="0" max="100" step="0.5" value={rule.discountPercent} onChange={e => setRule(index, { discountPercent: num(e.target.value) })} className={`${inputClass} !w-20`} />
+                %
+                <button type="button" onClick={() => set({ discountRules: rules.filter((_, i) => i !== index) })} className="cursor-pointer text-rose-500 hover:underline">Quitar</button>
+              </div>
+            ))}
+            {rules.length < 10 && (
+              <button type="button" onClick={() => set({ discountRules: [...rules, { daysRemaining: 14, discountPercent: 10 }] })} className="cursor-pointer text-xs font-semibold text-indigo-600 hover:underline">
+                + Agregar regla
+              </button>
+            )}
+          </div>
+        )}
+      </fieldset>
+    </div>
+  );
+}
+
 function GeneralSettings() {
   const config = useConfigStore(state => state.config);
   const setConfig = useConfigStore(state => state.setConfig);
@@ -155,6 +255,11 @@ function GeneralSettings() {
           </label>
         </div>
       </div>
+
+      <PerishableCard
+        value={form.perishable}
+        onChange={perishable => setForm({ ...form, perishable })}
+      />
 
       <div className="flex items-center gap-3">
         <button

@@ -1,6 +1,9 @@
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
+import { quantityError, roundQty } from '../../shared/utils/units.js';
+import { getConfig } from '../config/config.service.js';
+import { addBatchStock, consumeBatch, consumeFefo, requireBatchFields } from './batches.service.js';
 import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilterString } from '../../shared/utils/helpers.js';
 
 /**
@@ -104,16 +107,36 @@ export async function adjustStock(data, userId, userName) {
     throw AppError.notFound('Producto no encontrado');
   }
 
-  if (type === 'SALIDA' && product.stock < quantity) {
+  // AJUSTE fija el stock total (puede ser 0); el resto de movimientos exige una cantidad válida para la unidad
+  const qtyError = type === 'AJUSTE' && Number(quantity) === 0 ? null : quantityError(quantity, product.unit);
+  if (qtyError) throw AppError.badRequest(qtyError);
+
+  const isOut = type === 'SALIDA' || type === 'MERMA';
+  if (isOut && product.stock + 0.004 < quantity) {
     throw AppError.badRequest('El stock disponible no cubre la salida', ERROR_CODES.INSUFFICIENT_STOCK);
   }
 
+  const { perishable } = await getConfig();
+  // Perecederos: la entrada pide lote y vencimiento; la salida descuenta por FEFO (se permiten lotes vencidos: es una baja)
+  const delta = roundQty(type === 'AJUSTE' ? quantity - product.stock : isOut ? -quantity : quantity);
+  const entryBatch = product.isPerishable && delta > 0 ? requireBatchFields(data) : null;
+
   return prisma.$transaction(async (tx) => {
     let newStock = product.stock;
-    if (type === 'ENTRADA') newStock += quantity;
-    else if (type === 'SALIDA') newStock -= quantity;
-    else if (type === 'AJUSTE') newStock = quantity;
-    else if (type === 'DEVOLUCION') newStock += quantity;
+    if (type === 'ENTRADA') newStock = roundQty(newStock + quantity);
+    else if (isOut) newStock = roundQty(newStock - quantity);
+    else if (type === 'AJUSTE') newStock = roundQty(quantity);
+    else if (type === 'DEVOLUCION') newStock = roundQty(newStock + quantity);
+
+    if (product.isPerishable && delta !== 0) {
+      if (delta > 0) {
+        await addBatchStock(tx, { productId, ...entryBatch, quantity: delta, costPrice: Number(product.costPrice) });
+      } else if (data.batchId) {
+        await consumeBatch(tx, product, data.batchId, -delta); // baja de un lote concreto
+      } else {
+        await consumeFefo(tx, product, -delta, perishable, { allowExpired: true });
+      }
+    }
 
     const updated = await tx.product.update({
       where: { id: productId },
@@ -129,6 +152,8 @@ export async function adjustStock(data, userId, userName) {
         reason: `Ajuste: ${reason}`,
         userId,
         userName,
+        // La merma registra el costo perdido (para el reporte de vencimientos y mermas)
+        ...(type === 'MERMA' ? { unitCost: Number(product.costPrice), totalCost: Math.round(quantity * Number(product.costPrice) * 100) / 100 } : {}),
       },
     });
 
@@ -155,13 +180,17 @@ export async function registerPurchase(data, userId, userName) {
   if (!product) {
     throw AppError.notFound('Producto no encontrado');
   }
+  const purchaseQtyError = quantityError(quantity, product.unit);
+  if (purchaseQtyError) throw AppError.badRequest(purchaseQtyError);
 
+  // Perecederos: cada compra entra como lote con su vencimiento
+  const batchFields = product.isPerishable ? requireBatchFields(data) : null;
   const totalCost = Math.round(quantity * Number(unitCost) * 100) / 100;
 
   // Weighted average cost: ((current stock x current cost) + (qty x new unit cost)) / new stock
   const currentStock = product.stock || 0;
   const currentCost = Number(product.costPrice) || 0;
-  const newStock = currentStock + quantity;
+  const newStock = roundQty(currentStock + quantity);
   const weightedAverageCost = newStock > 0
     ? Math.round(((currentStock * currentCost + quantity * Number(unitCost)) / newStock) * 100) / 100
     : Number(unitCost);
@@ -174,6 +203,10 @@ export async function registerPurchase(data, userId, userName) {
         costPrice: weightedAverageCost,
       },
     });
+
+    if (batchFields) {
+      await addBatchStock(tx, { productId, ...batchFields, quantity, costPrice: Number(unitCost), supplierId: supplierId || null });
+    }
 
     const log = await tx.inventoryLog.create({
       data: {

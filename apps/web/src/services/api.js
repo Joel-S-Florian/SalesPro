@@ -192,7 +192,7 @@ export const api = {
     get: (id) => request(`/categories/${id}`),
     create: (name, description) => request('/categories', { method: 'POST', body: JSON.stringify({ name, description }) }),
     update: (id, name, description) => request(`/categories/${id}`, { method: 'PUT', body: JSON.stringify({ name, description }) }),
-    delete: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
+    delete: (id, moveTo) => request(`/categories/${id}${moveTo ? `?moveTo=${encodeURIComponent(moveTo)}` : ''}`, { method: 'DELETE' }),
   },
 
   products: {
@@ -310,6 +310,9 @@ export const api = {
     adjust: (payload) => request('/inventory/adjust', { method: 'POST', body: JSON.stringify(payload) }),
     purchase: (payload) => request('/inventory/purchase', { method: 'POST', body: JSON.stringify(payload) }),
     getSummary: () => request('/inventory/summary'),
+    expiring: (params = {}) => request(`/inventory/expiring?${toQuery(params)}`),
+    expiringSummary: () => request('/inventory/expiring/summary'),
+    batches: (productId, params = {}) => request(`/inventory/batches/${productId}?${toQuery(params)}`),
   },
 
   reports: {
@@ -335,6 +338,8 @@ export const api = {
     inventory: (params = {}) => request(`/reports/inventory?${toQuery(params)}`),
     kardex: (productId, params = {}) => request(`/reports/kardex/${productId}?${toQuery(params)}`),
     purchases: (params = {}) => request(`/reports/purchases?${toQuery(params)}`),
+    expiry: (params = {}) => request(`/reports/expiry?${toQuery(params)}`),
+    bulk: (params = {}) => request(`/reports/bulk?${toQuery(params)}`),
     cash: (params = {}) => request(`/reports/cash?${toQuery(params)}`),
     customerInsights: (params = {}) => request(`/reports/customer-insights?${toQuery(params)}`),
     exportXlsx: payload =>

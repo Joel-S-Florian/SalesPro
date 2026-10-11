@@ -44,6 +44,8 @@ Roles: `SUPERADMIN` (plataforma), `ADMINISTRADOR` y `VENDEDOR` (empresa).
 | `config` | Configuración por empresa: datos del negocio, ITBIS, métodos de pago, descuentos, formato de comprobante |
 | `reports`, `finance` | Reportes (ver «Reportes» abajo) y flujo de caja |
 | `ecf` | Facturación electrónica DGII: configuración, certificado cifrado, token, emisión y firma de e-CF, cola de envío, receptor, directorio, tablero (ver [`Facturacion_Electronica.md`](Facturacion_Electronica.md)) |
+| `inventory` (lotes) | Perecederos: lotes con vencimiento, FEFO en ventas, descuento por vencimiento y alertas (ver [`Perecederos_y_Lotes.md`](Perecederos_y_Lotes.md)) |
+| unidades y presentaciones | Venta a granel (lb/kg…), paquetes/cajas como presentaciones del mismo producto, cantidades con 2 decimales (ver [`Unidades_y_Presentaciones.md`](Unidades_y_Presentaciones.md)) |
 | `platform` | Super-admin: empresas, planes y prueba, suspensión, contraseñas, estadísticas |
 | `public`, `leads` | Endpoints sin sesión: registro autónomo (`/public/signup`) y solicitudes de contacto (`/public/leads`, con bandeja de aprobación) |
 

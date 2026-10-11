@@ -5,7 +5,7 @@ Plataforma multi-empresa (SaaS) de punto de venta, inventario y facturación par
 **Incluye:** POS con lector de códigos (teclado, cámara, puerto serie) y pantalla para el cliente, cajas y turnos con cierre
 (Reporte Z), inventario con importación masiva (CSV, Excel o JSON), proveedores, reportes (resumen, ventas, rentabilidad, inventario,
 compras, cajas, fiscal y clientes, con exportación a Excel/PDF), configuración por empresa y panel
-de plataforma (super-admin). La facturación electrónica DGII (e-CF) tiene su base completa (emisión, firma, cola, recepción, directorio, tablero) probada con un simulador local; falta validar con la DGII real (ver `Doc/Facturacion_Electronica.md`).
+de plataforma (super-admin). La facturación electrónica DGII (e-CF) tiene su base completa (emisión, firma, cola, recepción, directorio, tablero) probada con un simulador local; falta validar con la DGII real (ver `Doc/Facturacion_Electronica.md`). También soporta productos perecederos con lotes, FEFO y descuentos por vencimiento (ver `Doc/Perecederos_y_Lotes.md`), venta a granel por peso y presentaciones paquete/caja (ver `Doc/Unidades_y_Presentaciones.md`).
 
 ## Arquitectura Monorepo
 

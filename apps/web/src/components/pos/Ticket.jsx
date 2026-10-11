@@ -4,6 +4,9 @@ import { Loader2, Minus, Plus, ReceiptText, Tag, Trash2 } from 'lucide-react';
 import AnimatedMoney from './AnimatedMoney';
 import CustomerPicker from './CustomerPicker';
 import { money } from '../../utils/format';
+import { expiryPercentFor, sellableStock } from '../../utils/expiry';
+import { baseQuantityOf, expiryOf, lineTotalOf } from '../../hooks/usePosCart';
+import { isFractional, stepFor, trimQty, unitInfo } from '../../utils/units';
 
 const PAYMENT_LABELS = { EFECTIVO: 'Efectivo', TARJETA: 'Tarjeta' };
 
@@ -12,8 +15,19 @@ const stepButton =
 
 function CartLine({ item, canDiscount, onQuantity, onDiscount, onRemove }) {
   const [showDiscount, setShowDiscount] = useState(false);
-  const { product, quantity, discount } = item;
-  const lineTotal = product.salePrice * quantity - discount;
+  const { product, presentation, quantity, discount } = item;
+  const expiryDiscount = expiryOf(item);
+  const expiryPercent = expiryPercentFor(product, baseQuantityOf(item));
+  const lineTotal = lineTotalOf(item);
+  // Unidad de venta: presentaciones (paquetes), peso/volumen (lb) o unidades
+  const fractional = !presentation && isFractional(product.unit);
+  const step = fractional ? stepFor(product.unit) : 1;
+  const unitShort = unitInfo(product.unit).short;
+  const priceLabel = presentation
+    ? `${money(presentation.salePrice)} c/u`
+    : fractional
+      ? `${money(product.salePrice)} por ${unitShort}`
+      : `${money(product.salePrice)} c/u`;
   const discountVisible = canDiscount && (showDiscount || discount > 0);
 
   return (
@@ -28,33 +42,52 @@ function CartLine({ item, canDiscount, onQuantity, onDiscount, onRemove }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{product.name}</p>
-          <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">{money(product.salePrice)} c/u</p>
+          <p className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+            {presentation ? `${trimQty(quantity)} × ${presentation.name} · ` : fractional ? `${trimQty(quantity)} ${unitShort} · ` : ''}
+            {priceLabel}
+          </p>
+          <AnimatePresence initial={false}>
+            {expiryDiscount > 0 && (
+              <motion.p
+                key="expiry"
+                initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+              >
+                <Tag className="h-3 w-3" aria-hidden="true" />
+                Descuento por vencimiento{expiryPercent ? ` ${expiryPercent}%` : ''}: -{money(expiryDiscount)}
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
         <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{money(lineTotal)}</p>
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="flex items-center rounded-lg border border-slate-200 dark:border-slate-700" role="group" aria-label={`Cantidad de ${product.name}`}>
-          <button type="button" className={stepButton} onClick={() => onQuantity(product.id, quantity - 1)} aria-label="Quitar una unidad">
+          <button type="button" className={stepButton} onClick={() => onQuantity(item.lineId, Math.round((quantity - step) * 100) / 100)} aria-label={fractional ? `Quitar ${step} ${unitShort}` : 'Quitar una unidad'}>
             <Minus className="h-3.5 w-3.5" />
           </button>
           <input
             type="number"
-            inputMode="numeric"
-            min="1"
-            max={product.stock}
+            inputMode={fractional ? 'decimal' : 'numeric'}
+            min={fractional ? '0.01' : '1'}
+            step={fractional ? '0.01' : '1'}
+            max={presentation ? undefined : sellableStock(product)}
             value={quantity}
             aria-label={`Cantidad de ${product.name}`}
             onFocus={e => e.target.select()}
-            onChange={e => onQuantity(product.id, parseInt(e.target.value, 10) || 1)}
-            className="h-8 w-11 border-0 bg-transparent p-0 text-center text-sm font-medium tabular-nums text-slate-800 outline-none dark:text-slate-100 [@media(pointer:coarse)]:h-11 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            onChange={e => onQuantity(item.lineId, fractional ? parseFloat(e.target.value) || 0.01 : parseInt(e.target.value, 10) || 1)}
+            className={`h-8 ${fractional ? 'w-16' : 'w-11'} border-0 bg-transparent p-0 text-center text-sm font-medium tabular-nums text-slate-800 outline-none dark:text-slate-100 [@media(pointer:coarse)]:h-11 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
           />
           <button
             type="button"
             className={stepButton}
-            onClick={() => onQuantity(product.id, quantity + 1)}
-            disabled={quantity >= product.stock}
-            aria-label="Agregar una unidad"
+            onClick={() => onQuantity(item.lineId, Math.round((quantity + step) * 100) / 100)}
+            disabled={!presentation && quantity >= sellableStock(product)}
+            aria-label={fractional ? `Agregar ${step} ${unitShort}` : 'Agregar una unidad'}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -72,7 +105,7 @@ function CartLine({ item, canDiscount, onQuantity, onDiscount, onRemove }) {
           )}
           <button
             type="button"
-            onClick={() => onRemove(product.id)}
+            onClick={() => onRemove(item.lineId)}
             aria-label={`Quitar ${product.name} del ticket`}
             className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 cursor-pointer"
           >
@@ -83,18 +116,18 @@ function CartLine({ item, canDiscount, onQuantity, onDiscount, onRemove }) {
 
       {discountVisible && (
         <div className="mt-2 flex items-center gap-2">
-          <label htmlFor={`disc-${product.id}`} className="text-xs text-slate-500 dark:text-slate-400">
+          <label htmlFor={`disc-${item.lineId}`} className="text-xs text-slate-500 dark:text-slate-400">
             Descuento
           </label>
           <input
-            id={`disc-${product.id}`}
+            id={`disc-${item.lineId}`}
             type="number"
             inputMode="decimal"
             min="0"
             step="0.5"
             placeholder="0.00"
             value={discount || ''}
-            onChange={e => onDiscount(product.id, parseFloat(e.target.value) || 0)}
+            onChange={e => onDiscount(item.lineId, parseFloat(e.target.value) || 0)}
             className="h-8 w-24 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums outline-none dark:border-slate-700 dark:bg-slate-900"
           />
         </div>
@@ -159,8 +192,8 @@ export default function Ticket({
   const empty = items.length === 0;
   const globalVisible = canDiscount && (showGlobalDiscount || globalDiscount > 0);
 
-  const handleQuantity = (productId, quantity) => {
-    if (cart.setQuantity(productId, quantity) === 'remove') onRequestRemove(productId);
+  const handleQuantity = (lineId, quantity) => {
+    if (cart.setQuantity(lineId, quantity) === 'remove') onRequestRemove(lineId);
   };
 
   return (
@@ -184,7 +217,7 @@ export default function Ticket({
             <AnimatePresence initial={false} mode="popLayout">
               {items.map(item => (
                 <CartLine
-                  key={item.product.id}
+                  key={item.lineId}
                   item={item}
                   canDiscount={canDiscount}
                   onQuantity={handleQuantity}

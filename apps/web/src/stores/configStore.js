@@ -14,6 +14,17 @@ export const DEFAULT_CONFIG = {
   paymentMethods: ['EFECTIVO', 'TARJETA'],
   vendedorCanDiscount: false,
   requireOpenShift: false,
+  perishable: {
+    enabled: false,
+    yellowThresholdDays: 30,
+    redThresholdDays: 7,
+    blockExpiredSales: true,
+    autoDiscountEnabled: false,
+    discountRules: [
+      { daysRemaining: 3, discountPercent: 30 },
+      { daysRemaining: 7, discountPercent: 15 },
+    ],
+  },
 };
 
 /** Porcentaje de impuesto para mostrar en etiquetas, ej. 0.18 -> "18". */

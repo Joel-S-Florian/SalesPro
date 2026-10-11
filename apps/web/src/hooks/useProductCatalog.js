@@ -75,18 +75,29 @@ export function useProductCatalog() {
   /** Descuenta localmente lo vendido para que las existencias se vean al instante. */
   const applySale = soldItems => {
     const sold = Object.fromEntries(soldItems.map(item => [item.product.id, item.quantity]));
-    setProducts(prev => prev.map(p => (sold[p.id] ? { ...p, stock: Math.max(0, p.stock - sold[p.id]) } : p)));
+    setProducts(prev => prev.map(p => (sold[p.id] ? { ...p, stock: Math.max(0, p.stock - sold[p.id]), ...(p.sellableStock !== undefined ? { sellableStock: Math.max(0, p.sellableStock - sold[p.id]) } : {}) } : p)));
   };
 
-  /** Busca un producto por código exacto: primero en lo cargado, luego en el servidor. */
+  /**
+   * Busca por código exacto (del producto o del código de barras de una presentación): primero en lo cargado,
+   * luego en el servidor. Devuelve { product, presentation } (presentation es null si el código es del producto).
+   */
   const findByCode = async rawCode => {
     const code = rawCode.trim().toLowerCase();
     if (!code) return null;
-    const local = products.find(p => (p.code || '').toLowerCase() === code);
+    const match = list => {
+      for (const p of list) {
+        if ((p.code || '').toLowerCase() === code) return { product: p, presentation: null };
+        const presentation = (p.presentations || []).find(x => (x.barcode || '').toLowerCase() === code);
+        if (presentation) return { product: p, presentation };
+      }
+      return null;
+    };
+    const local = match(products);
     if (local) return local;
     try {
       const result = await api.products.page({ q: rawCode.trim(), active: true, limit: 10 });
-      return (result?.data || []).find(p => (p.code || '').toLowerCase() === code) || null;
+      return match(result?.data || []);
     } catch {
       return null;
     }

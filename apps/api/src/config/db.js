@@ -34,7 +34,7 @@ const TENANT_MODELS = new Set([
   'EcfConfig',
   'EcfSequence',
   'EcfDocument',
-  'EcfInbox',
+  'EcfInbox', 'ProductBatch', 'SaleBatchDetail', 'ProductPresentation',
 ]);
 
 const FILTERED = new Set([

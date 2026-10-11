@@ -5,6 +5,7 @@ import { SalesTrendChart, TopProductsChart } from '../components/SVGCharts';
 import { DollarSign, TrendingUp, Package, AlertTriangle, ArrowRight, Loader2, RefreshCw, ShoppingCart } from 'lucide-react';
 import Modal from '../components/Modal';
 import { notify } from '../utils/notify';
+import ExpiryBadge from '../components/inventory/ExpiryBadge';
 
 export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
   const [stats, setStats] = useState(null);
@@ -116,6 +117,18 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </button>
         </div>
       </div>
+
+      {/* Lotes en riesgo (perecederos) */}
+      {stats?.expiring?.enabled && stats.expiring.expired + stats.expiring.red + stats.expiring.yellow > 0 && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200" id="expiry-banner">
+          <span className="font-semibold">Perecederos en riesgo:</span>
+          {stats.expiring.expired > 0 && <ExpiryBadge status="EXPIRED" daysLeft={-1} className="!normal-case" />}
+          {stats.expiring.expired > 0 && <span>{stats.expiring.expired} lote(s) vencido(s)</span>}
+          {stats.expiring.red > 0 && <span><b className="text-rose-600 dark:text-rose-400">{stats.expiring.red}</b> crítico(s)</span>}
+          {stats.expiring.yellow > 0 && <span><b className="text-amber-700 dark:text-amber-300">{stats.expiring.yellow}</b> por vencer</span>}
+          <span className="ml-auto text-amber-700/80 dark:text-amber-300/80">Revisa Inventario → Lotes y Vencimientos</span>
+        </div>
+      )}
 
       {/* KPI Stats Grid */}
       {stats && (

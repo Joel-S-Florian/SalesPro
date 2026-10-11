@@ -7,6 +7,7 @@ import { formatTaxPercent } from '../stores/configStore';
 import { api } from '../services/api';
 import SaleEcfPanel from './ecf/SaleEcfPanel';
 
+import { lineDisplay } from '../utils/units';
 export default function SaleDetailModal({ isOpen, onClose, saleId }) {
   const { data: queryResult, isLoading, error } = useQuery({
     queryKey: ['sales', 'detail', saleId],
@@ -270,9 +271,9 @@ export default function SaleDetailModal({ isOpen, onClose, saleId }) {
                                 </p>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-center font-mono">{detail.quantity}</td>
+                            <td className="px-4 py-3 text-center font-mono">{lineDisplay(detail).qtyText}</td>
                             <td className="px-4 py-3 text-right font-mono">
-                              {formatCurrency(detail.unitPrice)}
+                              {formatCurrency(lineDisplay(detail).priceEach)}
                             </td>
                             <td className="px-4 py-3 text-right font-semibold font-mono text-slate-900 dark:text-slate-100">
                               {formatCurrency(detail.subtotal)}

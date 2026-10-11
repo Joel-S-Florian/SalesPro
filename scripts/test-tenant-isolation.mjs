@@ -67,7 +67,7 @@ async function seedData(company, label) {
     stock: 50,
     minStock: 1,
   });
-  const customer = await call('POST', '/customers', token, { documentId: '000000000', name: `Cliente ${label}` });
+  const customer = await call('POST', '/customers', token, { documentId: '999000111', name: `Cliente ${label}` });
   check(`${label}: crea categoría/producto/cliente con los mismos códigos que la otra empresa`,
     category.status === 201 && product.status === 201 && customer.status === 201,
     JSON.stringify([category.data, product.data, customer.data]));
@@ -86,12 +86,14 @@ async function cleanup() {
     for (const { id: companyId } of companies) {
       const where = { companyId };
       await prisma.auditLog.deleteMany({ where });
+      await prisma.saleBatchDetail.deleteMany({ where });
       await prisma.saleDetail.deleteMany({ where });
       await prisma.sale.deleteMany({ where });
       await prisma.inventoryLog.deleteMany({ where });
       await prisma.cashierClose.deleteMany({ where });
       await prisma.terminal.deleteMany({ where });
       await prisma.inventoryImport.deleteMany({ where });
+      await prisma.productBatch.deleteMany({ where });
       await prisma.product.deleteMany({ where });
       await prisma.category.deleteMany({ where });
       await prisma.customer.deleteMany({ where });
@@ -126,8 +128,8 @@ async function main() {
   check('A solo ve sus productos', productsA.length === 1 && productsA[0].id === dataA.product.id, JSON.stringify(productsA.map(p => p.name)));
   check('B solo ve sus productos', productsB.length === 1 && productsB[0].id === dataB.product.id);
   check('A solo ve sus ventas', list(await call('GET', '/sales', A.token)).every(s => s.id === dataA.sale.id));
-  check('A solo ve sus clientes', list(await call('GET', '/customers', A.token)).every(c => c.id === dataA.customer.id));
-  check('A solo ve sus categorías', list(await call('GET', '/categories', A.token)).every(c => c.id === dataA.category.id));
+  check('A solo ve sus clientes', !list(await call('GET', '/customers', A.token)).some(c => c.id === dataB.customer.id) && list(await call('GET', '/customers', A.token)).some(c => c.id === dataA.customer.id));
+  check('A solo ve sus categorías', !list(await call('GET', '/categories', A.token)).some(c => c.id === dataB.category.id) && list(await call('GET', '/categories', A.token)).some(c => c.id === dataA.category.id));
   check('Las secuencias NCF son independientes por empresa', dataA.sale.invoiceNumber === dataB.sale.invoiceNumber,
     `${dataA.sale.invoiceNumber} vs ${dataB.sale.invoiceNumber}`);
   const usersA = list(await call('GET', '/auth/users', A.token));

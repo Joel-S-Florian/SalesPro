@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Edit2, Trash2, Filter, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Search, Edit2, Trash2, Filter, AlertTriangle, X } from 'lucide-react';
+import { UNITS, formatQty, isFractional, unitInfo } from '../utils/units';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import { useConfigStore } from '../stores/configStore';
+import ExpiryBadge from '../components/inventory/ExpiryBadge';
 
 export default function Products() {
   const [categories, setCategories] = useState([]);
+  const perishableEnabled = useConfigStore(state => state.config.perishable?.enabled);
 
   // Search & Filters
   const [search, setSearch] = useState('');
@@ -47,6 +51,11 @@ export default function Products() {
   const [stock, setStock] = useState(0);
   const [minStock, setMinStock] = useState(5);
   const [active, setActive] = useState(true);
+  const [isPerishable, setIsPerishable] = useState(false);
+  const [unit, setUnit] = useState('UND');
+  const [presentations, setPresentations] = useState([]); // [{ name, factor, salePrice, barcode }]
+  const [batchNumber, setBatchNumber] = useState('');
+  const [expirationDate, setExpirationDate] = useState('');
 
   const [saving, setSaving] = useState(false);
 
@@ -70,6 +79,11 @@ export default function Products() {
     setStock(0);
     setMinStock(5);
     setActive(true);
+    setIsPerishable(false);
+    setUnit('UND');
+    setPresentations([]);
+    setBatchNumber('');
+    setExpirationDate('');
     setIsFormOpen(true);
   };
 
@@ -86,6 +100,11 @@ export default function Products() {
     setStock(Number(p.stock || 0));
     setMinStock(Number(p.minStock || 5));
     setActive(p.active !== false);
+    setIsPerishable(Boolean(p.isPerishable));
+    setUnit(p.unit || 'UND');
+    setPresentations((p.presentations || []).map(x => ({ name: x.name, factor: x.factor, salePrice: x.salePrice, barcode: x.barcode || '' })));
+    setBatchNumber('');
+    setExpirationDate('');
     setIsFormOpen(true);
   };
 
@@ -105,6 +124,15 @@ export default function Products() {
       return;
     }
 
+    // Presentaciones: se ignoran las filas vacías; las incompletas se avisan
+    const cleanPresentations = presentations
+      .filter(p => p.name.trim() || p.factor || p.salePrice)
+      .map(p => ({ name: p.name.trim(), factor: Number(p.factor), salePrice: Number(p.salePrice), barcode: String(p.barcode || '').trim() }));
+    if (cleanPresentations.some(p => !p.name || !(p.factor > 0) || !(p.salePrice >= 0))) {
+      notify.warning('Complete el nombre, la cantidad que contiene y el precio de cada presentación');
+      return;
+    }
+
     try {
       setSaving(true);
       const payload = editingId
@@ -115,6 +143,9 @@ export default function Products() {
             salePrice: Number(salePrice),
             minStock: Number(minStock),
             active,
+            isPerishable,
+            unit,
+            presentations: cleanPresentations,
           }
         : {
             code,
@@ -126,7 +157,17 @@ export default function Products() {
             stock: Number(stock),
             minStock: Number(minStock),
             active,
+            isPerishable,
+            unit,
+            presentations: cleanPresentations,
+            ...(isPerishable && Number(stock) > 0 && batchNumber ? { batchNumber: batchNumber.trim(), expirationDate } : {}),
           };
+
+      if (!editingId && isPerishable && Number(stock) > 0 && batchNumber && !expirationDate) {
+        notify.warning('Indique la fecha de vencimiento del lote');
+        setSaving(false);
+        return;
+      }
 
       if (editingId) {
         await api.products.update(editingId, payload);
@@ -260,7 +301,11 @@ export default function Products() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="space-y-0.5">
-                        <div className="font-semibold text-slate-900 dark:text-slate-100">{p.name}</div>
+                        <div className="flex flex-wrap items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
+                          {p.name}
+                          {p.isPerishable && p.nearestBatch && <ExpiryBadge status={p.nearestBatch.status} daysLeft={p.nearestBatch.daysLeft} />}
+                          {p.isPerishable && !p.nearestBatch && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800">Sin lotes vigentes</span>}
+                        </div>
                         <div className="text-[10px] text-slate-400 line-clamp-1">{p.description}</div>
                       </div>
                     </td>
@@ -268,6 +313,7 @@ export default function Products() {
                     <td className="px-6 py-4 text-right font-mono">${Number(p.costPrice || 0).toFixed(2)}</td>
                     <td className="px-6 py-4 text-right font-semibold font-mono text-slate-900 dark:text-slate-100">
                       ${Number(p.salePrice || 0).toFixed(2)}
+                      {p.unit && p.unit !== 'UND' && <span className="ml-0.5 text-[10px] font-normal text-slate-400">/{unitInfo(p.unit).short}</span>}
                     </td>
                     <td className="px-6 py-4 text-center">
                       <div className="flex flex-col items-center gap-0.5">
@@ -276,7 +322,7 @@ export default function Products() {
                           isLow ? 'bg-amber-50 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400' :
                           'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400'
                         }`}>
-                          {p.stock} uds.
+                          {p.unit && p.unit !== 'UND' ? formatQty(p.stock, p.unit) : `${p.stock} uds.`}
                         </span>
                         {isLow && (
                           <span className="text-[9px] text-amber-500 font-mono font-bold flex items-center gap-0.5">
@@ -440,6 +486,25 @@ export default function Products() {
             </div>
 
             <div className="space-y-1.5">
+              <label htmlFor="prod-unit" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                Se vende por
+              </label>
+              <select
+                id="prod-unit"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              >
+                {Object.entries(UNITS).map(([code, info]) => (
+                  <option key={code} value={code} className="dark:bg-slate-950">{info.label}{info.fractional ? ' (a granel, con decimales)' : ''}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-400">
+                {isFractional(unit) ? `Precio, costo y stock son por ${unitInfo(unit).label.toLowerCase()}; el cajero escribe el peso o el monto.` : 'Cuenta unidades enteras (leche, refresco, etc.).'}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <label htmlFor="prod-cost" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Precio de Compra (Costo $) *
               </label>
@@ -485,10 +550,80 @@ export default function Products() {
               )}
             </div>
 
+            <div className="col-span-1 space-y-2 md:col-span-2" id="presentations-editor">
+              <div className="flex items-center justify-between">
+                <span className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Presentaciones (paquete, caja…)</span>
+                <button
+                  type="button"
+                  onClick={() => setPresentations(list => [...list, { name: '', factor: '', salePrice: '', barcode: '' }])}
+                  className="text-xs font-semibold text-indigo-600 hover:underline cursor-pointer"
+                >
+                  + Agregar presentación
+                </button>
+              </div>
+              {presentations.length === 0 ? (
+                <p className="text-[10px] text-slate-400">Opcional. Úsalo si además de {isFractional(unit) ? 'por peso' : 'suelto'} lo vendes en paquetes o cajas: al vender uno se descuentan sus unidades del mismo stock.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="hidden grid-cols-[1.4fr_0.8fr_0.9fr_1.2fr_auto] gap-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400 md:grid">
+                    <span>Nombre</span><span>Contiene ({unitInfo(unit).short})</span><span>Precio $</span><span>Código de barras</span><span />
+                  </div>
+                  {presentations.map((row, index) => {
+                    const set = patch => setPresentations(list => list.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+                    const field = 'w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent outline-none text-xs focus:ring-1 focus:ring-indigo-500';
+                    return (
+                      <div key={index} className="grid grid-cols-2 items-center gap-2 md:grid-cols-[1.4fr_0.8fr_0.9fr_1.2fr_auto]">
+                        <input aria-label={`Nombre de la presentación ${index + 1}`} className={field} placeholder="Paquete x12" maxLength={40} value={row.name} onChange={e => set({ name: e.target.value })} />
+                        <input aria-label={`Unidades que contiene la presentación ${index + 1}`} className={`${field} font-mono`} type="number" min="0.01" step="0.01" placeholder="12" value={row.factor} onChange={e => set({ factor: e.target.value })} />
+                        <input aria-label={`Precio de la presentación ${index + 1}`} className={`${field} font-mono`} type="number" min="0" step="0.01" placeholder="0.00" value={row.salePrice} onChange={e => set({ salePrice: e.target.value })} />
+                        <input aria-label={`Código de barras de la presentación ${index + 1}`} className={`${field} font-mono`} placeholder="Opcional" value={row.barcode} onChange={e => set({ barcode: e.target.value })} />
+                        <button type="button" aria-label="Quitar presentación" onClick={() => setPresentations(list => list.filter((_, i) => i !== index))} className="justify-self-end rounded-lg p-1.5 text-slate-400 hover:bg-slate-50 hover:text-rose-500 dark:hover:bg-slate-800 cursor-pointer">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {(perishableEnabled || isPerishable) && (
+              <div className="col-span-1 space-y-2 md:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  <input
+                    id="prod-perishable"
+                    type="checkbox"
+                    checked={isPerishable}
+                    disabled={!perishableEnabled && !isPerishable}
+                    onChange={(e) => setIsPerishable(e.target.checked)}
+                  />
+                  Producto perecedero
+                </label>
+                <p className="text-[10px] text-slate-400">
+                  {isPerishable
+                    ? 'Se controla por lotes con fecha de vencimiento y se vende primero lo que vence antes (FEFO).'
+                    : 'Actívalo para controlar lotes y vencimientos de este producto.'}
+                </p>
+                {!editingId && isPerishable && Number(stock) > 0 && (
+                  <div className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label htmlFor="prod-batch" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Lote del stock inicial</label>
+                      <input id="prod-batch" type="text" maxLength={50} placeholder="Ej. L-2410" value={batchNumber} onChange={(e) => setBatchNumber(e.target.value)} className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent outline-none text-xs font-mono focus:ring-1 focus:ring-indigo-500" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor="prod-expiry" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Vencimiento del lote</label>
+                      <input id="prod-expiry" type="date" value={expirationDate} onChange={(e) => setExpirationDate(e.target.value)} className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent outline-none text-xs font-mono focus:ring-1 focus:ring-indigo-500" />
+                    </div>
+                    <p className="text-[10px] text-slate-400 md:col-span-2">Si lo dejas vacío, el stock inicial queda como «SIN-LOTE» (sin vencimiento). Los siguientes lotes se registran en Inventario.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {!editingId && (
               <div className="space-y-1.5">
                 <label htmlFor="prod-stock" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                  Stock Inicial *
+                  Stock Inicial ({unitInfo(unit).short}) *
                 </label>
                 <input
                   id="prod-stock"
@@ -496,7 +631,8 @@ export default function Products() {
                   min="0"
                   required
                   value={stock}
-                  onChange={(e) => setStock(Math.max(0, parseInt(e.target.value) || 0))}
+                  step={isFractional(unit) ? '0.01' : '1'}
+                  onChange={(e) => setStock(Math.max(0, isFractional(unit) ? Math.round((parseFloat(e.target.value) || 0) * 100) / 100 : parseInt(e.target.value) || 0))}
                   className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
                 />
               </div>
@@ -515,7 +651,8 @@ export default function Products() {
                 min="0"
                 required
                 value={minStock}
-                onChange={(e) => setMinStock(Math.max(0, parseInt(e.target.value) || 0))}
+                step={isFractional(unit) ? '0.01' : '1'}
+                onChange={(e) => setMinStock(Math.max(0, isFractional(unit) ? Math.round((parseFloat(e.target.value) || 0) * 100) / 100 : parseInt(e.target.value) || 0))}
                 className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
               />
             </div>

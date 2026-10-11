@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { api } from './services/api';
+import { notify } from './utils/notify';
 import { useAuthStore } from './stores/authStore';
 import { useAuthMe } from './hooks/queries';
 import { useConfigStore } from './stores/configStore';
@@ -110,6 +111,29 @@ export default function App() {
   useEffect(() => {
     if (isAuthenticated && user?.role !== 'SUPERADMIN') loadConfig();
   }, [isAuthenticated, user?.role, loadConfig]);
+  // Aviso proactivo al iniciar la sesión: lotes vencidos o por vencer (una vez por sesión)
+  const perishableEnabled = useConfigStore(state => state.config.perishable?.enabled);
+  useEffect(() => {
+    if (!isAuthenticated || !perishableEnabled) return;
+    try {
+      if (sessionStorage.getItem('factos-expiry-notice') === '1') return;
+      sessionStorage.setItem('factos-expiry-notice', '1');
+    } catch {
+      // sin almacenamiento: se avisa igual
+    }
+    api.inventory
+      .expiringSummary()
+      .then(summary => {
+        const risky = summary.expired + summary.red + summary.yellow;
+        if (!risky) return;
+        const parts = [];
+        if (summary.expired) parts.push(`${summary.expired} vencido(s)`);
+        if (summary.red) parts.push(`${summary.red} crítico(s)`);
+        if (summary.yellow) parts.push(`${summary.yellow} por vencer`);
+        notify.warning(`Lotes en riesgo: ${parts.join(', ')}.`);
+      })
+      .catch(() => {});
+  }, [isAuthenticated, perishableEnabled]);
   const [loginError, setLoginError] = useState(null);
   const [sessionMessage, setSessionMessage] = useState(null);
   const [loggingIn, setLoggingIn] = useState(false);

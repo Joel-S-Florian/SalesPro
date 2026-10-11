@@ -8,35 +8,38 @@ datasource db {
 }
 
 model Company {
-  id            String            @id @default(cuid())
-  name          String
-  rnc           String?           @unique
-  email         String?
-  phone         String?
-  address       String?
-  active        Boolean           @default(true)
-  plan          PlanType          @default(STARTER)
-  trialEndsAt   DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  users         User[]
-  categories    Category[]
-  products      Product[]
-  customers     Customer[]
-  sales         Sale[]
-  saleDetails   SaleDetail[]
-  inventoryLogs InventoryLog[]
-  suppliers     Supplier[]
-  configs       SystemConfig[]
-  terminals     Terminal[]
-  cashierCloses CashierClose[]
-  imports       InventoryImport[]
-  ncfSequences  NCFSequence[]
-  auditLogs     AuditLog[]
-  ecfConfig     EcfConfig?
-  ecfSequences  EcfSequence[]
-  ecfDocuments  EcfDocument[]
-  ecfInbox      EcfInbox[]
+  id               String                @id @default(cuid())
+  name             String
+  rnc              String?               @unique
+  email            String?
+  phone            String?
+  address          String?
+  active           Boolean               @default(true)
+  plan             PlanType              @default(STARTER)
+  trialEndsAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  users            User[]
+  categories       Category[]
+  products         Product[]
+  customers        Customer[]
+  sales            Sale[]
+  saleDetails      SaleDetail[]
+  inventoryLogs    InventoryLog[]
+  suppliers        Supplier[]
+  configs          SystemConfig[]
+  terminals        Terminal[]
+  cashierCloses    CashierClose[]
+  imports          InventoryImport[]
+  ncfSequences     NCFSequence[]
+  auditLogs        AuditLog[]
+  ecfConfig        EcfConfig?
+  ecfSequences     EcfSequence[]
+  ecfDocuments     EcfDocument[]
+  ecfInbox         EcfInbox[]
+  productBatches   ProductBatch[]
+  saleBatchDetails SaleBatchDetail[]
+  presentations    ProductPresentation[]
 
   @@map("companies")
 }
@@ -123,23 +126,27 @@ model Category {
 }
 
 model Product {
-  id            String         @id @default(cuid())
+  id            String                @id @default(cuid())
   code          String
   name          String
   description   String?
   categoryId    String
   costPrice     Float
   salePrice     Float
-  stock         Int            @default(0)
-  minStock      Int            @default(0)
-  active        Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  stock         Float                 @default(0) // en la unidad base del producto (2 decimales en productos a granel)
+  minStock      Float                 @default(0)
+  unit          String                @default("UND") // UND, LB, KG, OZ, GR, LT, GAL... (ver shared/utils/units.js)
+  presentations ProductPresentation[]
+  active        Boolean               @default(true)
+  isPerishable  Boolean               @default(false)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
   inventoryLogs InventoryLog[]
-  category      Category       @relation(fields: [categoryId], references: [id])
+  batches       ProductBatch[]
+  category      Category              @relation(fields: [categoryId], references: [id])
   saleDetails   SaleDetail[]
   companyId     String
-  company       Company        @relation(fields: [companyId], references: [id])
+  company       Company               @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -213,19 +220,23 @@ model Sale {
 }
 
 model SaleDetail {
-  id          String  @id @default(cuid())
-  saleId      String
-  productId   String
-  productName String
-  quantity    Int
-  unitPrice   Float
-  unitCost    Float   @default(0)
-  discount    Float   @default(0)
-  subtotal    Float
-  product     Product @relation(fields: [productId], references: [id])
-  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  companyId   String
-  company     Company @relation(fields: [companyId], references: [id])
+  id               String            @id @default(cuid())
+  saleId           String
+  productId        String
+  productName      String
+  quantity         Float // siempre en la unidad base del producto (negativa en notas de crédito)
+  unit             String            @default("UND")
+  presentationName String? // "Paquete x12": cómo se vendió (informativo; quantity ya está en unidades base)
+  presentationQty  Float? // 2 -> "2 paquetes"
+  unitPrice        Float
+  unitCost         Float             @default(0)
+  discount         Float             @default(0)
+  subtotal         Float
+  product          Product           @relation(fields: [productId], references: [id])
+  sale             Sale              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  companyId        String
+  company          Company           @relation(fields: [companyId], references: [id])
+  batches          SaleBatchDetail[]
 
   @@index([companyId])
   @@map("sale_details")
@@ -236,7 +247,7 @@ model InventoryLog {
   productId     String
   productName   String
   type          InventoryType
-  quantity      Int
+  quantity      Float
   reason        String
   userId        String
   userName      String
@@ -269,12 +280,77 @@ model Supplier {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   purchases    InventoryLog[]
+  batches      ProductBatch[]
   companyId    String
   company      Company        @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, rnc])
   @@index([companyId])
   @@map("suppliers")
+}
+
+/// Presentación de venta de un producto: Paquete x12, Caja x24... Vender una presentación descuenta
+/// `factor` unidades base del mismo stock (y del mismo lote, FEFO). Puede tener su propio código de barras.
+model ProductPresentation {
+  id        String   @id @default(cuid())
+  productId String
+  name      String
+  factor    Float // unidades base que contiene
+  salePrice Float // precio de la presentación completa
+  barcode   String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, productId, name])
+  @@unique([companyId, barcode])
+  @@index([companyId, productId])
+  @@map("product_presentations")
+}
+
+/// Lote de un producto perecedero. Product.stock = suma de currentStock de sus lotes.
+/// expirationDate nulo = lote genérico (SIN-LOTE): se vende al final (FEFO) y no genera alertas.
+model ProductBatch {
+  id             String            @id @default(cuid())
+  productId      String
+  batchNumber    String
+  expirationDate DateTime?
+  initialStock   Float
+  currentStock   Float
+  costPrice      Float             @default(0)
+  supplierId     String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier       Supplier?         @relation(fields: [supplierId], references: [id])
+  saleDetails    SaleBatchDetail[]
+  companyId      String
+  company        Company           @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, productId, batchNumber])
+  @@index([companyId, productId])
+  @@index([companyId, expirationDate])
+  @@map("product_batches")
+}
+
+/// Qué lote(s) se descontaron en cada línea de venta (trazabilidad y devoluciones).
+model SaleBatchDetail {
+  id             String       @id @default(cuid())
+  saleDetailId   String
+  batchId        String
+  quantity       Float
+  discountAmount Float        @default(0) // descuento por vencimiento dado a esta porción
+  saleDetail     SaleDetail   @relation(fields: [saleDetailId], references: [id], onDelete: Cascade)
+  batch          ProductBatch @relation(fields: [batchId], references: [id])
+  companyId      String
+  company        Company      @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, saleDetailId])
+  @@index([batchId])
+  @@map("sale_batch_details")
 }
 
 model SystemConfig {
@@ -430,6 +506,7 @@ enum InventoryType {
   SALIDA
   AJUSTE
   DEVOLUCION
+  MERMA // baja por vencimiento, daño o pérdida (con costo perdido)
 }
 
 enum NCFType {

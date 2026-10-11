@@ -4,6 +4,7 @@ import autoTable from 'jspdf-autotable';
 import { api } from '../services/api';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
 import { notify } from './notify';
+import { lineDisplay } from './units';
 
 
 const NCF_LABELS = {
@@ -221,15 +222,16 @@ function buildA4Receipt(sale, qr = null) {
 
   // Detailed Items Table
   const tableRows = (sale.details || []).map((det, index) => {
+    const view = lineDisplay(det);
     const qty = det.quantity || 1;
-    const unit = Number(det.unitPrice || 0);
+    const unit = view.priceEach;
     const disc = Number(det.discount || 0);
     const sub = Number(det.subtotal || unit * qty - disc);
 
     return [
       index + 1,
       det.productName || det.product?.name || `Artículo #${index + 1}`,
-      qty,
+      view.qtyText,
       `$${unit.toFixed(2)}`,
       disc > 0 ? `-$${disc.toFixed(2)}` : '$0.00',
       `$${sub.toFixed(2)}`,
@@ -452,12 +454,13 @@ function buildTicketReceipt(sale, qr = null) {
   y += 3.6;
   doc.setFont('courier', 'normal');
   details.forEach((det, i) => {
+    const view = lineDisplay(det);
     const qty = det.quantity || 1;
-    const unit = Number(det.unitPrice || 0);
+    const unit = view.priceEach;
     const disc = Number(det.discount || 0);
     const sub = Number(det.subtotal ?? unit * qty - disc);
     itemLines[i].forEach(text => line(text));
-    doc.text(`${qty} x ${money(unit)}${disc > 0 ? ` (-${money(disc)})` : ''}`, margin + 2, y);
+    doc.text(`${view.qtyText} x ${money(unit)}${disc > 0 ? ` (-${money(disc)})` : ''}`, margin + 2, y);
     doc.text(money(sub), right, y, { align: 'right' });
     y += 3.6;
   });

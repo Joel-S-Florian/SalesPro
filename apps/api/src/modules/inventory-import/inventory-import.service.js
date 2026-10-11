@@ -1,3 +1,4 @@
+import { addUnbatchedStock } from '../inventory/batches.service.js';
 import { Readable } from 'node:stream';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../config/db.js';
@@ -307,6 +308,8 @@ export async function applyImport(importId, requester) {
           productId = product.id;
           productName = product.name;
           counts.updated += 1;
+          // La importación no trae lotes: en un perecedero la mercancía entra como stock sin lote (SIN-LOTE)
+          if (product.isPerishable && stock > 0) await addUnbatchedStock(tx, { productId, quantity: stock, costPrice: cost });
         }
 
         if (stock > 0) {

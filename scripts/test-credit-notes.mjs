@@ -83,6 +83,15 @@ await runInTenant(company.id, async () => {
     check('etiquetas DGII en el reporte fiscal', types === 'B01:Crédito fiscal,B02:Consumo,B04:Nota de crédito', types);
     const cash = await prisma.sale.aggregate({ where: { paymentMethod: 'EFECTIVO' }, _sum: { total: true } });
     check('caja (suma de efectivo) resta la devolución', Math.abs(cash._sum.total - (s1.total - 118)) < 0.01, `${cash._sum.total}`);
+
+    // Descuento por línea: debe reducir base, ITBIS y total (2 uds x 100, línea -30, global -10 -> base 160)
+    await expectError('rechaza descuento de línea mayor que la línea', () => sales.createSale({ customerId: consumer.id, details: [{ productId: product.id, quantity: 1, discount: 150 }], discount: 0, paymentMethod: 'EFECTIVO' }, admin.id, admin.fullName, req), 'no puede superar');
+    const s3 = await sales.createSale({ customerId: consumer.id, details: [{ productId: product.id, quantity: 2, discount: 30 }], discount: 10, paymentMethod: 'EFECTIVO' }, admin.id, admin.fullName, req);
+    created.sales.push(s3.id);
+    check('descuento de línea entra en total e ITBIS', s3.subtotal === 200 && s3.discount === 40 && s3.tax === 28.8 && s3.total === 188.8, `${s3.subtotal}/${s3.discount}/${s3.tax}/${s3.total}`);
+    const n3 = await sales.createCreditNote(s3.id, { reason: 'Prueba descuento', details: [{ productId: product.id, quantity: 1 }] }, admin.id, admin.fullName, req);
+    created.sales.push(n3.id);
+    check('nota devuelve línea (-15) y global proporcional (-5)', n3.discount === -20 && n3.tax === -14.4 && n3.total === -94.4, `${n3.discount}/${n3.tax}/${n3.total}`);
   } finally {
     // Limpieza total de lo creado por la prueba
     const ids = created.sales;

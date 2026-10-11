@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { lineDisplay } from '../../utils/units';
 import { motion } from 'motion/react';
 import { ChevronDown, Printer } from 'lucide-react';
 import Modal from '../Modal';
@@ -142,7 +143,7 @@ export default function CheckoutSuccessModal({ sale, onPrint, onNewSale }) {
               {sale.details.map((line, index) => (
                 <div key={index} className="flex justify-between gap-3 text-slate-700 dark:text-slate-200">
                   <span className="min-w-0 truncate">
-                    {line.quantity} × {line.productName}
+                    {lineDisplay(line).qtyText} × {line.productName}
                   </span>
                   <span className="shrink-0 tabular-nums">{money(line.subtotal)}</span>
                 </div>

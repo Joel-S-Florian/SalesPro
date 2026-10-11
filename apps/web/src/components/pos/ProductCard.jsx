@@ -1,20 +1,27 @@
 import React, { memo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { money } from '../../utils/format';
+import { sellableStock } from '../../utils/expiry';
+import { formatQty, isFractional, unitInfo } from '../../utils/units';
+import ExpiryBadge from '../inventory/ExpiryBadge';
 
 /**
  * Tarjeta de producto: todo el recuadro es el botón de agregar. La cantidad ya en el ticket se muestra
  * como insignia que "salta" al cambiar. Si no hay existencia, el recuadro tiembla al intentar agregarlo.
  */
 function ProductCard({ product, inCart, shake, onAdd, large }) {
-  const outOfStock = product.stock <= 0;
-  const low = !outOfStock && product.stock <= product.minStock;
+  const available = sellableStock(product);
+  const outOfStock = available <= 0;
+  const low = !outOfStock && available <= product.minStock;
+  const nearest = product.isPerishable ? product.nearestBatch : null;
+  const fractional = isFractional(product.unit);
+  const packs = product.presentations?.length || 0;
 
   return (
     <button
       type="button"
       onClick={() => onAdd(product)}
-      aria-label={`Agregar ${product.name}, ${money(product.salePrice)}, ${outOfStock ? 'agotado' : `${product.stock} en existencia`}`}
+      aria-label={`Agregar ${product.name}, ${money(product.salePrice)}, ${outOfStock ? 'agotado' : `${available} en existencia`}`}
       className={`group relative flex flex-col justify-between gap-3 rounded-xl border bg-white p-3.5 text-left dark:bg-slate-900 ${
         shake ? 'animate-shake' : ''
       } ${
@@ -39,6 +46,19 @@ function ProductCard({ product, inCart, shake, onAdd, large }) {
 
       <div className="space-y-1.5">
         <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{product.code}</p>
+        {(packs > 0 || fractional) && (
+          <span className="inline-flex rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+            {fractional ? `Por ${unitInfo(product.unit).label.toLowerCase()}` : `+${packs} presentación${packs > 1 ? 'es' : ''}`}
+          </span>
+        )}
+        {nearest && (
+          <div className="flex flex-wrap items-center gap-1">
+            <ExpiryBadge status={nearest.status} daysLeft={nearest.daysLeft} />
+            {nearest.discountPercent > 0 && (
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">-{nearest.discountPercent}%</span>
+            )}
+          </div>
+        )}
         <h4
           className={`line-clamp-2 font-medium leading-snug text-slate-800 dark:text-slate-100 ${large ? 'text-[15px]' : 'text-sm'}`}
         >
@@ -49,6 +69,7 @@ function ProductCard({ product, inCart, shake, onAdd, large }) {
       <div className="flex items-end justify-between gap-2">
         <span className={`font-semibold tabular-nums text-slate-900 dark:text-white ${large ? 'text-xl' : 'text-base'}`}>
           {money(product.salePrice)}
+          {fractional && <span className="ml-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">/{unitInfo(product.unit).short}</span>}
         </span>
         <span
           className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
@@ -59,7 +80,7 @@ function ProductCard({ product, inCart, shake, onAdd, large }) {
                 : 'text-slate-500 dark:text-slate-400'
           }`}
         >
-          {outOfStock ? 'Agotado' : low ? `Quedan ${product.stock}` : `${product.stock} disp.`}
+          {outOfStock ? 'Agotado' : low ? `Quedan ${formatQty(available, product.unit)}` : `${formatQty(available, product.unit)} disp.`}
         </span>
       </div>
     </button>

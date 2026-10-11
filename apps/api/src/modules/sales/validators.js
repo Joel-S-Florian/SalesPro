@@ -9,7 +9,9 @@ export const createSaleSchema = z.object({
     terminalId: z.string().cuid().optional(),
     details: z.array(z.object({
       productId: z.string().cuid(),
-      quantity: z.number().int().positive('Cantidad debe ser positiva'),
+      // Entera en UND; a granel admite 2 decimales (el servicio lo valida según la unidad del producto)
+      quantity: z.number().positive('Cantidad debe ser positiva'),
+      presentationId: z.string().min(1).max(64).optional(),
       discount: z.number().min(0).default(0),
     })).min(1, 'Al menos un producto es requerido'),
     discount: z.number().min(0).default(0),
@@ -62,7 +64,7 @@ export const saleQuerySchema = z.object({
 export const cartRemovalSchema = z.object({
   body: z.object({
     productId: z.string().cuid(),
-    quantity: z.number().int().positive(),
+    quantity: z.number().positive(),
     reason: z.string().max(200).optional(),
     adminUsername: z.string().max(50).optional(),
     adminPassword: z.string().max(200).optional(),
