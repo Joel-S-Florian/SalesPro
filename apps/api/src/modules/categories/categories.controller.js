@@ -32,6 +32,10 @@ export const updateCategory = asyncHandler(async (req, res) => {
 
 export const deleteCategory = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  await categoriesService.deleteCategory(id);
-  res.json({ success: true, message: 'Categoría eliminada correctamente' });
+  const result = await categoriesService.deleteCategory(id, { moveToCategoryId: req.query.moveTo || undefined });
+  res.json({
+    success: true,
+    message: result.moved ? `Categoría eliminada; ${result.moved} producto(s) pasaron a «${result.movedTo}»` : 'Categoría eliminada correctamente',
+    ...result,
+  });
 });

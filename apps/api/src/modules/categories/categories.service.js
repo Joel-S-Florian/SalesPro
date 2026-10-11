@@ -101,19 +101,37 @@ export async function updateCategory(id, data) {
 }
 
 /**
- * Delete category
+ * Elimina una categoría. Si tiene productos hay que indicar a qué categoría se mueven (`moveToCategoryId`);
+ * el cambio de categoría y la eliminación ocurren juntos o no ocurre ninguno.
  */
-export async function deleteCategory(id) {
+export async function deleteCategory(id, { moveToCategoryId } = {}) {
   const category = await prisma.category.findUnique({ where: { id } });
   if (!category) {
     throw AppError.notFound('Categoría no encontrada');
   }
 
   const productsCount = await prisma.product.count({ where: { categoryId: id } });
-  if (productsCount > 0) {
-    throw AppError.badRequest('No se puede eliminar la categoría porque tiene productos asignados', ERROR_CODES.CATEGORY_HAS_PRODUCTS);
+  if (productsCount > 0 && !moveToCategoryId) {
+    throw AppError.badRequest(
+      `La categoría tiene ${productsCount} producto(s). Elija a qué categoría moverlos para poder eliminarla.`,
+      ERROR_CODES.CATEGORY_HAS_PRODUCTS
+    );
   }
 
-  await prisma.category.delete({ where: { id } });
-  return { success: true };
+  let target = null;
+  if (moveToCategoryId) {
+    if (moveToCategoryId === id) throw AppError.badRequest('Elija una categoría distinta a la que se elimina');
+    target = await prisma.category.findUnique({ where: { id: moveToCategoryId } });
+    if (!target) throw AppError.notFound('La categoría de destino no existe');
+  }
+
+  const moved = await prisma.$transaction(async tx => {
+    let count = 0;
+    if (productsCount > 0) {
+      ({ count } = await tx.product.updateMany({ where: { categoryId: id }, data: { categoryId: moveToCategoryId } }));
+    }
+    await tx.category.delete({ where: { id } });
+    return count;
+  });
+  return { success: true, moved, movedTo: target?.name || null };
 }

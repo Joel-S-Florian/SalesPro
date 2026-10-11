@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, Edit2, Trash2, Tag } from 'lucide-react';
 import Modal from '../components/Modal';
@@ -59,15 +59,36 @@ export default function Categories() {
     }
   };
 
-  const handleDeleteCategory = async (id) => {
-    if (!confirm('¿Está seguro de eliminar esta categoría?')) return;
+  // Eliminación: sin productos es una confirmación simple; con productos se elige a dónde moverlos
+  const [deleting, setDeleting] = useState(null);
+  const [moveTo, setMoveTo] = useState('');
+  const [targets, setTargets] = useState([]);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
+  const openDelete = category => {
+    setDeleting(category);
+    setMoveTo('');
+  };
+
+  useEffect(() => {
+    if (!deleting || !deleting._count?.products) return;
+    api.categories
+      .list({ limit: 100 })
+      .then(list => setTargets((Array.isArray(list) ? list : []).filter(c => c.id !== deleting.id)))
+      .catch(() => setTargets([]));
+  }, [deleting]);
+
+  const confirmDelete = async () => {
     try {
-      await api.categories.delete(id);
-      notify.success('Categoría eliminada');
+      setDeletingBusy(true);
+      const result = await api.categories.delete(deleting.id, moveTo || undefined);
+      notify.success(result?.message || 'Categoría eliminada');
+      setDeleting(null);
       reload();
     } catch (err) {
       notify.error(err.message || 'Error al eliminar categoría');
+    } finally {
+      setDeletingBusy(false);
     }
   };
 
@@ -116,12 +137,13 @@ export default function Categories() {
                 <th className="px-6 py-4 w-12"></th>
                 <th className="px-6 py-4">Nombre de Categoría</th>
                 <th className="px-6 py-4">Descripción</th>
+                <th className="px-6 py-4 text-center">Productos</th>
                 <th className="px-6 py-4">Fecha de Creación</th>
                 <th className="px-6 py-4 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {loading && filteredCategories.length === 0 && <TableSkeleton rows={pageSize} columns={5} />}
+              {loading && filteredCategories.length === 0 && <TableSkeleton rows={pageSize} columns={6} />}
               {filteredCategories.map((c) => (
                 <tr key={c.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/25 transition-colors">
                   <td className="px-6 py-4 text-indigo-500">
@@ -131,6 +153,7 @@ export default function Categories() {
                     {c.name}
                   </td>
                   <td className="px-6 py-4 text-slate-500 max-w-xs truncate">{c.description || '-'}</td>
+                  <td className="px-6 py-4 text-center font-mono font-semibold">{c._count?.products ?? 0}</td>
                   <td className="px-6 py-4 text-slate-400 font-mono">
                     {new Date(c.createdAt).toLocaleDateString()}
                   </td>
@@ -144,7 +167,7 @@ export default function Categories() {
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button aria-label="Eliminar"
-                        onClick={() => handleDeleteCategory(c.id)}
+                        onClick={() => openDelete(c)}
                         className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
                         title="Eliminar"
                       >
@@ -156,7 +179,7 @@ export default function Categories() {
               ))}
               {!loading && filteredCategories.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-10 text-slate-400 font-mono">
+                  <td colSpan={6} className="text-center py-10 text-slate-400 font-mono">
                     {error || 'No se encontraron categorías comerciales.'}
                   </td>
                 </tr>
@@ -166,6 +189,49 @@ export default function Categories() {
         </div>
         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} noun="categorías" />
       </div>
+
+      {/* Eliminar categoría */}
+      <Modal isOpen={!!deleting} onClose={() => setDeleting(null)} title="Eliminar categoría" maxWidth="sm">
+        {deleting && (
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              Se eliminará la categoría <strong>{deleting.name}</strong>.
+            </p>
+            {deleting._count?.products > 0 && (
+              <div className="space-y-1.5">
+                <label htmlFor="cat-move" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Tiene {deleting._count.products} producto(s). Moverlos a: *
+                </label>
+                <select
+                  id="cat-move"
+                  value={moveTo}
+                  onChange={e => setMoveTo(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
+                >
+                  <option value="">{targets.length ? 'Seleccione una categoría…' : 'No hay otra categoría: cree una primero'}</option>
+                  {targets.map(c => (
+                    <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={() => setDeleting(null)} className="px-4 py-2 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium rounded-lg cursor-pointer">
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deletingBusy || (deleting._count?.products > 0 && !moveTo)}
+                className="bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-medium px-4 py-2 rounded-lg flex items-center gap-1.5 cursor-pointer"
+              >
+                {deletingBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                {deleting._count?.products > 0 ? 'Mover y eliminar' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Create / Edit Form modal */}
       <Modal
