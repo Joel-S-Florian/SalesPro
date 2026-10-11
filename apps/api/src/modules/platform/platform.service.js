@@ -1,7 +1,7 @@
 import { basePrisma } from '../../config/db.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { hashPassword } from '../../shared/utils/crypto.js';
-import { initializeNCFSequences } from '../../shared/utils/ncf.js';
+import { bootstrapCompany } from './bootstrap.js';
 
 /**
  * Operaciones de plataforma (super-admin). Usan `basePrisma` a propósito: ven todas las empresas.
@@ -15,6 +15,8 @@ const companySelect = {
   phone: true,
   address: true,
   active: true,
+  plan: true,
+  trialEndsAt: true,
   createdAt: true,
   _count: { select: { users: true, products: true, sales: true } },
 };
@@ -60,8 +62,9 @@ const clean = data =>
 /**
  * Crea una empresa con su primer administrador y sus secuencias NCF.
  */
-export async function createCompany({ admin, ...companyData }) {
+export async function createCompany({ admin, trialDays, ...companyData }) {
   const data = clean(companyData);
+  if (trialDays) data.trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
   await assertRncAvailable(data.rnc);
 
   const username = admin.username.toLowerCase();
@@ -85,13 +88,14 @@ export async function createCompany({ admin, ...companyData }) {
     return created;
   });
 
-  await initializeNCFSequences(company.id);
+  await bootstrapCompany(company.id);
   return getCompany(company.id);
 }
 
 export async function updateCompany(id, data) {
   await getCompany(id);
   const clean_ = clean(data);
+  if ('trialEndsAt' in clean_) clean_.trialEndsAt = clean_.trialEndsAt ? new Date(clean_.trialEndsAt) : null;
   await assertRncAvailable(clean_.rnc, id);
   await basePrisma.company.update({ where: { id }, data: clean_ });
 
@@ -111,12 +115,13 @@ export async function resetCompanyUserPassword(companyId, userId, newPassword) {
 }
 
 export async function getPlatformStats() {
-  const [companies, activeCompanies, users, sales, revenue] = await Promise.all([
+  const [companies, activeCompanies, users, sales, revenue, newLeads] = await Promise.all([
     basePrisma.company.count(),
     basePrisma.company.count({ where: { active: true } }),
     basePrisma.user.count({ where: { companyId: { not: null } } }),
     basePrisma.sale.count(),
     basePrisma.sale.aggregate({ _sum: { total: true } }),
+    basePrisma.lead.count({ where: { status: 'NEW' } }),
   ]);
-  return { companies, activeCompanies, users, sales, salesVolume: revenue._sum.total || 0 };
+  return { companies, activeCompanies, users, sales, salesVolume: revenue._sum.total || 0, newLeads };
 }

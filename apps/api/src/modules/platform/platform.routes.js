@@ -1,10 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
 import * as platformService from './platform.service.js';
+import * as leadsService from '../leads/leads.service.js';
+import { getPlatformAnalytics } from './analytics.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { auditLog } from '../../shared/middleware/audit.js';
+import { auditLog, createAuditLog } from '../../shared/middleware/audit.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 
 const router = express.Router();
@@ -18,10 +20,13 @@ const companyFields = {
   address: optionalText(250),
 };
 const idParams = z.object({ id: z.string().min(1).max(64) });
+const planEnum = z.enum(['STARTER', 'BUSINESS', 'PRO', 'ENTERPRISE']);
 
 const createSchema = {
   body: z.object({
     ...companyFields,
+    plan: planEnum.optional(),
+    trialDays: z.number().int().min(0).max(365).optional(),
     admin: z.object({
       fullName: z.string().trim().min(1, 'Nombre del administrador requerido').max(120),
       username: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9._-]+$/, 'Solo letras, números, punto, guion y guion bajo'),
@@ -32,7 +37,7 @@ const createSchema = {
 const updateSchema = {
   params: idParams,
   body: z
-    .object({ ...companyFields, active: z.boolean() })
+    .object({ ...companyFields, active: z.boolean(), plan: planEnum, trialEndsAt: z.string().datetime().nullable() })
     .partial()
     .refine(data => Object.keys(data).length > 0, 'Al menos un campo es requerido'),
 };
@@ -43,6 +48,59 @@ const resetSchema = {
 
 // Solo el equipo de la plataforma
 router.use(authenticate, authorize('SUPERADMIN'));
+
+const leadListSchema = {
+  query: z.object({
+    status: z.enum(['NEW', 'APPROVED', 'REJECTED']).optional(),
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(10),
+  }),
+};
+const leadApproveSchema = {
+  params: idParams,
+  body: z.object({ plan: planEnum.default('STARTER'), trialDays: z.number().int().min(0).max(365).default(14) }),
+};
+
+router.get(
+  '/leads',
+  validate(leadListSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await leadsService.listLeads(req.query));
+  })
+);
+
+router.post(
+  '/leads/:id/approve',
+  validate(leadApproveSchema),
+  // La respuesta lleva una contraseña temporal: no se guarda en la auditoría (solo la acción y el id)
+  asyncHandler(async (req, res) => {
+    const result = await leadsService.approveLead(req.params.id, req.body);
+    await createAuditLog({
+      userId: req.user.userId,
+      action: 'APPROVE_LEAD',
+      entity: 'lead',
+      entityId: req.params.id,
+      newData: { companyId: result.company.id, plan: req.body.plan, trialDays: req.body.trialDays },
+    });
+    res.status(201).json(result);
+  })
+);
+
+router.post(
+  '/leads/:id/reject',
+  validate({ params: idParams }),
+  auditLog('REJECT_LEAD', 'lead'),
+  asyncHandler(async (req, res) => {
+    res.json(await leadsService.rejectLead(req.params.id));
+  })
+);
+
+router.get(
+  '/analytics',
+  asyncHandler(async (req, res) => {
+    res.json(await getPlatformAnalytics());
+  })
+);
 
 router.get(
   '/stats',

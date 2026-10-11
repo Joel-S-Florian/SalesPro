@@ -57,6 +57,29 @@ Menú **Empresas** (solo `SUPERADMIN`, `/api/platform`):
 El usuario `superadmin` lo crea `prisma/seed.js` (contraseña de desarrollo `superadmin`; **cámbiela** en cualquier
 entorno real, con `/api/auth/password` o creando otro con un script y desactivando este).
 
+## Alta de empresas (embudo SaaS)
+
+### Registro autónomo (camino principal)
+1. En la página de promoción, **Empezar gratis** (o la dirección `…/?registro=1` del sistema) abre el asistente de registro:
+   **plan** → **cuenta** (nombre, correo, contraseña) → **negocio** (nombre comercial, tipo, RNC, teléfono, dirección) →
+   **configuración** (ITBIS, métodos de pago, formato de factura, nombre de la primera caja) → **confirmar**.
+2. `POST /api/public/signup` (sin sesión; 10 por hora por IP; campo trampa) crea en una transacción la empresa (plan `FREE`), su
+   administrador (**el correo es su usuario**), su configuración y su primera caja; luego `bootstrapCompany` agrega secuencias de
+   comprobantes, el cliente "Consumidor Final" y la categoría "General". Responde con la sesión iniciada: el usuario entra
+   directo al sistema, ya configurado y listo para vender.
+3. Hoy solo se puede contratar el plan **Gratis**; los de pago aparecen como "Próximamente" y el API los rechaza. No hay
+   verificación de correo (falta un servicio de envío).
+
+### Contacto y aprobación manual (planes a medida)
+1. **Página de promoción** (`apps/landing`): el formulario de contacto hace `POST /api/public/leads` (sin sesión; 5 por hora por IP, campo trampa
+   anti-bots). Si el API no responde, abre un correo con los datos como respaldo.
+2. **Solicitudes** (menú del super-admin, con insignia de pendientes): se revisan, se **aprueban** (plan y días de prueba) o se
+   rechazan. Aprobar crea la empresa, su primer administrador y una contraseña temporal que se muestra **una sola vez**; queda
+   registrado en la auditoría (sin la contraseña).
+3. **Prueba gratuita:** `Company.plan` (`STARTER`/`BUSINESS`/`PRO`/`ENTERPRISE`) y `Company.trialEndsAt`. Los usuarios de la empresa
+   ven un aviso con los días restantes; el super-admin edita plan y fecha desde la ficha de la empresa.
+4. **Aún no se aplica:** los límites de ventas por plan, el cobro y el bloqueo al vencer la prueba (ver pendientes).
+
 ## Migración de datos existentes
 
 La migración `20261008190000_multi_tenant` crea la empresa inicial `cmp_default` (nombre tomado de la
@@ -75,8 +98,8 @@ suspensión. Al terminar elimina las empresas de prueba.
 
 ## Pendiente (siguientes fases del roadmap SaaS)
 
-- Planes y suscripciones, pasarela de pago, periodo de prueba.
-- Registro/onboarding autónomo de empresas.
+- Pasarela de pago, facturación recurrente, límites por plan y bloqueo al vencer la prueba.
+- Verificación del correo, recuperación de contraseña y correos transaccionales (bienvenida, avisos de prueba).
 - Row-Level Security en PostgreSQL como segunda barrera, y cifrado de secretos por empresa.
 - Límites de uso por plan, métricas (MRR, churn) y limitación de tasa por empresa.
 - DGII / e-CF por empresa (certificado, secuencias y configuración propias).

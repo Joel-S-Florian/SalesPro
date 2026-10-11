@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
 import Modal from '../components/Modal';
+import PlatformInsights from '../components/PlatformInsights';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { useClientPage } from '../hooks/usePagedList';
@@ -29,6 +30,16 @@ const money = value =>
 /**
  * Panel de plataforma (solo SUPERADMIN): alta, suspensión y consulta de empresas.
  */
+const PLAN_LABELS = { FREE: 'Gratis', STARTER: 'Starter', BUSINESS: 'Business', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+
+/** "Prueba: 9 días" / "Prueba vencida" / "Sin prueba". */
+function trialLabel(trialEndsAt) {
+  if (!trialEndsAt) return 'Sin prueba';
+  const days = Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+  if (days <= 0) return 'Prueba vencida';
+  return `Prueba: ${days} ${days === 1 ? 'día' : 'días'}`;
+}
+
 export default function Companies() {
   const [stats, setStats] = useState(null);
   const [companies, setCompanies] = useState([]);
@@ -125,6 +136,8 @@ export default function Companies() {
       email: detail.email || '',
       phone: detail.phone || '',
       address: detail.address || '',
+      plan: detail.plan || 'STARTER',
+      trialEndsAt: detail.trialEndsAt ? detail.trialEndsAt.slice(0, 10) : '',
     });
   };
 
@@ -133,7 +146,11 @@ export default function Companies() {
     try {
       setEditSaving(true);
       setEditError('');
-      const updated = await api.platform.updateCompany(detail.id, editForm);
+      const { trialEndsAt, ...rest } = editForm;
+      const updated = await api.platform.updateCompany(detail.id, {
+        ...rest,
+        trialEndsAt: trialEndsAt ? new Date(`${trialEndsAt}T23:59:59`).toISOString() : null,
+      });
       setDetail(updated);
       setEditForm(null);
       notify.success('Datos de la empresa actualizados');
@@ -193,6 +210,8 @@ export default function Companies() {
         ))}
       </div>
 
+      <PlatformInsights />
+
       <div className={`${cardClass} p-4 flex flex-col md:flex-row md:items-center justify-between gap-4`}>
         <div>
           <h3 className="font-semibold text-slate-800 dark:text-slate-100">Empresas</h3>
@@ -230,6 +249,7 @@ export default function Companies() {
           <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 uppercase tracking-wider">
             <tr>
               <th className="px-4 py-3">Empresa</th>
+              <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">RNC</th>
               <th className="px-4 py-3 text-center">Usuarios</th>
               <th className="px-4 py-3 text-center">Productos</th>
@@ -239,9 +259,9 @@ export default function Companies() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-            {loading && <TableSkeleton rows={pager.pageSize} columns={7} />}
+            {loading && <TableSkeleton rows={pager.pageSize} columns={8} />}
             {!loading && companies.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">No hay empresas.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">No hay empresas.</td></tr>
             )}
             {!loading &&
               pager.rows.map(c => (
@@ -249,6 +269,10 @@ export default function Companies() {
                   <td className="px-4 py-3 font-medium">
                     {c.name}
                     {!c.active && <span className="ml-2 text-[10px] font-semibold text-rose-500">SUSPENDIDA</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="font-medium">{PLAN_LABELS[c.plan] || c.plan}</span>
+                    <span className="block text-xs text-slate-500">{trialLabel(c.trialEndsAt)}</span>
                   </td>
                   <td className="px-4 py-3 font-mono">{c.rnc || '—'}</td>
                   <td className="px-4 py-3 text-center font-mono">{c._count.users}</td>
@@ -313,17 +337,34 @@ export default function Companies() {
                     ['phone', 'Teléfono', false, ''],
                     ['email', 'Email', false, 'md:col-span-2'],
                     ['address', 'Dirección', false, 'md:col-span-2'],
+                    ['plan', 'Plan', false, ''],
+                    ['trialEndsAt', 'La prueba termina el', false, ''],
                   ].map(([key, label, required, span]) => (
                     <div key={key} className={`space-y-1.5 ${span}`}>
                       <label htmlFor={`edit-${key}`} className={labelClass}>{label}</label>
-                      <input
-                        id={`edit-${key}`}
-                        required={required}
-                        type={key === 'email' ? 'email' : 'text'}
-                        value={editForm[key]}
-                        onChange={e => setEditForm({ ...editForm, [key]: e.target.value })}
-                        className={inputClass}
-                      />
+                      {key === 'plan' ? (
+                        <select
+                          id={`edit-${key}`}
+                          value={editForm.plan}
+                          onChange={e => setEditForm({ ...editForm, plan: e.target.value })}
+                          className={inputClass}
+                        >
+                          {Object.entries(PLAN_LABELS).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          id={`edit-${key}`}
+                          required={required}
+                          type={key === 'email' ? 'email' : key === 'trialEndsAt' ? 'date' : 'text'}
+                          value={editForm[key]}
+                          onChange={e => setEditForm({ ...editForm, [key]: e.target.value })}
+                          className={inputClass}
+                        />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -339,6 +380,7 @@ export default function Companies() {
                   <p>RNC: <span className="font-mono">{detail.rnc || '—'}</span></p>
                   <p>Contacto: {[detail.phone, detail.email].filter(Boolean).join(' · ') || '—'}</p>
                   <p>Dirección: {detail.address || '—'}</p>
+                  <p>Plan: {PLAN_LABELS[detail.plan] || detail.plan} · {trialLabel(detail.trialEndsAt)}</p>
                   <p>Estado: <strong className={detail.active ? 'text-emerald-600' : 'text-rose-500'}>{detail.active ? 'Activa' : 'Suspendida'}</strong></p>
                 </div>
                 <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-indigo-600 cursor-pointer">

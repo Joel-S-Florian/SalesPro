@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  ::selection {
+    background: rgba(79, 70, 229, 0.25);
+  }
+
+  button,
+  a,
+  summary {
+    transition: color 140ms var(--ease-out), background-color 140ms var(--ease-out), border-color 140ms var(--ease-out),
+      transform 140ms var(--ease-out), box-shadow 140ms var(--ease-out), opacity 140ms var(--ease-out);
+  }
+
+  button:not(:disabled):active,
+  a.press:active {
+    transform: scale(0.97);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-12 items-center justify-center gap-2 rounded-xl px-6 text-[15px] font-semibold cursor-pointer;
+  }
+  .btn-primary {
+    @apply bg-brand text-white shadow-[0_8px_20px_-8px_rgba(79,70,229,0.8)] hover:bg-brand-dark;
+  }
+  .btn-ghost {
+    @apply border border-ink/15 bg-white/70 text-ink hover:border-ink/30 hover:bg-white;
+  }
+  .btn-ghost-dark {
+    @apply border border-white/20 text-white hover:border-white/40 hover:bg-white/5;
+  }
+  .eyebrow {
+    @apply text-sm font-medium text-brand;
+  }
+  .container-x {
+    @apply mx-auto w-full max-w-6xl px-5 sm:px-8;
+  }
+}
+
+/* Borde dentado inferior del ticket */
+.receipt-edge {
+  --tooth: 10px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--tooth) 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / var(--tooth) 100%;
+}
+
+@keyframes beam {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  button:not(:disabled):active,
+  a.press:active {
+    transform: none;
+  }
+}
