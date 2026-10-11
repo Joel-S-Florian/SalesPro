@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, BadgeCheck, CircleAlert, Copy, FileKey2, Loader2, PlugZap, Plus, Power, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, BadgeCheck, CircleAlert, Copy, Eye, EyeOff, FileKey2, KeyRound, Loader2, PlugZap, Plus, Power, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
 import { api } from '../../services/api';
 import Modal from '../Modal';
 import { Skeleton } from '../Skeleton';
@@ -108,12 +109,154 @@ function FiscalData({ config, onSaved }) {
 
 /* ------------------------------- 2. Certificado -------------------------------- */
 
+const fileSize = bytes => (bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`);
+const CERT_PROVIDERS = ['Avansi', 'DigiFirma', 'Cámara de Comercio'];
+
+/** Zona para soltar o elegir el .p12/.pfx: muestra el archivo elegido y deja quitarlo. */
+function CertificateDropzone({ file, onFile, disabled }) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef(null);
+  const accept = selected => {
+    if (!selected) return;
+    if (!/\.(p12|pfx)$/i.test(selected.name)) return notify.warning('El certificado debe ser un archivo .p12 o .pfx');
+    if (selected.size > 100 * 1024) return notify.warning('El archivo es demasiado grande para ser un certificado (máx. 100 KB)');
+    onFile(selected);
+  };
+
+  return (
+    <div>
+      <input
+        id="ecf-cert-file"
+        ref={inputRef}
+        type="file"
+        accept=".p12,.pfx,application/x-pkcs12"
+        className="sr-only"
+        disabled={disabled}
+        onChange={event => accept(event.target.files?.[0])}
+      />
+      <AnimatePresence mode="wait" initial={false}>
+        {file ? (
+          <motion.div
+            key="chosen"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              <FileKey2 className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{file.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{fileSize(file.size)} · listo para guardar</p>
+            </div>
+            <button type="button" onClick={() => onFile(null)} disabled={disabled} aria-label="Quitar el archivo" className="rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-rose-500 dark:hover:bg-slate-800 cursor-pointer">
+              <X className="h-4 w-4" />
+            </button>
+          </motion.div>
+        ) : (
+          <motion.label
+            key="empty"
+            htmlFor="ecf-cert-file"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onDragOver={event => { event.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={event => { event.preventDefault(); setDragging(false); accept(event.dataTransfer.files?.[0]); }}
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+              dragging
+                ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30'
+                : 'border-slate-300 hover:border-indigo-400 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/40'
+            }`}
+          >
+            <span className={`flex h-11 w-11 items-center justify-center rounded-full transition-transform ${dragging ? 'scale-110 bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>
+              <Upload className="h-5 w-5" aria-hidden="true" />
+            </span>
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Arrastre su certificado aquí o <span className="text-indigo-600 underline underline-offset-2 dark:text-indigo-400">elija el archivo</span>
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Formato .p12 o .pfx</span>
+          </motion.label>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Estado del certificado cargado: vigencia con barra de tiempo, titular y coincidencia con el RNC. */
+function CertificateSummary({ cert }) {
+  const start = cert.notBefore ? new Date(cert.notBefore).getTime() : null;
+  const end = cert.notAfter ? new Date(cert.notAfter).getTime() : null;
+  const progress = start && end && end > start ? Math.min(100, Math.max(0, ((Date.now() - start) / (end - start)) * 100)) : 0;
+  const expired = cert.daysLeft !== null && cert.daysLeft < 0;
+  const soon = cert.daysLeft !== null && cert.daysLeft >= 0 && cert.daysLeft < 30;
+  const tone = expired ? 'rose' : soon ? 'amber' : 'emerald';
+  const chip = {
+    rose: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+    amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  }[tone];
+  const bar = { rose: 'bg-rose-500', amber: 'bg-amber-500', emerald: 'bg-emerald-500' }[tone];
+  const rows = [
+    ['Titular', cert.subject],
+    ['Emitido por', cert.issuer],
+    ['Huella (SHA-256)', cert.fingerprint, true],
+  ];
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+      <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-4 py-3 dark:bg-slate-800/40">
+        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-300">
+          <FileKey2 className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">Certificado instalado</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Guardado cifrado en el servidor</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${chip}`}>
+          {expired ? 'Vencido' : soon ? `Vence en ${cert.daysLeft} d` : 'Vigente'}
+        </span>
+        {cert.rncMatch !== null && cert.rncMatch !== undefined && (
+          <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${cert.rncMatch ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'}`}>
+            {cert.rncMatch ? 'RNC coincide' : 'RNC no coincide'}
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-4 px-4 py-4">
+        <div>
+          <div className="mb-1.5 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>{dateOnly(cert.notBefore)}</span>
+            <span className="font-medium text-slate-600 dark:text-slate-300">{cert.daysLeft !== null && cert.daysLeft >= 0 ? `Quedan ${cert.daysLeft} días` : 'Fuera de vigencia'}</span>
+            <span>{dateOnly(cert.notAfter)}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Tiempo transcurrido de la vigencia">
+            <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }} className={`h-full rounded-full ${bar}`} />
+          </div>
+        </div>
+        <dl className="grid gap-x-6 gap-y-3 text-xs md:grid-cols-2">
+          {rows.map(([label, value, mono]) => (
+            <div key={label} className={mono ? 'md:col-span-2' : ''}>
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{label}</dt>
+              <dd className={`mt-0.5 break-all ${mono ? 'font-mono text-[11px] text-slate-500' : 'font-medium text-slate-700 dark:text-slate-200'}`}>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </div>
+  );
+}
+
 function Certificate({ config, onSaved }) {
   const cert = config.certificate;
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const readBase64 = selected =>
     new Promise((resolve, reject) => {
@@ -164,34 +307,55 @@ function Certificate({ config, onSaved }) {
 
       {cert.loaded ? (
         <div className="space-y-3">
-          <div className="flex items-start gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-            <FileKey2 className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" aria-hidden="true" />
-            <dl className="min-w-0 flex-1 space-y-1 text-xs">
-              <div className="flex flex-wrap gap-x-2"><dt className="text-slate-400">Titular</dt><dd className="break-all font-medium text-slate-700 dark:text-slate-200">{cert.subject}</dd></div>
-              <div className="flex flex-wrap gap-x-2"><dt className="text-slate-400">Emitido por</dt><dd className="break-all text-slate-600 dark:text-slate-300">{cert.issuer}</dd></div>
-              <div className="flex flex-wrap gap-x-2"><dt className="text-slate-400">Vigencia</dt><dd className="text-slate-600 dark:text-slate-300">{dateOnly(cert.notBefore)} al {dateOnly(cert.notAfter)}</dd></div>
-              <div className="flex flex-wrap gap-x-2"><dt className="text-slate-400">Huella</dt><dd className="break-all font-mono text-[11px] text-slate-500">{cert.fingerprint}</dd></div>
-            </dl>
-          </div>
+          <CertificateSummary cert={cert} />
           {cert.daysLeft !== null && cert.daysLeft < 0 && <Notice tone="red">El certificado está vencido. Cargue uno vigente.</Notice>}
           {cert.daysLeft !== null && cert.daysLeft >= 0 && cert.daysLeft < 30 && <Notice>El certificado vence en {cert.daysLeft} {cert.daysLeft === 1 ? 'día' : 'días'}. Renuévelo con tiempo.</Notice>}
           {cert.rncMatch === false && <Notice>El titular del certificado no parece corresponder al RNC de la empresa; la DGII lo rechazará en producción.</Notice>}
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setConfirmRemove(true)} className={`${secondaryButtonClass} inline-flex items-center gap-2 text-rose-600`}>
-              <Trash2 className="h-4 w-4" /> Eliminar certificado
+              <Trash2 className="h-4 w-4" /> Reemplazar o eliminar certificado
             </button>
           </div>
         </div>
       ) : (
-        <form onSubmit={upload} className="grid gap-4 md:grid-cols-2">
-          <Field id="ecf-cert-file" label="Archivo del certificado (.p12 o .pfx)" hint="Lo entrega la entidad certificadora (por ejemplo Avansi, DigiFirma o Cámara de Comercio).">
-            <input id="ecf-cert-file" type="file" accept=".p12,.pfx,application/x-pkcs12" onChange={event => setFile(event.target.files?.[0] || null)} className={`${inputClass} py-1.5`} />
-          </Field>
-          <Field id="ecf-cert-pass" label="Contraseña del certificado">
-            <input id="ecf-cert-pass" type="password" autoComplete="off" value={password} onChange={event => setPassword(event.target.value)} className={inputClass} />
-          </Field>
-          <div className="flex items-center justify-between gap-3 md:col-span-2">
-            <p className="flex items-center gap-1.5 text-xs text-slate-500"><ShieldCheck className="h-4 w-4 text-emerald-500" aria-hidden="true" /> Se guarda cifrado en el servidor; la llave privada nunca vuelve al navegador.</p>
+        <form onSubmit={upload} className="space-y-5">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            El certificado digital identifica a su empresa ante la DGII y firma cada comprobante. Se obtiene con una entidad certificadora autorizada
+            ({CERT_PROVIDERS.join(', ')}…) y llega como un archivo <strong>.p12</strong> o <strong>.pfx</strong> con su contraseña.
+          </p>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <span className="block text-[13px] font-medium text-slate-700 dark:text-slate-200">1. Archivo del certificado</span>
+              <CertificateDropzone file={file} onFile={setFile} disabled={busy} />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="ecf-cert-pass" className="block text-[13px] font-medium text-slate-700 dark:text-slate-200">2. Contraseña del certificado</label>
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                <input
+                  id="ecf-cert-pass"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="off"
+                  value={password}
+                  onChange={event => setPassword(event.target.value)}
+                  placeholder="La que le dio la entidad certificadora"
+                  className={`${inputClass} pl-9 pr-10`}
+                />
+                <button type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-400 hover:text-slate-600 cursor-pointer">
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400">La contraseña se usa solo para abrir el archivo y se guarda cifrada.</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800/40">
+            <p className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" aria-hidden="true" />
+              Se guarda cifrado (AES-256) en el servidor; la llave privada nunca vuelve al navegador.
+            </p>
             <button type="submit" disabled={busy || !file || !password || !config.encryptionReady} className={`${primaryButtonClass} inline-flex items-center gap-2`}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Guardar certificado
             </button>
