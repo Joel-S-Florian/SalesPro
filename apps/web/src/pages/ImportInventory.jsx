@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const inputClass =
   'w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 outline-none text-xs';
@@ -154,7 +155,7 @@ export default function ImportInventory() {
   const renderMappingField = field => (
     <div key={field.key} className="space-y-1.5">
       <label htmlFor={`map-${field.key}`} className={labelClass}>{field.label}</label>
-      <select
+      <SmartSelect
         id={`map-${field.key}`}
         value={mapping[field.key] || ''}
         onChange={e => setMapping({ ...mapping, [field.key]: e.target.value })}
@@ -164,7 +165,7 @@ export default function ImportInventory() {
         {staged.columns.map(column => (
           <option key={column} value={column}>{column}</option>
         ))}
-      </select>
+      </SmartSelect>
     </div>
   );
 
@@ -231,17 +232,17 @@ export default function ImportInventory() {
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="imp-category" className={labelClass}>Categoría por defecto</label>
-                <select id="imp-category" value={defaultCategoryId} onChange={e => setDefaultCategoryId(e.target.value)} className={inputClass}>
+                <SmartSelect id="imp-category" value={defaultCategoryId} onChange={e => setDefaultCategoryId(e.target.value)} className={inputClass}>
                   <option value="">{mapping.category ? '— Usar la del archivo —' : 'Seleccione...'}</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                </SmartSelect>
               </div>
               <div className="space-y-1.5">
                 <label htmlFor="imp-supplier" className={labelClass}>Proveedor</label>
-                <select id="imp-supplier" value={supplierId} onChange={e => setSupplierId(e.target.value)} className={inputClass}>
+                <SmartSelect id="imp-supplier" value={supplierId} onChange={e => setSupplierId(e.target.value)} className={inputClass}>
                   <option value="">— Sin proveedor —</option>
                   {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                </SmartSelect>
               </div>
             </div>
             <label className="flex items-center gap-2 text-xs cursor-pointer">

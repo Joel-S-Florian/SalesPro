@@ -6,6 +6,7 @@ import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
 
 export default function Categories() {
   // Search filter
@@ -202,7 +203,7 @@ export default function Categories() {
                 <label htmlFor="cat-move" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Tiene {deleting._count.products} producto(s). Moverlos a: *
                 </label>
-                <select
+                <SmartSelect
                   id="cat-move"
                   value={moveTo}
                   onChange={e => setMoveTo(e.target.value)}
@@ -212,7 +213,7 @@ export default function Categories() {
                   {targets.map(c => (
                     <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
                   ))}
-                </select>
+                </SmartSelect>
               </div>
             )}
             <div className="flex justify-end gap-3">

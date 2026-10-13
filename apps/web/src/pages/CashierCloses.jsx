@@ -6,6 +6,7 @@ import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { printZReport } from '../utils/zReportPdf';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const money = value =>
   `$${Number(value || 0).toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -51,7 +52,7 @@ export default function CashierCloses() {
           <p className="text-xs text-slate-400">Turnos abiertos y cerrados por caja, con diferencias de efectivo.</p>
         </div>
         <div className="flex gap-2">
-          <select
+          <SmartSelect
             value={terminalId}
             onChange={e => setTerminalId(e.target.value)}
             aria-label="Filtrar por caja"
@@ -61,8 +62,8 @@ export default function CashierCloses() {
             {terminals.map(t => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
-          </select>
-          <select
+          </SmartSelect>
+          <SmartSelect
             value={status}
             onChange={e => setStatus(e.target.value)}
             aria-label="Filtrar por estado"
@@ -71,7 +72,7 @@ export default function CashierCloses() {
             <option value="">Todos</option>
             <option value="OPEN">Abiertos</option>
             <option value="CLOSED">Cerrados</option>
-          </select>
+          </SmartSelect>
         </div>
       </div>
 

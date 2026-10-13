@@ -7,6 +7,7 @@ import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
 
 export default function Customers() {
   // Search filter
@@ -283,7 +284,7 @@ export default function Customers() {
               <label htmlFor="form-doctype" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Tipo de Documento *
               </label>
-              <select
+              <SmartSelect
                 id="form-doctype"
                 value={docType}
                 onChange={(e) => {
@@ -296,7 +297,7 @@ export default function Customers() {
               >
                 <option value={DocumentType.CEDULA} className="dark:bg-slate-950">Cédula</option>
                 <option value={DocumentType.RNC} className="dark:bg-slate-950">RNC (Empresa)</option>
-              </select>
+              </SmartSelect>
             </div>
 
             <div className="space-y-1.5">

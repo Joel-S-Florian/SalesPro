@@ -10,6 +10,7 @@ import { usePagedList } from '../hooks/usePagedList';
 import { dateTime, money } from '../utils/format';
 import { notify } from '../utils/notify';
 import { Kpi } from './reports/shared';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const TABS = [
   { id: 'SENT', label: 'Emitidos', icon: Receipt },
@@ -55,10 +56,10 @@ function IssuedTab() {
     <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-4 dark:border-slate-800">
         <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Comprobantes emitidos</h3>
-        <select aria-label="Filtrar por estado" value={status} onChange={e => setStatus(e.target.value)} className={selectClass}>
+        <SmartSelect aria-label="Filtrar por estado" value={status} onChange={e => setStatus(e.target.value)} className={selectClass}>
           <option value="">Todos los estados</option>
           {Object.entries(ECF_STATUS).map(([value, info]) => <option key={value} value={value}>{info.label}</option>)}
-        </select>
+        </SmartSelect>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">

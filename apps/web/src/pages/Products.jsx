@@ -9,6 +9,7 @@ import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
 import { useConfigStore } from '../stores/configStore';
 import ExpiryBadge from '../components/inventory/ExpiryBadge';
+import SmartSelect from '../components/ui/SmartSelect';
 
 export default function Products() {
   const [categories, setCategories] = useState([]);
@@ -243,7 +244,7 @@ export default function Products() {
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <Filter className="w-3.5 h-3.5" />
             <span>Categoría:</span>
-            <select
+            <SmartSelect
               value={selectedCatId}
               onChange={(e) => setSelectedCatId(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -252,13 +253,13 @@ export default function Products() {
               {categories.map(c => (
                 <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
               ))}
-            </select>
+            </SmartSelect>
           </div>
 
           {/* Stock Filter */}
           <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <span>Stock:</span>
-            <select
+            <SmartSelect
               value={selectedStockStatus}
               onChange={(e) => setSelectedStockStatus(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-2.5 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -267,7 +268,7 @@ export default function Products() {
               <option value="OK">Suficiente</option>
               <option value="LOW">Stock Mínimo</option>
               <option value="OUT">Agotado</option>
-            </select>
+            </SmartSelect>
           </div>
         </div>
       </div>
@@ -457,7 +458,7 @@ export default function Products() {
                   <p className="text-[10px] text-slate-400">La categoría no se puede modificar después de crear el producto.</p>
                 </>
               ) : (
-                <select
+                <SmartSelect
                   id="prod-cat"
                   value={categoryId}
                   onChange={(e) => setCategoryId(e.target.value)}
@@ -466,7 +467,7 @@ export default function Products() {
                   {categories.map(c => (
                     <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
                   ))}
-                </select>
+                </SmartSelect>
               )}
             </div>
 
@@ -474,7 +475,7 @@ export default function Products() {
               <label htmlFor="prod-active" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Estado Comercial
               </label>
-              <select
+              <SmartSelect
                 id="prod-active"
                 value={active ? 'true' : 'false'}
                 onChange={(e) => setActive(e.target.value === 'true')}
@@ -482,14 +483,14 @@ export default function Products() {
               >
                 <option value="true" className="dark:bg-slate-950">Activo (Habilitado en POS)</option>
                 <option value="false" className="dark:bg-slate-950">Inactivo (Oculto en POS)</option>
-              </select>
+              </SmartSelect>
             </div>
 
             <div className="space-y-1.5">
               <label htmlFor="prod-unit" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Se vende por
               </label>
-              <select
+              <SmartSelect
                 id="prod-unit"
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
@@ -498,7 +499,7 @@ export default function Products() {
                 {Object.entries(UNITS).map(([code, info]) => (
                   <option key={code} value={code} className="dark:bg-slate-950">{info.label}{info.fractional ? ' (a granel, con decimales)' : ''}</option>
                 ))}
-              </select>
+              </SmartSelect>
               <p className="text-[10px] text-slate-400">
                 {isFractional(unit) ? `Precio, costo y stock son por ${unitInfo(unit).label.toLowerCase()}; el cajero escribe el peso o el monto.` : 'Cuenta unidades enteras (leche, refresco, etc.).'}
               </p>

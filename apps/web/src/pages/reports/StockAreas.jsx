@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import Modal from '../../components/Modal';
 import { dateTime, money } from '../../utils/format';
 import { BarList, Callout, Kpi, Panel, ReportState, ReportTable, TrendChart, num, periodLabel, useReport } from './shared';
+import SmartSelect from '../../components/ui/SmartSelect';
 
 const selectClass =
   'h-9 rounded-lg border border-slate-200 bg-transparent px-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:text-slate-300';
@@ -133,9 +134,9 @@ export function InventoryArea({ range }) {
                 title="Productos sin movimiento"
                 subtitle="Con existencia y sin ventas en el plazo elegido: dinero parado en estantería"
                 actions={
-                  <select aria-label="Días sin venta" value={deadDays} onChange={e => setDeadDays(Number(e.target.value))} className={selectClass}>
+                  <SmartSelect aria-label="Días sin venta" value={deadDays} onChange={e => setDeadDays(Number(e.target.value))} className={selectClass}>
                     {[30, 60, 90, 180].map(d => <option key={d} value={d}>{d} días sin vender</option>)}
-                  </select>
+                  </SmartSelect>
                 }
               >
                 <ReportTable columns={deadColumns} rows={data.dead} empty="Todo lo que tienes en existencia se ha vendido" rowKey={r => r.id} />

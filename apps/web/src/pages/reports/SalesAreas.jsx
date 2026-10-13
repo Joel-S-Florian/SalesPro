@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { money } from '../../utils/format';
 import { ECF_STATUS } from '../../components/ecf/EcfStatusBadge';
 import { BarList, Callout, Heatmap, Kpi, Panel, PAYMENT_LABELS, ReportState, ReportTable, TrendChart, WEEKDAYS, num, pctText, periodLabel, useReport } from './shared';
+import SmartSelect from '../../components/ui/SmartSelect';
 
 const GROUPS = [
   ['', 'Automático'],
@@ -101,9 +102,9 @@ export function SalesArea({ range }) {
           <>
             <div className="flex items-center gap-2">
               <label htmlFor="sales-group" className="text-xs font-semibold text-slate-600 dark:text-slate-400">Agrupar</label>
-              <select id="sales-group" value={groupBy} onChange={e => setGroupBy(e.target.value)} className={selectClass}>
+              <SmartSelect id="sales-group" value={groupBy} onChange={e => setGroupBy(e.target.value)} className={selectClass}>
                 {GROUPS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
+              </SmartSelect>
             </div>
             <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
               <Kpi label="Total vendido" value={money(summary.total)} icon={Banknote} tone="indigo" />

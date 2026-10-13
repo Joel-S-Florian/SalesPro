@@ -6,6 +6,7 @@ import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
 
 export default function Users() {
   // Search filter
@@ -241,7 +242,7 @@ export default function Users() {
               <label htmlFor="usr-role" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Rol Funcional *
               </label>
-              <select
+              <SmartSelect
                 id="usr-role"
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
@@ -249,14 +250,14 @@ export default function Users() {
               >
                 <option value="VENDEDOR" className="dark:bg-slate-950">Vendedor POS</option>
                 <option value="ADMINISTRADOR" className="dark:bg-slate-950">Administrador</option>
-              </select>
+              </SmartSelect>
             </div>
 
             <div className="space-y-1.5">
               <label htmlFor="usr-active" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Acceso Habilitado *
               </label>
-              <select
+              <SmartSelect
                 id="usr-active"
                 value={active ? 'true' : 'false'}
                 onChange={(e) => setActive(e.target.value === 'true')}
@@ -264,7 +265,7 @@ export default function Users() {
               >
                 <option value="true" className="dark:bg-slate-950">Permitido (Activo)</option>
                 <option value="false" className="dark:bg-slate-950">Suspendido (Bloqueado)</option>
-              </select>
+              </SmartSelect>
             </div>
           </div>
 

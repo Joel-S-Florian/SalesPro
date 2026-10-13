@@ -9,6 +9,7 @@ import { BulkArea, ExpiryArea } from './reports/FoodAreas';
 import { useConfigStore } from '../stores/configStore';
 import LegacyReports from './reports/LegacyReports';
 import { PRESETS, presetRange, periodText } from './reports/shared';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const AREAS = [
   { id: 'OVERVIEW', label: 'Resumen', icon: LayoutDashboard, hint: 'Cómo va el negocio frente al período anterior' },
@@ -108,7 +109,7 @@ export default function Reports() {
 
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Período del reporte">
           <CalendarRange className="h-4 w-4 text-indigo-500" aria-hidden="true" />
-          <select
+          <SmartSelect
             aria-label="Período"
             value={preset}
             onChange={e => setView(v => ({ ...v, preset: e.target.value }))}
@@ -117,7 +118,7 @@ export default function Reports() {
             {PRESETS.map(p => (
               <option key={p.id} value={p.id} className="dark:bg-slate-950">{p.label}</option>
             ))}
-          </select>
+          </SmartSelect>
           {preset === 'custom' && (
             <>
               <input type="date" aria-label="Desde" value={custom.from} max={custom.to || undefined} onChange={e => setCustom(c => ({ ...c, from: e.target.value }))} className={dateInput} />

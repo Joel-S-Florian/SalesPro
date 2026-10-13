@@ -3,6 +3,7 @@ import { CircleCheck, Clock, Scale, TrendingDown, TrendingUp, UserMinus, UserPlu
 import { api } from '../../services/api';
 import { dateTime, money } from '../../utils/format';
 import { BarList, Callout, Kpi, Panel, ReportState, ReportTable, num, shortDate, useReport } from './shared';
+import SmartSelect from '../../components/ui/SmartSelect';
 
 const selectClass =
   'h-9 rounded-lg border border-slate-200 bg-transparent px-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:text-slate-300';
@@ -121,9 +122,9 @@ export function CustomersArea({ range }) {
               title="Clientes que dejaron de comprar"
               subtitle="Los de mayor gasto primero: buenos candidatos para una llamada o un mensaje"
               actions={
-                <select aria-label="Días sin comprar" value={inactiveDays} onChange={e => setInactiveDays(Number(e.target.value))} className={selectClass}>
+                <SmartSelect aria-label="Días sin comprar" value={inactiveDays} onChange={e => setInactiveDays(Number(e.target.value))} className={selectClass}>
                   {[30, 60, 90, 180].map(d => <option key={d} value={d}>{d} días sin comprar</option>)}
-                </select>
+                </SmartSelect>
               }
             >
               <ReportTable columns={inactiveColumns} rows={data.inactive} range={range} name="clientes_inactivos" empty="Todos tus clientes han comprado recientemente" rowKey={r => r.customerId} />

@@ -7,6 +7,7 @@ import { Skeleton } from '../Skeleton';
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from '../ui/form';
 import { dateTime } from '../../utils/format';
 import { notify } from '../../utils/notify';
+import SmartSelect from '../ui/SmartSelect';
 
 const MODES = [
   { id: 'OFF', label: 'Apagado', help: 'Solo comprobantes de papel (serie B). Es lo normal hasta que la DGII autorice a la empresa.' },
@@ -481,9 +482,9 @@ function Sequences({ types }) {
 
       <form onSubmit={add} className="mt-4 grid items-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800 md:grid-cols-5">
         <Field id="seq-type" label="Tipo">
-          <select id="seq-type" value={form.ecfType} onChange={event => setForm(prev => ({ ...prev, ecfType: event.target.value }))} className={inputClass}>
+          <SmartSelect id="seq-type" value={form.ecfType} onChange={event => setForm(prev => ({ ...prev, ecfType: event.target.value }))} className={inputClass}>
             {types.map(t => <option key={t.code} value={t.code}>{t.code} · {t.label}</option>)}
-          </select>
+          </SmartSelect>
         </Field>
         <Field id="seq-from" label="Desde"><input id="seq-from" type="number" min="1" value={form.rangeFrom} onChange={event => setForm(prev => ({ ...prev, rangeFrom: event.target.value }))} className={inputClass} required /></Field>
         <Field id="seq-to" label="Hasta"><input id="seq-to" type="number" min="1" value={form.rangeTo} onChange={event => setForm(prev => ({ ...prev, rangeTo: event.target.value }))} className={inputClass} required /></Field>

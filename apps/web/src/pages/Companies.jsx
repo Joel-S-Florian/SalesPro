@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { useClientPage } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 outline-none text-xs';
@@ -343,7 +344,7 @@ export default function Companies() {
                     <div key={key} className={`space-y-1.5 ${span}`}>
                       <label htmlFor={`edit-${key}`} className={labelClass}>{label}</label>
                       {key === 'plan' ? (
-                        <select
+                        <SmartSelect
                           id={`edit-${key}`}
                           value={editForm.plan}
                           onChange={e => setEditForm({ ...editForm, plan: e.target.value })}
@@ -354,7 +355,7 @@ export default function Companies() {
                               {label}
                             </option>
                           ))}
-                        </select>
+                        </SmartSelect>
                       ) : (
                         <input
                           id={`edit-${key}`}

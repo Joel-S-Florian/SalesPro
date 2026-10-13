@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react
 import { api } from '../../services/api';
 import { DocumentType, formatDocument, validateDocument } from '../../utils/documents';
 import { Field, inputClass } from '../ui/form';
+import SmartSelect from '../ui/SmartSelect';
 
 const STEPS = ['Plan', 'Tu cuenta', 'Tu negocio', 'Configuración', 'Confirmar'];
 
@@ -247,11 +248,11 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
                   </div>
                   {input('su-company', 'Nombre comercial', { required: true, autoComplete: 'organization', autoFocus: true }, v => setCompany({ ...company, name: v }), company.name)}
                   <Field id="su-type" label="Tipo de negocio">
-                    <select id="su-type" value={company.businessType} onChange={e => setCompany({ ...company, businessType: e.target.value })} className={inputClass}>
+                    <SmartSelect id="su-type" value={company.businessType} onChange={e => setCompany({ ...company, businessType: e.target.value })} className={inputClass}>
                       {BUSINESS_TYPES.map(type => (
                         <option key={type}>{type}</option>
                       ))}
-                    </select>
+                    </SmartSelect>
                   </Field>
                   <div className="grid gap-4 sm:grid-cols-2">
                     {input('su-rnc', 'RNC (opcional)', { inputMode: 'numeric', maxLength: 11, placeholder: '000-00000-0' }, v => setCompany({ ...company, rnc: formatDocument(DocumentType.RNC, v) }), company.rnc, { mono: true })}

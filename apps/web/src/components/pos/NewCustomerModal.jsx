@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { DocumentType, formatDocument, validateDocument } from '../../utils/documents';
 import { notify } from '../../utils/notify';
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from '../ui/form';
+import SmartSelect from '../ui/SmartSelect';
 
 const EMPTY = { docType: DocumentType.CEDULA, documentId: '', name: '', email: '', phone: '', address: '' };
 
@@ -55,7 +56,7 @@ export default function NewCustomerModal({ isOpen, onClose, onCreated }) {
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="nc-doctype" label="Tipo de documento">
-            <select
+            <SmartSelect
               id="nc-doctype"
               value={form.docType}
               onChange={e => setForm(prev => ({ ...prev, docType: e.target.value, documentId: formatDocument(e.target.value, prev.documentId) }))}
@@ -63,7 +64,7 @@ export default function NewCustomerModal({ isOpen, onClose, onCreated }) {
             >
               <option value={DocumentType.CEDULA}>Cédula</option>
               <option value={DocumentType.RNC}>RNC (empresa)</option>
-            </select>
+            </SmartSelect>
           </Field>
           <Field id="nc-doc" label="Número">
             <input

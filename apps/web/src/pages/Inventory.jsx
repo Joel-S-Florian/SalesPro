@@ -12,6 +12,7 @@ import { formatQty, isFractional, unitInfo } from '../utils/units';
 import BatchFields from '../components/inventory/BatchFields';
 import ExpiringBatches from '../components/inventory/ExpiringBatches';
 import ExpiryBadge from '../components/inventory/ExpiryBadge';
+import SmartSelect from '../components/ui/SmartSelect';
 
 export default function Inventory() {
   // Search & Filter state
@@ -259,7 +260,7 @@ export default function Inventory() {
           <div className="flex items-center gap-2 text-xs text-slate-500 w-full md:w-auto justify-end">
             <ListFilter className="w-3.5 h-3.5" />
             <span>Tipo Movimiento:</span>
-            <select
+            <SmartSelect
               value={logTypeFilter}
               onChange={(e) => setLogTypeFilter(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-2 py-1 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -267,7 +268,7 @@ export default function Inventory() {
               <option value="ALL">Todos</option>
               <option value="Entrada">Entradas (Reabastecimientos)</option>
               <option value="Salida">Salidas (Ventas / Mermas)</option>
-            </select>
+            </SmartSelect>
           </div>
         )}
       </div>
@@ -429,7 +430,7 @@ export default function Inventory() {
               <label htmlFor="adjust-type" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Tipo de Ajuste *
               </label>
-              <select
+              <SmartSelect
                 id="adjust-type"
                 value={adjustType}
                 onChange={(e) => setAdjustType(e.target.value)}
@@ -438,7 +439,7 @@ export default function Inventory() {
                 <option value="Entrada" className="dark:bg-slate-950">Entrada (+) Reabastecimiento / Compra</option>
                 <option value="Salida" className="dark:bg-slate-950">Salida (-) Retiro / Ajustes</option>
                 <option value="Merma" className="dark:bg-slate-950">Merma (-) Vencido, dañado o perdido (con costo)</option>
-              </select>
+              </SmartSelect>
             </div>
 
             <div className="space-y-1.5">
@@ -518,7 +519,7 @@ export default function Inventory() {
               <label htmlFor="purchase-supplier" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Proveedor *
               </label>
-              <select
+              <SmartSelect
                 id="purchase-supplier"
                 required
                 value={purchaseSupplier}
@@ -533,7 +534,7 @@ export default function Inventory() {
                     {sup.name}{sup.rnc ? ` — ${sup.rnc}` : ''}
                   </option>
                 ))}
-              </select>
+              </SmartSelect>
             </div>
 
             <div className="space-y-1.5 col-span-1 md:col-span-2">

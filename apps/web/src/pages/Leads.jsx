@@ -8,6 +8,7 @@ import { usePagedList } from '../hooks/usePagedList';
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass } from '../components/ui/form';
 import { notify } from '../utils/notify';
 import { dateTime } from '../utils/format';
+import SmartSelect from '../components/ui/SmartSelect';
 
 const STATUS = {
   NEW: { label: 'Nueva', style: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' },
@@ -172,13 +173,13 @@ export default function Leads() {
               contraseña temporal.
             </p>
             <Field id="lead-plan" label="Plan">
-              <select id="lead-plan" value={plan} onChange={e => setPlan(e.target.value)} className={inputClass}>
+              <SmartSelect id="lead-plan" value={plan} onChange={e => setPlan(e.target.value)} className={inputClass}>
                 {PLANS.map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </SmartSelect>
             </Field>
             <Field id="lead-trial" label="Días de prueba gratuita" hint="0 = sin periodo de prueba">
               <input id="lead-trial" type="number" min="0" max="365" value={trialDays} onChange={e => setTrialDays(e.target.value)} className={inputClass} />

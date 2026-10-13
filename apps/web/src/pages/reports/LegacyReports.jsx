@@ -7,6 +7,7 @@ import {
 import Pagination from '../../components/Pagination';
 import { useClientPage } from '../../hooks/usePagedList';
 import { generateFilename, exportToCSV, exportToJSON, exportToXML, exportToPDF } from '../../utils/export';
+import SmartSelect from '../../components/ui/SmartSelect';
 
 function ExportButtons({ onExport, disabled }) {
   const btn = 'flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
@@ -286,7 +287,7 @@ export default function LegacyReports({ tab, range }) {
       <form onSubmit={handleApply} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
         {tab === 'PRODUCTS' && (
           <>
-            <select
+            <SmartSelect
               value={productView}
               onChange={(e) => setProductView(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -295,8 +296,8 @@ export default function LegacyReports({ tab, range }) {
               <option value="most-profitable" className="dark:bg-slate-950">Más rentables</option>
               <option value="low-margin" className="dark:bg-slate-950">Menor margen</option>
               <option value="by-category" className="dark:bg-slate-950">Por categoría</option>
-            </select>
-            <select
+            </SmartSelect>
+            <SmartSelect
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -305,21 +306,21 @@ export default function LegacyReports({ tab, range }) {
               {categories.map((c) => (
                 <option key={c.id} value={c.id} className="dark:bg-slate-950">{c.name}</option>
               ))}
-            </select>
+            </SmartSelect>
           </>
         )}
 
         {tab === 'CUSTOMERS' && (
           <>
-            <select
+            <SmartSelect
               value={customerView}
               onChange={(e) => setCustomerView(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
             >
               <option value="top-amount" className="dark:bg-slate-950">Por monto</option>
               <option value="top-frequency" className="dark:bg-slate-950">Por frecuencia</option>
-            </select>
-            <select
+            </SmartSelect>
+            <SmartSelect
               value={docType}
               onChange={(e) => setDocType(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -327,7 +328,7 @@ export default function LegacyReports({ tab, range }) {
               <option value="" className="dark:bg-slate-950">Todos los documentos</option>
               <option value="CEDULA" className="dark:bg-slate-950">Cédula</option>
               <option value="RNC" className="dark:bg-slate-950">RNC</option>
-            </select>
+            </SmartSelect>
             <input
               type="text"
               placeholder="Buscar cliente..."
@@ -340,7 +341,7 @@ export default function LegacyReports({ tab, range }) {
 
         {tab === 'STAFF' && (
           <>
-            <select
+            <SmartSelect
               value={staffUserId}
               onChange={(e) => setStaffUserId(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -349,8 +350,8 @@ export default function LegacyReports({ tab, range }) {
               {users.map((u) => (
                 <option key={u.id} value={u.id} className="dark:bg-slate-950">{u.fullName || u.username}</option>
               ))}
-            </select>
-            <select
+            </SmartSelect>
+            <SmartSelect
               value={staffPayment}
               onChange={(e) => setStaffPayment(e.target.value)}
               className="border border-slate-200 dark:border-slate-800 bg-transparent px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 outline-none text-xs"
@@ -358,7 +359,7 @@ export default function LegacyReports({ tab, range }) {
               <option value="" className="dark:bg-slate-950">Todos los pagos</option>
               <option value="EFECTIVO" className="dark:bg-slate-950">Efectivo</option>
               <option value="TARJETA" className="dark:bg-slate-950">Tarjeta</option>
-            </select>
+            </SmartSelect>
           </>
         )}
 

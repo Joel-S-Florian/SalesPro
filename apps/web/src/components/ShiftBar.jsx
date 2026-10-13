@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Store, Lock, Unlock, Star } from 'lucide-react';
 import Modal from './Modal';
 import { printZReport } from '../utils/zReportPdf';
+import SmartSelect from './ui/SmartSelect';
 
 const inputClass =
   'w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent text-xs outline-none focus:ring-1 focus:ring-indigo-500';
@@ -75,7 +76,7 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
     <>
       <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-sm flex flex-wrap items-center gap-3 text-xs">
         <Store className="w-4 h-4 text-indigo-500" />
-        <select
+        <SmartSelect
           value={terminalId}
           onChange={e => selectTerminal(e.target.value)}
           aria-label="Caja"
@@ -87,7 +88,7 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
               {t.name}
             </option>
           ))}
-        </select>
+        </SmartSelect>
         {terminalId && (
           <button aria-label={defaultTerminalId === terminalId ? 'Caja predeterminada' : 'Usar como predeterminada'}
             onClick={makeDefault}

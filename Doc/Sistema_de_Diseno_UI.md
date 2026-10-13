@@ -41,3 +41,16 @@ interfaz web de Vercel.
 `vite.config.js` pre-empaqueta las dependencias de las pantallas diferidas (`optimizeDeps`) para evitar el error
 "Failed to fetch dynamically imported module" tras instalar dependencias nuevas. Si aparece, detenga `npm run dev` y borre
 `apps/web/node_modules/.vite`.
+
+## Smart Select (reemplazo del `<select>` nativo)
+
+`apps/web/src/components/ui/SmartSelect.jsx`. Se ve como un select (borde redondeado, flecha) y abre un menú propio:
+
+- **Barra de búsqueda** arriba (aparece con más de 7 opciones, o siempre si la búsqueda es del servidor); filtra en vivo sin distinguir mayúsculas ni acentos.
+- **Carga visual de 8 en 8:** al abrir solo se dibujan las primeras 8 opciones (el orden lo da quien lo usa: lo más reciente primero); el resto aparece al llegar al final
+  de la lista (scroll infinito) o al buscar. Un pie indica «Mostrando 8 de N».
+- **Cierre automático:** al elegir, con Escape (sin cerrar el modal que lo contiene) o al hacer clic fuera. Teclado: flechas, Enter, Inicio/Fin.
+- El menú va en un portal (no lo recortan modales ni tablas) y se abre hacia arriba si abajo no hay espacio. Roles ARIA `combobox`/`listbox`.
+- **Reemplazo directo:** acepta `<option>` como hijos y llama `onChange({ target: { value, name, id } })`; `required` conserva la validación del formulario.
+- **Listas largas del servidor:** `onSearch(texto)` (con espera de 250 ms), `loading` y `options`; ver `components/ProductPicker.jsx`.
+- Regla del proyecto: no usar `<select>` nativo (todos los de la aplicación ya fueron reemplazados, 45 en 22 archivos).

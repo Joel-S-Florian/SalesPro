@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import SmartSelect from './ui/SmartSelect';
 
 export const PAGE_SIZES = [10, 20, 50];
 
@@ -46,7 +47,7 @@ export default function Pagination({ page, pageSize, total, onPageChange, onPage
         {onPageSizeChange && (
           <label className="flex items-center gap-1.5">
             <span className="sr-only sm:not-sr-only">Por página</span>
-            <select
+            <SmartSelect
               value={pageSize}
               onChange={e => onPageSizeChange(Number(e.target.value))}
               aria-label="Filas por página"
@@ -57,7 +58,7 @@ export default function Pagination({ page, pageSize, total, onPageChange, onPage
                   {size}
                 </option>
               ))}
-            </select>
+            </SmartSelect>
           </label>
         )}
       </div>

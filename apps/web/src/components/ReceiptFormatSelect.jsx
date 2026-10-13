@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { RECEIPT_FORMATS, getReceiptFormat, setReceiptFormat } from '../utils/receiptPdf';
+import SmartSelect from './ui/SmartSelect';
 
 /** Selector del formato de comprobante (carta / ticket 80mm), recordado en este equipo. */
 export default function ReceiptFormatSelect({ className = '' }) {
   const [format, setFormat] = useState(getReceiptFormat());
 
   return (
-    <select
+    <SmartSelect
       value={format}
       onChange={e => {
         setFormat(e.target.value);
@@ -18,6 +19,6 @@ export default function ReceiptFormatSelect({ className = '' }) {
       <option value={RECEIPT_FORMATS.A4}>Carta (A4)</option>
       <option value={RECEIPT_FORMATS.TICKET}>Ticket 80 mm</option>
       <option value={RECEIPT_FORMATS.BOTH}>Ambos (A4 + Ticket)</option>
-    </select>
+    </SmartSelect>
   );
 }
