@@ -22,7 +22,11 @@ const openSchema = {
 };
 const closeSchema = {
   params: z.object({ id: cuid }),
-  body: z.object({ declaredCash: money, notes: z.string().trim().max(500).optional() }),
+  body: z.object({
+    declaredCash: money,
+    closingCount: z.record(z.string(), z.number().int().min(0).max(100000)).optional(),
+    notes: z.string().trim().max(500).optional(),
+  }),
 };
 const idSchema = { params: z.object({ id: cuid }) };
 const listSchema = {

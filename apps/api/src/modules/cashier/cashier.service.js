@@ -90,13 +90,9 @@ export async function openShift(requester, { terminalId, openingBalance = 0, ope
  * `complete` es falso si no hubo conteo de apertura o si alguna denominación quedó en negativo (el cajero movió efectivo sin registrarlo):
  * las sugerencias de devuelta siguen funcionando con lo que se sabe.
  */
-export async function getDrawer(requester, id) {
-  const close = await prisma.cashierClose.findUnique({ where: { id } });
-  if (!close) throw AppError.notFound('Turno no encontrado');
-  if (close.userId !== requester.userId && requester.role !== 'ADMINISTRADOR') throw AppError.forbidden('No tiene permisos para ver esta caja');
-
+async function drawerState(close) {
   const sales = await prisma.sale.findMany({
-    where: { cashierCloseId: id, paymentMethod: 'EFECTIVO' },
+    where: { cashierCloseId: close.id, paymentMethod: 'EFECTIVO' },
     select: { cashReceived: true, cashChange: true },
   });
   const opening = close.openingCount || {};
@@ -109,10 +105,18 @@ export async function getDrawer(requester, id) {
   const exact = addBreakdowns(opening, received, given, { allowNegative: true });
   const counts = addBreakdowns(opening, received, given);
   const complete = Boolean(close.openingCount) && Object.values(exact).every(value => value >= 0);
-  return { counts, total: sumBreakdown(counts), complete, hasOpeningCount: Boolean(close.openingCount) };
+  return { counts, exact, total: sumBreakdown(counts), complete, hasOpeningCount: Boolean(close.openingCount) };
 }
 
-export async function closeShift(requester, id, { declaredCash, notes }) {
+export async function getDrawer(requester, id) {
+  const close = await prisma.cashierClose.findUnique({ where: { id } });
+  if (!close) throw AppError.notFound('Turno no encontrado');
+  if (close.userId !== requester.userId && requester.role !== 'ADMINISTRADOR') throw AppError.forbidden('No tiene permisos para ver esta caja');
+  const { counts, total, complete, hasOpeningCount } = await drawerState(close);
+  return { counts, total, complete, hasOpeningCount };
+}
+
+export async function closeShift(requester, id, { declaredCash, closingCount, notes }) {
   const close = await prisma.cashierClose.findUnique({ where: { id } });
   if (!close) throw AppError.notFound('Turno no encontrado');
   if (close.status !== 'OPEN') throw AppError.conflict('Este turno ya está cerrado');
@@ -120,8 +124,35 @@ export async function closeShift(requester, id, { declaredCash, notes }) {
     throw AppError.forbidden('Solo el cajero del turno o un administrador pueden cerrarlo');
   }
 
+  // Con el conteo por denominaciones, el efectivo contado es lo que suman los billetes y monedas
+  let count = null;
+  if (closingCount && Object.keys(closingCount).length > 0) {
+    const normalized = normalizeBreakdown(closingCount);
+    if (!normalized.ok) throw AppError.badRequest(normalized.error);
+    count = normalized.breakdown;
+    const counted = sumBreakdown(count);
+    if (declaredCash && Math.abs(declaredCash - counted) > 0.01) {
+      throw AppError.badRequest(`El efectivo contado (${declaredCash}) no coincide con el conteo de billetes y monedas (${counted})`);
+    }
+    declaredCash = counted;
+  }
+
   const summary = await buildSummary(id);
   const expectedCash = round2(close.openingBalance + summary.cashSales);
+
+  // Comparación por denominación: solo si se contó la apertura (si no, no hay base confiable)
+  if (count) {
+    const drawer = await drawerState(close);
+    if (drawer.hasOpeningCount) {
+      const denominations = {};
+      for (const denom of new Set([...Object.keys(drawer.exact), ...Object.keys(count)])) {
+        const expected = drawer.exact[denom] || 0;
+        const counted = count[denom] || 0;
+        if (expected !== counted) denominations[denom] = { expected, counted, difference: counted - expected };
+      }
+      summary.denominationDifferences = denominations;
+    }
+  }
 
   return prisma.cashierClose.update({
     where: { id },
@@ -130,6 +161,7 @@ export async function closeShift(requester, id, { declaredCash, notes }) {
       closedAt: new Date(),
       expectedCash,
       declaredCash,
+      ...(count ? { closingCount: count } : {}),
       difference: round2(declaredCash - expectedCash),
       notes: notes || null,
       summary,

@@ -1,6 +1,6 @@
 # Devuelta por billetes y monedas
 
-Estado: **hecho y probado** (`cashChange.test.js` con 13 pruebas, `scripts/test-cash-change.mjs` con 15 comprobaciones y recorrido en navegador).
+Estado: **hecho y probado** (`cashChange.test.js` con 13 pruebas, `scripts/test-cash-change.mjs` con 19 comprobaciones y recorrido en navegador).
 Se activa por empresa en *Configuración → Calcular la devuelta por billetes y monedas al cobrar en efectivo* (apagado por defecto: sin activarlo, el POS cobra como siempre).
 
 ## Denominaciones
@@ -27,9 +27,15 @@ Un *desglose* es `{ denominación: cantidad }`, por ejemplo `{ "1000": 1, "50": 
 
 El **efectivo esperado del cierre** no cambia: fondo inicial + ventas en efectivo (recibido − devuelta = total de la venta).
 
+## Cierre de caja con conteo por denominación
+
+Al cerrar, el cajero puede abrir *Contar billetes y monedas de la caja*: el efectivo contado pasa a ser la suma del conteo (`CashierClose.closingCount`).
+Si el turno se abrió con conteo, el modal muestra al instante las diferencias por pieza (p. ej. «RD$ 100 faltan 1») y el servidor las guarda en `summary.denominationDifferences`
+(`{ denominación: { expected, counted, difference } }`, solo las que no cuadran). Sin conteo de apertura no hay base confiable y solo se compara el total, como antes.
+
 ## Pendiente / ideas
 
-- Conteo por denominaciones también **al cerrar** la caja y comparación contra lo esperado por denominación (hoy el cierre cuenta solo el total).
+- Mostrar las diferencias por denominación en el reporte Z impreso y en el historial de cierres.
 - Retiros e ingresos de efectivo durante el turno (alimentan la caja por denominación).
 - Aviso de «poco cambio» (monedas o billetes bajos) y sugerencia de pedir cambio al banco.
 - Reembolsos en efectivo de notas de crédito: no descuentan aún de la caja por denominación.

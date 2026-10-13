@@ -90,8 +90,12 @@ export function useShift() {
     await loadShift(terminalId);
   };
 
-  const closeShift = async ({ declaredCash, notes }) => {
-    const closed = await api.cashier.close(shift.id, { declaredCash: Number(declaredCash) || 0, notes });
+  const closeShift = async ({ declaredCash, closingCount, notes }) => {
+    const closed = await api.cashier.close(shift.id, {
+      declaredCash: Number(declaredCash) || 0,
+      ...(closingCount && Object.keys(closingCount).length ? { closingCount } : {}),
+      notes,
+    });
     setShift(null);
     return closed;
   };

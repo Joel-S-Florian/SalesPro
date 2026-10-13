@@ -413,6 +413,7 @@ model CashierClose {
   closedAt       DateTime?
   openingBalance Float       @default(0)
   openingCount   Json? // billetes y monedas con los que abrió la caja { "100": 5, "25": 8 }
+  closingCount   Json? // billetes y monedas contados al cerrar { "100": 5 }
   expectedCash   Float?
   declaredCash   Float?
   difference     Float?

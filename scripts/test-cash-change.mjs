@@ -81,7 +81,15 @@ await runInTenant(company.id, async () => {
     check('sin desglose la venta en efectivo funciona como siempre', s3.cashReceived === null);
 
     // --- Caja sin conteo de apertura ---
-    await cashier.closeShift(req, shift.id, { declaredCash: 0 });
+    // --- Cierre con conteo por denominación ---
+    drawer = await cashier.getDrawer(req, shift.id);
+    const counted = { ...drawer.counts, 100: drawer.counts[100] - 1 }; // falta un billete de 100
+    await expectError('el efectivo contado debe coincidir con el conteo', () => cashier.closeShift(req, shift.id, { declaredCash: 1, closingCount: counted }), 'no coincide');
+    await expectError('el conteo de cierre rechaza denominaciones inventadas', () => cashier.closeShift(req, shift.id, { declaredCash: 0, closingCount: { 300: 1 } }), 'Denominación desconocida');
+    const closed = await cashier.closeShift(req, shift.id, { declaredCash: 0, closingCount: counted });
+    const countedTotal = Object.entries(counted).reduce((a, [d, c]) => a + d * c, 0);
+    check('al cerrar, el efectivo contado es la suma del conteo', closed.declaredCash === countedTotal && closed.closingCount[100] === counted[100]);
+    check('el cierre marca la diferencia por denominación (falta 1 billete de 100)', Object.keys(closed.summary.denominationDifferences).join() === '100' && closed.summary.denominationDifferences[100].difference === -1 && closed.summary.denominationDifferences[100].expected === drawer.counts[100], JSON.stringify(closed.summary.denominationDifferences));
     const shift2 = await cashier.openShift(req, { terminalId: terminal.id, openingBalance: 500 });
     drawer = await cashier.getDrawer(req, shift2.id);
     check('sin conteo de apertura, la caja se reporta como incompleta (pero responde)', drawer.hasOpeningCount === false && drawer.complete === false && drawer.total === 0);
