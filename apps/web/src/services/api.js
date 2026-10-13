@@ -174,6 +174,24 @@ export const api = {
       }
     },
 
+    // Recuperación de contraseña (sin sesión)
+    async forgotPassword(identifier) {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier }),
+      });
+      return handleResponse(res);
+    },
+    async resetPassword(token, newPassword) {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, newPassword }),
+      });
+      return handleResponse(res);
+    },
+
     getMe: () => request('/auth/me'),
     getUsersPage: (params = {}) => request(`/auth/users?${toQuery(params)}`),
     getUsers: async (params = {}) =>

@@ -5,7 +5,7 @@ import { validate } from '../../shared/middleware/validate.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { createLead } from '../leads/leads.service.js';
 import { signup } from './signup.service.js';
-import { env } from '../../config/env.js';
+import { isDev } from '../../config/env.js';
 
 /**
  * Endpoints públicos (sin sesión), usados por la página de promoción.
@@ -15,7 +15,7 @@ const router = express.Router();
 // Pocas solicitudes por hora y por IP: evita que alguien llene la bandeja
 const leadRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: env.isDev ? 50 : 5,
+  max: isDev ? 50 : 5,
   message: { error: 'Ya recibimos varias solicitudes desde su conexión. Intente más tarde.', code: 'LEAD_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -25,7 +25,7 @@ const leadRateLimiter = rateLimit({
 // Alta de empresas nuevas: más estricto aún, es una operación que crea datos
 const signupRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: env.isDev ? 100 : 10,
+  max: isDev ? 100 : 10,
   message: { error: 'Se crearon varias cuentas desde su conexión. Intente más tarde.', code: 'SIGNUP_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,

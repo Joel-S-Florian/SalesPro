@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { Loader2, Plus, Search, ArrowUpRight, ArrowDownLeft, FileText, AlertTriangle, ListFilter, ShoppingCart } from 'lucide-react';
 import Modal from '../components/Modal';
@@ -60,8 +60,23 @@ export default function Inventory() {
   const [suppliers, setSuppliers] = useState([]);
   const [purchaseInvoice, setPurchaseInvoice] = useState('');
   const [purchaseProd, setPurchaseProd] = useState(null);
+  const [pinnedProduct, setPinnedProduct] = useState(null);
   const [purchaseBatch, setPurchaseBatch] = useState({ batchNumber: '', expirationDate: '' });
   const [submittingPurchase, setSubmittingPurchase] = useState(false);
+
+  // «Reabastecer» del Dashboard: abre el registro de compra con el producto ya elegido
+  useEffect(() => {
+    let id = null;
+    try {
+      id = sessionStorage.getItem('factos-restock-product');
+      sessionStorage.removeItem('factos-restock-product');
+    } catch {
+      // almacenamiento no disponible
+    }
+    if (!id) return;
+    api.products.get(id).then(product => openPurchaseModal(product)).catch(() => notify.error('No se pudo cargar el producto a reabastecer'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const openAdjustmentModal = () => {
     setSelectedProdId('');
@@ -86,13 +101,14 @@ export default function Inventory() {
     setIsAdjustOpen(true);
   };
 
-  const openPurchaseModal = () => {
-    setPurchaseProdId('');
+  const openPurchaseModal = (preselected = null) => {
+    setPinnedProduct(preselected);
+    setPurchaseProdId(preselected?.id || '');
     setPurchaseQty(1);
-    setPurchaseUnitCost(0);
+    setPurchaseUnitCost(preselected ? Number(preselected.costPrice) || 0 : 0);
     setPurchaseSupplier('');
     setPurchaseInvoice('');
-    setPurchaseProd(null);
+    setPurchaseProd(preselected);
     setPurchaseBatch({ batchNumber: '', expirationDate: '' });
     setIsPurchaseOpen(true);
     api.suppliers
@@ -178,7 +194,7 @@ export default function Inventory() {
         </div>
         <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
           <button
-            onClick={openPurchaseModal}
+            onClick={() => openPurchaseModal()}
             className="flex items-center gap-1.5 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400 px-4 py-2.5 rounded-lg text-sm font-semibold transition w-full sm:w-auto justify-center cursor-pointer"
           >
             <ShoppingCart className="w-4 h-4" /> Registrar Compra
@@ -524,7 +540,7 @@ export default function Inventory() {
               <label htmlFor="purchase-prod" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Producto *
               </label>
-              <ProductPicker id="purchase-prod" value={purchaseProdId} onChange={(id, product) => { setPurchaseProdId(id); setPurchaseProd(product || null); }} />
+              <ProductPicker id="purchase-prod" pinned={pinnedProduct} value={purchaseProdId} onChange={(id, product) => { setPurchaseProdId(id); setPurchaseProd(product || null); }} />
             </div>
 
             {purchaseProd?.isPerishable && (
@@ -549,7 +565,7 @@ export default function Inventory() {
 
             <div className="space-y-1.5">
               <label htmlFor="purchase-cost" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Costo Unitario (USD) *
+                Costo Unitario (RD$) *
               </label>
               <input
                 id="purchase-cost"

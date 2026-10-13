@@ -57,3 +57,52 @@ describe('sanitizeRow', () => {
     );
   });
 });
+
+describe('alimentos: unidad, perecedero, lote y presentaciones', () => {
+  const base = { code: 'x1', name: 'Leche', cost: '60', price: '80' };
+
+  it('reconoce alias de unidad y admite decimales a granel', () => {
+    const { data, errors } = sanitizeRow({ ...base, unit: 'libras', stock: '6,5' });
+    expect(errors).toEqual([]);
+    expect(data.unit).toBe('LB');
+    expect(data.stock).toBe(6.5);
+  });
+
+  it('en unidades enteras redondea la existencia', () => {
+    expect(sanitizeRow({ ...base, stock: '6.6' }).data.stock).toBe(7);
+  });
+
+  it('unidad desconocida es error', () => {
+    expect(sanitizeRow({ ...base, unit: 'caja' }).errors.join()).toMatch(/Unidad desconocida/);
+  });
+
+  it('perecedero con existencia exige lote y vencimiento', () => {
+    expect(sanitizeRow({ ...base, stock: '5', perishable: 'SI' }).errors.join()).toMatch(/lote o el vencimiento/);
+    const ok = sanitizeRow({ ...base, stock: '5', perishable: 'sí', lot: 'L1', expiration: '20/10/2030' });
+    expect(ok.errors).toEqual([]);
+    expect(ok.data.isPerishable).toBe(true);
+    expect(ok.data.expiration).toBe('2030-10-20');
+  });
+
+  it('perecedero sin existencia no exige lote', () => {
+    expect(sanitizeRow({ ...base, stock: '0', perishable: 'SI' }).errors).toEqual([]);
+  });
+
+  it('rechaza fechas imposibles y el lote reservado', () => {
+    expect(sanitizeRow({ ...base, expiration: '2030-02-31' }).errors.join()).toMatch(/vencimiento inválida/);
+    expect(sanitizeRow({ ...base, lot: 'sin-lote' }).errors.join()).toMatch(/reservado/);
+  });
+
+  it('lee presentaciones completas y valida las incompletas', () => {
+    const ok = sanitizeRow({ ...base, pres1Name: 'Caja x12', pres1Qty: '12', pres1Price: '900', pres1Barcode: '7461' });
+    expect(ok.errors).toEqual([]);
+    expect(ok.data.presentations).toEqual([{ name: 'Caja x12', factor: 12, salePrice: 900, barcode: '7461' }]);
+    expect(sanitizeRow({ ...base, pres1Name: 'Caja', pres1Qty: '0', pres1Price: '5' }).errors.join()).toMatch(/Presentación 1/);
+    expect(sanitizeRow({ ...base, pres1Qty: '12' }).errors.join()).toMatch(/falta el nombre/);
+  });
+
+  it('«perecedero» solo acepta SI o NO', () => {
+    expect(sanitizeRow({ ...base, perishable: 'quizás' }).errors.join()).toMatch(/SI o NO/);
+    expect(sanitizeRow({ ...base, perishable: 'no' }).data.isPerishable).toBe(false);
+  });
+});

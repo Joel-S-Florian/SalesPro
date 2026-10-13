@@ -5,6 +5,27 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { env } from '../../config/env.js';
 import { prewarmToken } from '../ecf/ecf.token.service.js';
+import { sendMail, mailConfigured } from '../../shared/utils/mailer.js';
+import { logger } from '../../shared/utils/logger.js';
+import { createHash, randomBytes } from 'node:crypto';
+
+/** Minutos de inactividad por defecto antes de cerrar la sesión (configurable por empresa en `security`). */
+export const DEFAULT_IDLE_MINUTES = 30;
+/** El navegador renueva la sesión cada 15 min (vida del token de acceso): ese margen se suma al límite de inactividad. */
+const REFRESH_GRACE_MINUTES = 15;
+const RESET_TTL_MINUTES = 30;
+const MAX_RESETS_PER_HOUR = 3;
+
+const hashToken = token => createHash('sha256').update(token).digest('hex');
+const normalizeEmail = value => (value ? String(value).trim().toLowerCase() : null);
+const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
+
+async function idleMinutesOf(companyId) {
+  if (!companyId) return 0;
+  const row = await basePrisma.systemConfig.findUnique({ where: { companyId_key: { companyId, key: 'security' } } });
+  const minutes = row?.value?.idleTimeoutMinutes;
+  return Number.isFinite(minutes) ? minutes : DEFAULT_IDLE_MINUTES;
+}
 
 /**
  * Authenticate user with username and password
@@ -68,6 +89,7 @@ export async function login(username, password) {
       active: user.active,
       companyId: user.companyId,
       companyName: user.company?.name ?? null,
+      mustChangePassword: user.mustChangePassword,
     },
     accessToken,
     refreshToken,
@@ -96,6 +118,13 @@ export async function refreshTokens(refreshToken) {
     throw AppError.unauthorized('Sesión expirada', ERROR_CODES.REFRESH_TOKEN_EXPIRED);
   }
 
+  // Sesión abandonada: si nadie la renovó en el tiempo de inactividad (más el margen de renovación), se cierra
+  const idleMinutes = await idleMinutesOf(session.user.companyId);
+  if (idleMinutes > 0 && Date.now() - session.lastActivityAt.getTime() > (idleMinutes + REFRESH_GRACE_MINUTES) * 60000) {
+    await basePrisma.session.deleteMany({ where: { id: session.id } });
+    throw AppError.unauthorized('Sesión cerrada por inactividad', ERROR_CODES.REFRESH_TOKEN_EXPIRED);
+  }
+
   if (!session.user.active) {
     throw AppError.forbidden('Usuario inactivo', ERROR_CODES.USER_INACTIVE);
   }
@@ -115,6 +144,7 @@ export async function refreshTokens(refreshToken) {
     data: {
       token: newRefreshToken,
       expiresAt: newExpiresAt,
+      lastActivityAt: new Date(),
     },
   });
 
@@ -173,11 +203,64 @@ export async function changePassword(userId, oldPassword, newPassword) {
 
   await basePrisma.user.update({
     where: { id: userId },
-    data: { passwordHash: newHash },
+    data: { passwordHash: newHash, mustChangePassword: false },
   });
+}
 
-  // Revoke all sessions except current (optional - for security)
-  // await logoutAll(userId);
+/**
+ * «¿Olvidaste tu contraseña?»: envía un enlace de un solo uso (30 min) al correo del usuario.
+ * Responde siempre igual, exista o no la cuenta, para no revelar qué usuarios hay. Máximo 3 enlaces por hora y usuario.
+ */
+export async function forgotPassword(identifier) {
+  const key = String(identifier || '').trim().toLowerCase();
+  if (!key) return;
+  const user = await basePrisma.user.findFirst({
+    where: { OR: [{ username: key }, { email: key }], active: true },
+    include: { company: { select: { active: true } } },
+  });
+  if (!user || !user.email) return;
+  if (user.role !== 'SUPERADMIN' && !user.company?.active) return;
+
+  const recent = await basePrisma.passwordReset.count({ where: { userId: user.id, createdAt: { gte: new Date(Date.now() - 3600000) } } });
+  if (recent >= MAX_RESETS_PER_HOUR) return;
+
+  const token = randomBytes(32).toString('base64url');
+  await basePrisma.$transaction([
+    basePrisma.passwordReset.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
+    basePrisma.passwordReset.create({ data: { userId: user.id, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + RESET_TTL_MINUTES * 60000) } }),
+  ]);
+
+  const link = `${env.WEB_URL.replace(/\/$/, '')}/?reset=${token}`;
+  const result = await sendMail({
+    to: user.email,
+    subject: 'Restablece tu contraseña de FACTOS',
+    text: [
+      `Hola ${user.fullName},`,
+      '',
+      `Recibimos una solicitud para restablecer la contraseña del usuario «${user.username}».`,
+      `Abre este enlace (vale ${RESET_TTL_MINUTES} minutos y solo se puede usar una vez):`,
+      '',
+      link,
+      '',
+      'Si no fuiste tú, ignora este correo: tu contraseña no cambia.',
+    ].join('\n'),
+  });
+  // Solo en desarrollo, sin correo configurado, el enlace queda en el log para poder probar el flujo
+  if (!result.sent && env.NODE_ENV === 'development' && !mailConfigured()) logger.info(`[DEV] Enlace de recuperación para ${user.username}: ${link}`);
+}
+
+/** Cambia la contraseña con el enlace recibido por correo y cierra todas las sesiones del usuario. */
+export async function resetPassword(token, newPassword) {
+  const reset = await basePrisma.passwordReset.findUnique({ where: { tokenHash: hashToken(String(token || '')) }, include: { user: true } });
+  if (!reset || reset.usedAt || reset.expiresAt < new Date() || !reset.user.active) {
+    throw AppError.badRequest('El enlace no es válido o ya venció. Solicita uno nuevo.', ERROR_CODES.REFRESH_TOKEN_INVALID);
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await basePrisma.$transaction([
+    basePrisma.user.update({ where: { id: reset.userId }, data: { passwordHash, mustChangePassword: false } }),
+    basePrisma.passwordReset.updateMany({ where: { userId: reset.userId, usedAt: null }, data: { usedAt: new Date() } }),
+    basePrisma.session.deleteMany({ where: { userId: reset.userId } }),
+  ]);
 }
 
 /**
@@ -193,6 +276,8 @@ export async function getProfile(userId) {
       company: { select: { name: true, plan: true, trialEndsAt: true } },
       id: true,
       username: true,
+      email: true,
+      mustChangePassword: true,
       fullName: true,
       role: true,
       active: true,
@@ -208,6 +293,14 @@ export async function getProfile(userId) {
   return user;
 }
 
+/** El correo se usa para recuperar la contraseña: debe tener forma válida y no estar en otra cuenta. */
+async function assertEmailAvailable(email, exceptUserId) {
+  if (!email) return;
+  if (!EMAIL_PATTERN.test(email) || email.length > 120) throw AppError.badRequest('El correo no es válido');
+  const taken = await basePrisma.user.findUnique({ where: { email } });
+  if (taken && taken.id !== exceptUserId) throw AppError.conflict('Ese correo ya está registrado en otra cuenta', ERROR_CODES.DUPLICATE_ENTRY);
+}
+
 /**
  * Create new user (admin only)
  * @param {Object} data - User data
@@ -215,6 +308,8 @@ export async function getProfile(userId) {
  */
 export async function createUser(data) {
   const { username, fullName, role, password, active } = data;
+  const email = normalizeEmail(data.email);
+  await assertEmailAvailable(email);
 
   const existing = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
@@ -229,6 +324,7 @@ export async function createUser(data) {
   const user = await prisma.user.create({
     data: {
       username: username.toLowerCase(),
+      email,
       fullName,
       role,
       passwordHash,
@@ -237,6 +333,7 @@ export async function createUser(data) {
     select: {
       id: true,
       username: true,
+      email: true,
       fullName: true,
       role: true,
       active: true,
@@ -275,6 +372,8 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
       select: {
         id: true,
         username: true,
+        email: true,
+        mustChangePassword: true,
         fullName: true,
         role: true,
         active: true,
@@ -304,7 +403,7 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
  * @param {Object} data - Update data
  * @returns {Promise<Object>} Updated user
  */
-export async function updateUser(id, data) {
+export async function updateUser(id, data, actorId) {
   const { fullName, role, active, password } = data;
 
   const user = await prisma.user.findUnique({
@@ -319,7 +418,16 @@ export async function updateUser(id, data) {
   if (fullName) updateData.fullName = fullName;
   if (role) updateData.role = role;
   if (active !== undefined) updateData.active = active;
-  if (password) updateData.passwordHash = await hashPassword(password);
+  if (password) {
+    updateData.passwordHash = await hashPassword(password);
+    // Clave asignada por un administrador a otra persona: es temporal y debe cambiarla al entrar
+    if (id !== actorId) updateData.mustChangePassword = true;
+  }
+  if (data.email !== undefined) {
+    const email = normalizeEmail(data.email);
+    await assertEmailAvailable(email, id);
+    updateData.email = email;
+  }
 
   const updated = await prisma.user.update({
     where: { id },
@@ -327,6 +435,8 @@ export async function updateUser(id, data) {
     select: {
       id: true,
       username: true,
+      email: true,
+      mustChangePassword: true,
       fullName: true,
       role: true,
       active: true,

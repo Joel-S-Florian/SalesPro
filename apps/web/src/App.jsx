@@ -27,6 +27,9 @@ const VendorDashboard = lazy(() => import('./pages/VendorDashboard'));
 const Finance = lazy(() => import('./pages/Finance'));
 const Unauthorized = lazy(() => import('./pages/Unauthorized'));
 import ErrorBoundary from './components/ErrorBoundary';
+import PasswordRecovery from './components/auth/PasswordRecovery';
+import SessionGuard from './components/auth/SessionGuard';
+import ChangePasswordModal from './components/auth/ChangePasswordModal';
 
 import {
   LayoutDashboard,
@@ -54,7 +57,8 @@ import {
   Barcode,
   Building2,
   Inbox,
-  FileCheck2
+  FileCheck2,
+  KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -141,11 +145,24 @@ export default function App() {
   const [password, setPassword] = useState('');
 
   const [activeTab, setActiveTab] = useState('DASHBOARD');
+
+  // «Reabastecer» en el Dashboard lleva al módulo Inventario con el registro de compra ya preparado
+  const restockProduct = productId => {
+    try {
+      sessionStorage.setItem('factos-restock-product', productId);
+    } catch {
+      // almacenamiento no disponible
+    }
+    setActiveTab('INVENTORY');
+  };
   const [newLeads, setNewLeads] = useState(0);
   // Vista previa al inicio de sesión: la dirección con ?registro abre el alta de cuenta nueva
-  const [authView, setAuthView] = useState(() =>
-    new URLSearchParams(window.location.search).has('registro') ? 'signup' : 'login'
-  );
+  const [authView, setAuthView] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('reset')) return 'reset'; // enlace del correo de recuperación
+    return params.has('registro') ? 'signup' : 'login';
+  });
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const showAuthView = view => {
     setAuthView(view);
@@ -153,6 +170,7 @@ export default function App() {
     const url = new URL(window.location.href);
     if (view === 'signup') url.searchParams.set('registro', '1');
     else url.searchParams.delete('registro');
+    if (view !== 'reset') url.searchParams.delete('reset');
     window.history.replaceState({}, '', url);
   };
 
@@ -271,6 +289,14 @@ export default function App() {
     logout();
   };
 
+  // Sesión cerrada por inactividad (SessionGuard): se avisa en la pantalla de acceso
+  const handleIdleLogout = useCallback(() => {
+    api.auth.logout().finally(() => {
+      setSessionMessage('Tu sesión se cerró por inactividad. Inicia sesión de nuevo.');
+      logout();
+    });
+  }, [logout]);
+
   if (authLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen relative overflow-hidden">
@@ -295,6 +321,10 @@ export default function App() {
         <SignupWizard onDone={handleSignupDone} onBackToLogin={() => showAuthView('login')} />
       </Suspense>
     );
+  }
+  if (!isFullyAuthenticated && (authView === 'forgot' || authView === 'reset')) {
+    const resetToken = new URLSearchParams(window.location.search).get('reset') || '';
+    return <PasswordRecovery mode={authView} token={resetToken} onBack={() => showAuthView('login')} />;
   }
   if (!isFullyAuthenticated) {
     return (
@@ -364,6 +394,11 @@ export default function App() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl text-slate-800 dark:text-slate-100 glass-input outline-none text-xs font-mono"
               />
+              <div className="text-right">
+                <button type="button" onClick={() => showAuthView('forgot')} className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 cursor-pointer">
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
             </div>
 
             <button
@@ -466,7 +501,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'DASHBOARD':
-        return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} />;
+        return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} onRestock={restockProduct} />;
       case 'VENDOR_DASHBOARD':
         return <VendorDashboard onNavigateToPOS={() => setActiveTab('POS')} />;
       case 'POS':
@@ -517,12 +552,14 @@ export default function App() {
       case 'UNAUTHORIZED':
         return <Unauthorized />;
       default:
-        return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} />;
+        return <Dashboard onNavigateToPOS={() => setActiveTab('POS')} onNavigateToProducts={() => setActiveTab('PRODUCTS')} onRestock={restockProduct} />;
     }
   };
 
   return (
     <div className="h-dvh relative flex selection:bg-indigo-500 selection:text-white overflow-hidden" id="factos-app">
+      <SessionGuard onIdleLogout={handleIdleLogout} onLogout={handleLogout} />
+      <ChangePasswordModal isOpen={changingPassword && !user?.mustChangePassword} onClose={() => setChangingPassword(false)} />
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[110] focus:rounded-lg focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-xs focus:font-semibold focus:text-white"
@@ -610,7 +647,14 @@ export default function App() {
         </nav>
 
         {/* Footer Logout */}
-        <div className="p-4 border-t border-white/20 dark:border-slate-800/40">
+        <div className="p-4 border-t border-white/20 dark:border-slate-800/40 space-y-2">
+          <button
+            onClick={() => setChangingPassword(true)}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl text-xs font-semibold transition cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4" />
+            <span>Cambiar contraseña</span>
+          </button>
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-3 py-2.5 bg-white/30 dark:bg-slate-800/20 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl text-xs font-bold transition border border-white/30 dark:border-slate-800/40 hover:border-rose-200 dark:hover:border-rose-900/50 cursor-pointer"

@@ -1,9 +1,11 @@
-import { addUnbatchedStock } from '../inventory/batches.service.js';
+import { addBatchStock, addUnbatchedStock } from '../inventory/batches.service.js';
+import { parseExpiration } from '../inventory/batches.logic.js';
+import { getConfig } from '../config/config.service.js';
 import { Readable } from 'node:stream';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
-import { sanitizeRow } from './sanitize.js';
+import { cleanText, sanitizeRow } from './sanitize.js';
 
 const MAX_ROWS = 5000;
 const PREVIEW_ROWS = 100;
@@ -159,12 +161,16 @@ export async function previewImport(importId, { mapping, marginPercent, defaultC
     where: { importId },
     orderBy: { rowNumber: 'asc' },
   });
-  const existing = await prisma.product.findMany({ select: { code: true } });
-  const existingCodes = new Set(existing.map(p => p.code.toUpperCase()));
+  const existing = await prisma.product.findMany({ select: { code: true, unit: true, isPerishable: true } });
+  const existingProducts = new Map(existing.map(p => [p.code.toUpperCase(), p]));
+  const perishableEnabled = (await getConfig()).perishable.enabled;
+  // Códigos de barras ya ocupados (productos y presentaciones): una presentación nueva no puede repetirlos
+  const takenBarcodes = new Set(existing.map(p => p.code.toUpperCase()));
+  (await prisma.productPresentation.findMany({ where: { barcode: { not: null } }, select: { barcode: true } })).forEach(p => takenBarcodes.add(p.barcode.toUpperCase()));
   const categories = await prisma.category.findMany({ select: { name: true } });
   const categoryNames = new Set(categories.map(c => c.name.toLowerCase()));
 
-  const seenCodes = new Set();
+  const seen = new Map(); // código -> { action, perishable, lots } (un perecedero puede repetirse con otro lote)
   const newCategories = new Set();
   const updates = [];
   const summary = { total: rows.length, create: 0, update: 0, invalid: 0 };
@@ -175,16 +181,50 @@ export async function previewImport(importId, { mapping, marginPercent, defaultC
         .filter(([, column]) => column)
         .map(([field, column]) => [field, row.raw[column]])
     );
+    // Producto que ya existe: la existencia se interpreta en su unidad (no se redondea una libra a entero)
+    const known = existingProducts.get(cleanText(mapped.code).toUpperCase());
+    if (known && !cleanText(mapped.unit)) mapped.unit = known.unit;
     const { data, errors } = sanitizeRow(mapped, { marginPercent });
 
     if (!data.category && !defaultCategoryId) errors.push('Sin categoría (y no hay categoría por defecto)');
-    if (data.code && seenCodes.has(data.code)) errors.push('Código duplicado dentro del archivo');
-    if (data.code) seenCodes.add(data.code);
+    if (data.isPerishable && !known && !perishableEnabled) errors.push('Active «Perecederos y lotes» en Configuración para importar productos perecederos');
+    if (known && data.unit !== known.unit) errors.push(`La unidad del archivo (${data.unit}) no coincide con la del producto (${known.unit})`);
+
+    // Código repetido: solo es válido como un lote adicional de un producto perecedero
+    const perishable = known ? known.isPerishable : data.isPerishable;
+    const prior = data.code ? seen.get(data.code) : null;
+    let extraLot = false;
+    if (prior) {
+      if (!(prior.perishable && perishable && data.lot)) errors.push('Código duplicado dentro del archivo');
+      else if (prior.lots.has(data.lot.toUpperCase())) errors.push('Lote repetido para este producto en el archivo');
+      else if (prior.action === 'INVALID') errors.push('La primera fila de este producto es inválida');
+      else extraLot = true;
+    }
+
+    // Presentaciones (solo al crear el producto): su código de barras no puede estar en uso
+    if (!known && !extraLot) {
+      for (const presentation of data.presentations) {
+        const barcode = presentation.barcode;
+        if (!barcode) continue;
+        if (takenBarcodes.has(barcode)) errors.push(`El código de barras ${barcode} de la presentación ya está en uso`);
+      }
+    } else if (data.presentations.length) {
+      data.presentations = []; // un producto existente (o un lote adicional) conserva las presentaciones que ya tiene
+    }
+    if (extraLot) data.extraLot = true;
 
     let action = 'INVALID';
     if (errors.length === 0) {
-      action = existingCodes.has(data.code) ? 'UPDATE' : 'CREATE';
+      action = extraLot ? prior.action : known ? 'UPDATE' : 'CREATE';
       if (data.category && !categoryNames.has(data.category.toLowerCase())) newCategories.add(data.category);
+      if (!known && !extraLot) {
+        takenBarcodes.add(data.code);
+        data.presentations.forEach(p => p.barcode && takenBarcodes.add(p.barcode));
+      }
+    }
+    if (data.code) {
+      if (!prior) seen.set(data.code, { action, perishable, lots: new Set(data.lot ? [data.lot.toUpperCase()] : []) });
+      else if (data.lot) prior.lots.add(data.lot.toUpperCase());
     }
     summary[action.toLowerCase()] += 1;
     updates.push({ id: row.id, data, action, errors: errors.length ? errors : null });
@@ -265,18 +305,23 @@ export async function applyImport(importId, requester) {
       }
 
       const existing = new Map(
-        (await tx.product.findMany({ where: { code: { in: rows.map(r => r.data.code) } } })).map(p => [p.code, p])
+        (await tx.product.findMany({ where: { code: { in: rows.map(r => r.data.code) } } })).map(p => [p.code, { ...p }])
       );
-      const counts = { created: 0, updated: 0, entries: 0 };
+      const createdNow = new Set();
+      const counts = { created: 0, updated: 0, entries: 0, lots: 0 };
       const reason = `Importación ${batch.fileName}${supplier ? ` (${supplier.name})` : ''}`;
 
       for (const row of rows) {
-        const { code, name, cost, stock, price, category } = row.data;
-        const product = existing.get(code);
+        const { code, name, cost, stock, price, category, unit, minStock, isPerishable, lot, expiration, presentations } = row.data;
+        let product = existing.get(code);
         let productId;
         let productName;
+        const perishable = product ? product.isPerishable : Boolean(isPerishable);
+        const expirationDate = expiration ? parseExpiration(expiration) : null;
+        const supplierId = supplier?.id || null;
 
         if (!product) {
+          // Un perecedero entra por sus lotes: el producto nace en 0 y cada lote suma su existencia
           const created = await tx.product.create({
             data: {
               code,
@@ -284,12 +329,32 @@ export async function applyImport(importId, requester) {
               categoryId: category ? categoryIds.get(category.toLowerCase()) : defaultCategoryId,
               costPrice: cost,
               salePrice: price,
-              stock,
+              stock: perishable ? 0 : stock,
+              unit: unit || 'UND',
+              minStock: minStock ?? 0,
+              isPerishable: perishable,
             },
           });
+          for (const presentation of presentations || []) {
+            try {
+              await tx.productPresentation.create({ data: { ...presentation, productId: created.id, companyId: created.companyId } });
+            } catch (err) {
+              if (err.code === 'P2002') throw AppError.conflict(`El código de barras ${presentation.barcode || ''} ya lo usa otra presentación`);
+              throw err;
+            }
+          }
+          product = { ...created, stock: perishable ? 0 : stock };
+          existing.set(code, product);
+          createdNow.add(code);
           productId = created.id;
           productName = created.name;
           counts.created += 1;
+          if (perishable && stock > 0) {
+            await addBatchStock(tx, { productId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
+            await tx.product.update({ where: { id: productId }, data: { stock: { increment: stock } } });
+            product.stock = stock;
+            counts.lots += 1;
+          }
         } else {
           // Costo promedio ponderado cuando entra mercancía
           const newStock = product.stock + stock;
@@ -307,9 +372,15 @@ export async function applyImport(importId, requester) {
           });
           productId = product.id;
           productName = product.name;
-          counts.updated += 1;
-          // La importación no trae lotes: en un perecedero la mercancía entra como stock sin lote (SIN-LOTE)
-          if (product.isPerishable && stock > 0) await addUnbatchedStock(tx, { productId, quantity: stock, costPrice: cost });
+          if (!createdNow.has(code)) counts.updated += 1;
+          product.stock = newStock;
+          product.costPrice = costPrice;
+          // Perecedero: con lote y vencimiento entra a ese lote; sin ellos, como stock sin lote (SIN-LOTE)
+          if (product.isPerishable && stock > 0) {
+            if (lot && expirationDate) await addBatchStock(tx, { productId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
+            else await addUnbatchedStock(tx, { productId, quantity: stock, costPrice: cost });
+            counts.lots += 1;
+          }
         }
 
         if (stock > 0) {
@@ -319,7 +390,7 @@ export async function applyImport(importId, requester) {
               productName,
               type: 'ENTRADA',
               quantity: stock,
-              reason,
+              reason: perishable && lot ? `${reason} · lote ${lot}` : reason,
               userId: requester.userId,
               userName: requester.fullName,
               unitCost: cost,

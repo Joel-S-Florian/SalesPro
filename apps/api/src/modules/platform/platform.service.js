@@ -109,7 +109,7 @@ export async function updateCompany(id, data) {
 export async function resetCompanyUserPassword(companyId, userId, newPassword) {
   const user = await basePrisma.user.findFirst({ where: { id: userId, companyId } });
   if (!user) throw AppError.notFound('Usuario no encontrado en esa empresa');
-  await basePrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword) } });
+  await basePrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword), mustChangePassword: true } });
   await basePrisma.session.deleteMany({ where: { userId } });
   return { ok: true };
 }

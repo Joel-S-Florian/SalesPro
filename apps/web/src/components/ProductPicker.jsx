@@ -9,7 +9,7 @@ const inputClass =
  * Selector de producto con búsqueda en el servidor (no depende de tener todo el catálogo cargado).
  * `onChange(id, product)` entrega el id y el producto elegido; si no hay selección, toma el primer resultado.
  */
-export default function ProductPicker({ id, value, onChange, label = 'Producto' }) {
+export default function ProductPicker({ id, value, onChange, label = 'Producto', pinned = null }) {
   const [query, setQuery] = useState('');
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -41,6 +41,9 @@ export default function ProductPicker({ id, value, onChange, label = 'Producto' 
     };
   }, [query]);
 
+  // Un producto preseleccionado desde fuera aparece aunque no esté en los resultados de la búsqueda
+  const shown = pinned && !options.some(o => o.id === pinned.id) ? [pinned, ...options] : options;
+
   return (
     <div className="space-y-2">
       <div className="relative">
@@ -58,12 +61,12 @@ export default function ProductPicker({ id, value, onChange, label = 'Producto' 
       <select
         id={id}
         value={value}
-        onChange={e => onChange(e.target.value, options.find(o => o.id === e.target.value))}
+        onChange={e => onChange(e.target.value, shown.find(o => o.id === e.target.value))}
         className={inputClass}
         aria-busy={loading}
       >
-        {options.length === 0 && <option value="">{loading ? 'Buscando…' : 'Sin resultados'}</option>}
-        {options.map(p => (
+        {shown.length === 0 && <option value="">{loading ? 'Buscando…' : 'Sin resultados'}</option>}
+        {shown.map(p => (
           <option key={p.id} value={p.id} className="dark:bg-slate-950">
             {p.name} (Stock: {p.stock})
           </option>

@@ -32,11 +32,24 @@ solo las filas que no se pueden salvar. Lo que sí debe estar presente son los d
 | **Código** | **Sí** | Código de barras (EAN-13/UPC) o SKU. Es la clave única del producto. | Espacios sobrantes; minúsculas (se pasa a MAYÚSCULAS). Máx. 50 caracteres. |
 | **Descripción** | **Sí** | Nombre del producto. | Espacios dobles/laterales, tabulaciones, caracteres invisibles. Se recorta a 200 caracteres. |
 | **Costo unitario** | **Sí** | Lo que cuesta cada unidad (sin ITBIS de venta). | `$1,250.50`, `RD$ 85`, `1.234,50`, `85,5`, `"85"`. Debe ser un número ≥ 0. |
-| Existencia | No | Unidades que entran. Si falta, se asume 0. | Texto o decimal (`"40"`, `40.0`); se redondea a entero. No puede ser negativa. |
+| Existencia | No | Unidades que entran. Si falta, se asume 0. | Texto o decimal (`"40"`, `40.0`); se redondea a entero en `UND` (a granel conserva 2 decimales). No puede ser negativa. |
 | Precio de venta | No | Precio al público. Si falta, se calcula `costo + margen %` (el margen se elige en pantalla). | Mismos formatos de moneda que el costo. |
 | Categoría | No | Nombre de la categoría. Si no existe, **se crea**. Si falta, se usa la categoría por defecto elegida en pantalla. | Mayúsculas/minúsculas indistintas para detectar una existente. |
 
-Cualquier **otra columna** (lote, ubicación de almacén, SKU del proveedor, fecha, notas...) se **descarta**. No hace
+### Datos de alimentos (opcionales)
+
+| Dato | Qué es |
+|---|---|
+| Unidad de venta | `UND`, `LB`, `KG`, `OZ`, `GR`, `LT`, `GAL`, `ML` (se aceptan alias: libras, kilos, galón…). A granel la existencia admite 2 decimales. Si falta: `UND`. |
+| Stock mínimo | Número ≥ 0 |
+| Perecedero | `SI` / `NO` |
+| Lote y vencimiento | `AAAA-MM-DD` (también `DD/MM/AAAA`). Obligatorios en un perecedero con existencia. Varias filas con el mismo código y distinto lote = varios lotes del mismo producto. |
+| Presentación 1 y 2 | Nombre, unidades que contiene, precio del paquete y código de barras opcional |
+
+Se asignan en el paso «Columnas» (sección *Datos de alimentos*). Un producto que ya existe conserva su unidad y presentaciones. Con *Perecederos y lotes*
+apagado en Configuración, las filas perecederas se rechazan. Prompt y ejemplo completos: [`Prompt_Archivo_Ingesta_Alimentos.md`](Prompt_Archivo_Ingesta_Alimentos.md).
+
+Cualquier **otra columna** (ubicación de almacén, SKU del proveedor, notas...) se **descarta**. No hace
 falta que el archivo venga sin ellas.
 
 ## 4. Cuándo se rechaza una fila (queda "Inválida" y se omite)

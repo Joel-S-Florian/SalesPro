@@ -3,6 +3,10 @@ import { z } from 'zod';
 // Variables opcionales: una cadena vacía (como en .env.example) cuenta como no definida
 const optionalUrl = z.preprocess(value => (value === '' ? undefined : value), z.string().url().optional());
 
+// Texto opcional: una cadena vacía cuenta como no definida
+const optionalText = z.preprocess(value => (value === '' ? undefined : value), z.string().optional());
+const optionalEmail = z.preprocess(value => (value === '' ? undefined : value), z.string().email().optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(4010),
@@ -19,6 +23,15 @@ const envSchema = z.object({
   ECF_MASTER_KEY: z.string().optional(), // 32 bytes en base64: cifra certificados digitales
   ECF_BASE_URL_OVERRIDE: optionalUrl, // simulador de la DGII (nunca en producción)
   PUBLIC_API_URL: optionalUrl, // dirección pública del API, para registrar las URL de recepción
+  // Correo saliente (avisos de la landing y recuperación de contraseña)
+  SMTP_HOST: optionalText,
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: optionalText,
+  SMTP_PASS: optionalText,
+  SMTP_SECURE: z.preprocess(value => (value === '' || value === undefined ? undefined : value === 'true' || value === true), z.boolean().optional()),
+  MAIL_FROM: optionalText, // p. ej. "FACTOS <no-responder@tudominio.com>"
+  NOTIFY_EMAIL: optionalEmail, // a dónde llegan las solicitudes de la landing y los registros nuevos
+  WEB_URL: z.preprocess(value => (value === '' ? undefined : value), z.string().url().default('http://localhost:5180')), // dirección del sistema, para los enlaces de los correos
 });
 
 export const env = envSchema.parse(process.env);

@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = {
   paymentMethods: ['EFECTIVO', 'TARJETA'],
   vendedorCanDiscount: false,
   requireOpenShift: false,
+  security: { idleTimeoutMinutes: 30 },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,

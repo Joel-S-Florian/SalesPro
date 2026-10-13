@@ -48,6 +48,31 @@ function Switch({ id, checked, onToggle, label, hint, disabled }){
   );
 }
 
+/** Seguridad de la sesión: cierre automático cuando el sistema no se usa. */
+function SecurityCard({ value, onChange }) {
+  const minutes = value?.idleTimeoutMinutes ?? 30;
+  return (
+    <div className={cardClass} id="security-settings">
+      <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Seguridad de la sesión</h4>
+      <p className="text-xs text-slate-400">Si nadie toca el sistema durante este tiempo, la sesión se cierra sola (un minuto antes se avisa). Protege las cajas que se quedan abiertas.</p>
+      <div className="max-w-xs space-y-1.5">
+        <label htmlFor="idle-minutes" className={labelClass}>Cerrar sesión tras (minutos sin actividad)</label>
+        <input
+          id="idle-minutes"
+          type="number"
+          min="0"
+          max="1440"
+          step="1"
+          value={minutes}
+          onChange={e => onChange({ ...value, idleTimeoutMinutes: Math.min(1440, Math.max(0, parseInt(e.target.value, 10) || 0)) })}
+          className={inputClass}
+        />
+        <p className="text-[11px] text-slate-400">30 por defecto. Escribe 0 para no cerrar nunca (no recomendado en equipos compartidos).</p>
+      </div>
+    </div>
+  );
+}
+
 /** Gestión de perecederos y lotes: umbrales de alerta y reglas de descuento por vencimiento. */
 function PerishableCard({ value, onChange }) {
   const set = patch => onChange({ ...value, ...patch });
@@ -260,6 +285,8 @@ function GeneralSettings() {
         value={form.perishable}
         onChange={perishable => setForm({ ...form, perishable })}
       />
+
+      <SecurityCard value={form.security} onChange={security => setForm({ ...form, security })} />
 
       <div className="flex items-center gap-3">
         <button

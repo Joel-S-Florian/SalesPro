@@ -76,38 +76,56 @@ enum PlanType {
 }
 
 model User {
-  id                String         @id @default(cuid())
-  username          String         @unique
-  passwordHash      String
-  fullName          String
-  role              UserRole       @default(VENDEDOR)
-  active            Boolean        @default(true)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  auditLogs         AuditLog[]
-  inventoryLogs     InventoryLog[]
-  sales             Sale[]         @relation("SaleUser")
-  sessions          Session[]
-  terminals         Terminal[]     @relation("TerminalUsers")
-  defaultTerminalId String?
-  defaultTerminal   Terminal?      @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
-  cashierCloses     CashierClose[] @relation("CloseCashier")
-  companyId         String?
-  company           Company?       @relation(fields: [companyId], references: [id])
+  id                 String          @id @default(cuid())
+  username           String          @unique
+  passwordHash       String
+  email              String?         @unique // para recuperar la contraseña (opcional)
+  mustChangePassword Boolean         @default(false) // clave temporal asignada por un administrador
+  fullName           String
+  role               UserRole        @default(VENDEDOR)
+  active             Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  auditLogs          AuditLog[]
+  inventoryLogs      InventoryLog[]
+  sales              Sale[]          @relation("SaleUser")
+  sessions           Session[]
+  passwordResets     PasswordReset[]
+  terminals          Terminal[]      @relation("TerminalUsers")
+  defaultTerminalId  String?
+  defaultTerminal    Terminal?       @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
+  cashierCloses      CashierClose[]  @relation("CloseCashier")
+  companyId          String?
+  company            Company?        @relation(fields: [companyId], references: [id])
 
   @@index([companyId])
   @@map("users")
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  token          String   @unique
+  userId         String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now()) // última renovación: sirve para cerrar sesiones abandonadas
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sessions")
+}
+
+/// Enlace de un solo uso para restablecer la contraseña. Solo se guarda el hash (SHA-256) del token.
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_resets")
 }
 
 model Category {

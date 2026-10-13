@@ -3,10 +3,12 @@ import { basePrisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { buildPaginationQuery, getPaginationMeta } from '../../shared/utils/helpers.js';
 import { createCompany } from '../platform/platform.service.js';
+import { sendMail } from '../../shared/utils/mailer.js';
+import { env } from '../../config/env.js';
 
 /** Alta pública de una solicitud de acceso (la página de promoción). */
 export async function createLead(data, ipAddress) {
-  return basePrisma.lead.create({
+  const lead = await basePrisma.lead.create({
     data: {
       name: data.name,
       business: data.business,
@@ -17,6 +19,25 @@ export async function createLead(data, ipAddress) {
     },
     select: { id: true },
   });
+
+  // Aviso al equipo (no espera ni falla la solicitud: ya quedó guardada en la bandeja)
+  void sendMail({
+    to: env.NOTIFY_EMAIL,
+    subject: `Nueva solicitud en FACTOS: ${data.business}`,
+    replyTo: /^\S+@\S+\.\S+$/.test(data.contact) ? data.contact : undefined,
+    text: [
+      'Llegó una solicitud desde la página de promoción.',
+      '',
+      `Nombre: ${data.name}`,
+      `Negocio: ${data.business}${data.businessType ? ` (${data.businessType})` : ''}`,
+      `Contacto: ${data.contact}`,
+      ...(data.note ? [`Comentario: ${data.note}`] : []),
+      '',
+      `Atiéndela en ${env.WEB_URL} → Solicitudes.`,
+    ].join('\n'),
+  });
+
+  return lead;
 }
 
 export async function listLeads({ page = 1, limit = 10, status }) {

@@ -93,6 +93,24 @@ export const changePassword = asyncHandler(async (req, res) => {
 });
 
 /**
+ * POST /api/auth/forgot-password
+ * Pide un enlace de recuperación; la respuesta es siempre la misma
+ */
+export const forgotPassword = asyncHandler(async (req, res) => {
+  await authService.forgotPassword(req.body.identifier);
+  res.json({ success: true, message: 'Si la cuenta tiene un correo registrado, enviamos un enlace para restablecer la contraseña.' });
+});
+
+/**
+ * POST /api/auth/reset-password
+ * Cambia la contraseña con el enlace recibido por correo
+ */
+export const resetPassword = asyncHandler(async (req, res) => {
+  await authService.resetPassword(req.body.token, req.body.newPassword);
+  res.json({ success: true, message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
+});
+
+/**
  * GET /api/auth/users
  * Get all users (admin only)
  */
@@ -123,7 +141,7 @@ export const createUser = asyncHandler(async (req, res) => {
  */
 export const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const user = await authService.updateUser(id, req.body);
+  const user = await authService.updateUser(id, req.body, req.user.userId);
   res.json(user);
 });
 

@@ -30,6 +30,11 @@ export const perishableSchema = z
     }
   });
 
+/** Seguridad de la sesión: minutos sin actividad antes de cerrarla (0 = nunca). */
+export const securitySchema = z.object({
+  idleTimeoutMinutes: z.number().int().min(0).max(1440).default(30),
+});
+
 /**
  * Esquema de configuración global. Cada clave se guarda como una fila en `system_config`.
  */
@@ -47,6 +52,7 @@ export const configSchema = z.object({
   vendedorCanDiscount: z.boolean(),
   requireOpenShift: z.boolean(),
   perishable: perishableSchema,
+  security: securitySchema,
 });
 
 export const DEFAULT_CONFIG = {
@@ -62,6 +68,7 @@ export const DEFAULT_CONFIG = {
   paymentMethods: ['EFECTIVO', 'TARJETA'],
   vendedorCanDiscount: false,
   requireOpenShift: false,
+  security: { idleTimeoutMinutes: 30 },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,
@@ -95,6 +102,7 @@ export async function getConfig() {
     ...stored,
     business: { ...businessDefaults, ...(stored.business || {}) },
     perishable: { ...DEFAULT_CONFIG.perishable, ...(stored.perishable || {}) },
+    security: { ...DEFAULT_CONFIG.security, ...(stored.security || {}) },
   };
 }
 

@@ -67,5 +67,5 @@ global en proporción.
 
 - Merma como movimiento propio con costo perdido y reporte de mermas; reporte de ventas con descuento por vencimiento.
 - Rastreo hacia atrás (qué ventas recibieron un lote) usando `SaleBatchDetail`; lote/vencimiento en el recibo (opcional).
-- Columnas de lote en la importación de inventario; lectura de código con lote (GS1).
+- Lectura de código con lote (GS1). (La importación de inventario ya lee lote y vencimiento: ver `Prompt_Archivo_Ingesta_Alimentos.md`.)
 - El kárdex trata `AJUSTE` como resta (inconsistencia anterior): no se tocó.

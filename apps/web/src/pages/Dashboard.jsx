@@ -3,17 +3,12 @@ import { api } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import { SalesTrendChart, TopProductsChart } from '../components/SVGCharts';
 import { DollarSign, TrendingUp, Package, AlertTriangle, ArrowRight, Loader2, RefreshCw, ShoppingCart } from 'lucide-react';
-import Modal from '../components/Modal';
-import { notify } from '../utils/notify';
 import ExpiryBadge from '../components/inventory/ExpiryBadge';
 
-export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
+export default function Dashboard({ onNavigateToPOS, onNavigateToProducts, onRestock }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [adjustingProduct, setAdjustingProduct] = useState(null);
-  const [adjustmentQty, setAdjustmentQty] = useState(10);
-  const [submittingAdjust, setSubmittingAdjust] = useState(false);
 
   const isVendor = useAuthStore(state => state.user?.role === 'VENDEDOR');
 
@@ -41,28 +36,6 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
   useEffect(() => {
     fetchDashboardStats();
   }, [isVendor]);
-
-  const handleFastReorder = async (e) => {
-    e.preventDefault();
-    if (!adjustingProduct) return;
-
-    try {
-      setSubmittingAdjust(true);
-      await api.inventory.adjust({
-        productId: adjustingProduct.id,
-        type: 'Entrada',
-        quantity: adjustmentQty,
-        reason: 'Reabastecimiento Express (Dashboard Alertas)'
-      });
-      setAdjustingProduct(null);
-      setAdjustmentQty(10);
-      await fetchDashboardStats();
-    } catch (err) {
-      notify.error(err.message || 'Error al reabastecer');
-    } finally {
-      setSubmittingAdjust(false);
-    }
-  };
 
   if (loading && !stats) {
     return (
@@ -296,7 +269,7 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
                     </p>
                   </div>
                   <button
-                    onClick={() => setAdjustingProduct({ id: prod.id, name: prod.name, currentStock: prod.stock })}
+                    onClick={() => onRestock?.(prod.id)}
                     className="bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 text-[11px] font-bold px-3 py-1.5 rounded-md transition-colors whitespace-nowrap cursor-pointer"
                   >
                     Reabastecer
@@ -313,62 +286,6 @@ export default function Dashboard({ onNavigateToPOS, onNavigateToProducts }) {
           </div>
         </div>
       )}
-
-      {/* Fast Stock Adjust Modal */}
-      <Modal
-        isOpen={adjustingProduct !== null}
-        onClose={() => setAdjustingProduct(null)}
-        title="Reabastecimiento Express"
-        maxWidth="sm"
-      >
-        {adjustingProduct && (
-          <form onSubmit={handleFastReorder} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-xs text-slate-400 uppercase font-mono">Producto a Reabastecer</label>
-              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{adjustingProduct.name}</p>
-              <p className="text-xs text-slate-500 font-mono">Stock actual: {adjustingProduct.currentStock} unidades</p>
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="fast-stock-qty" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
-                Cantidad a Agregar (Entrada)
-              </label>
-              <input
-                id="fast-stock-qty"
-                type="number"
-                min="1"
-                required
-                value={adjustmentQty}
-                onChange={(e) => setAdjustmentQty(Math.max(1, parseInt(e.target.value) || 0))}
-                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm font-mono"
-              />
-            </div>
-
-            <div className="flex gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setAdjustingProduct(null)}
-                className="w-full px-4 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-medium rounded-lg transition-colors cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={submittingAdjust}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white text-sm font-medium py-2 rounded-lg shadow-sm transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                {submittingAdjust ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Registrando...
-                  </>
-                ) : (
-                  'Ingresar Stock'
-                )}
-              </button>
-            </div>
-          </form>
-        )}
-      </Modal>
     </div>
   );
 }

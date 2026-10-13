@@ -11,6 +11,22 @@ export const loginSchema = z.object({
   }),
 });
 
+/** Formato plano ({ body }): es el que `validate()` aplica de verdad. */
+const strongPassword = z
+  .string()
+  .min(8, 'La contraseña debe tener al menos 8 caracteres')
+  .max(100)
+  .regex(/[A-Za-z]/, 'La contraseña debe incluir al menos una letra')
+  .regex(/\d/, 'La contraseña debe incluir al menos un número');
+
+export const forgotPasswordSchema = {
+  body: z.object({ identifier: z.string().trim().min(1, 'Escribe tu usuario o correo').max(120) }),
+};
+
+export const resetPasswordSchema = {
+  body: z.object({ token: z.string().min(20).max(200), newPassword: strongPassword }),
+};
+
 export const changePasswordSchema = z.object({
   body: z.object({
     oldPassword: z.string().min(1, 'Contraseña actual requerida'),

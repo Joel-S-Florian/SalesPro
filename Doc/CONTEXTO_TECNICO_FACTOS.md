@@ -3,6 +3,8 @@
 Sistema de punto de venta, inventario y facturación para comercios, pensado como plataforma **multi-empresa (SaaS)**.
 Este documento reemplaza al antiguo `SALESPRO_V2_TECHNICAL_CONTEXT.md`.
 
+> Acceso y sesión (recuperar contraseña, clave temporal, cierre por inactividad, avisos por correo): [`Acceso_y_Sesion.md`](Acceso_y_Sesion.md). Inventario y cierre de caja: [`Inventario_y_Cierre_de_Caja.md`](Inventario_y_Cierre_de_Caja.md).
+
 ## Arquitectura
 
 Monorepo con `npm workspaces`:

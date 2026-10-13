@@ -2,10 +2,24 @@ import express from 'express';
 import * as authController from './auth.controller.js';
 import { authenticate, authorize } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { loginSchema, changePasswordSchema, createUserSchema, updateUserSchema, userIdParamSchema } from './validators.js';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { forgotPasswordSchema, resetPasswordSchema, loginSchema, changePasswordSchema, createUserSchema, updateUserSchema, userIdParamSchema } from './validators.js';
 import { auditLog } from '../../shared/middleware/audit.js';
 
 const router = express.Router();
+
+// Recuperación de contraseña: pocos intentos por conexión (el envío de correos no debe poder usarse para molestar a nadie)
+const recoveryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  message: { error: 'Demasiados intentos. Espera unos minutos.', code: 'RECOVERY_RATE_LIMIT' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: ipKeyGenerator,
+});
+
+router.post('/forgot-password', recoveryLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
+router.post('/reset-password', recoveryLimiter, validate(resetPasswordSchema), authController.resetPassword);
 
 /**
  * @route POST /api/auth/login

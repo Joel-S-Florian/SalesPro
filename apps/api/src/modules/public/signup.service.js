@@ -3,6 +3,8 @@ import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { hashPassword } from '../../shared/utils/crypto.js';
 import { bootstrapCompany } from '../platform/bootstrap.js';
 import { login } from '../auth/auth.service.js';
+import { sendMail } from '../../shared/utils/mailer.js';
+import { env } from '../../config/env.js';
 
 /** Planes que se pueden contratar solos hoy. Los de pago llegarán con la pasarela de cobro. */
 const SELF_SERVICE_PLANS = ['FREE'];
@@ -47,7 +49,7 @@ export async function signup({ plan, account, company, settings }) {
     });
 
     await tx.user.create({
-      data: { companyId: newCompany.id, username, fullName: account.fullName, passwordHash, role: 'ADMINISTRADOR' },
+      data: { companyId: newCompany.id, username, email: username, fullName: account.fullName, passwordHash, role: 'ADMINISTRADOR' },
     });
 
     await tx.systemConfig.createMany({
@@ -64,6 +66,13 @@ export async function signup({ plan, account, company, settings }) {
   });
 
   await bootstrapCompany(created.id);
+
+  // Aviso al equipo de la cuenta nueva (no espera ni afecta el registro)
+  void sendMail({
+    to: env.NOTIFY_EMAIL,
+    subject: `Cuenta nueva en FACTOS: ${company.name}`,
+    text: [`Se registró una empresa nueva.`, '', `Negocio: ${company.name}${company.businessType ? ` (${company.businessType})` : ''}`, `Administrador: ${account.fullName} <${account.email}>`, company.phone ? `Teléfono: ${company.phone}` : '', `Plan: ${plan}`].filter(Boolean).join('\n'),
+  });
 
   // Sesión iniciada: el usuario entra al sistema sin volver a escribir sus datos
   return login(username, account.password);

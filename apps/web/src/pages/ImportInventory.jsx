@@ -14,7 +14,23 @@ const MAPPING_FIELDS = [
   { key: 'stock', label: 'Existencia (opcional)', hint: /exist|stock|cant|qty|unid/i },
   { key: 'price', label: 'Precio de venta (opcional)', hint: /venta|pvp|sale|precio/i },
   { key: 'category', label: 'Categoría (opcional)', hint: /categ|depart|l[ií]nea|grupo/i },
+  // Datos de alimentos (todos opcionales)
+  { key: 'unit', label: 'Unidad de venta (UND, LB, KG…)', advanced: true, hint: /^unidad(\s*de\s*(venta|medida))?$|^unit$|medida|^u\.?m\.?$/i },
+  { key: 'minStock', label: 'Stock mínimo', advanced: true, hint: /m[ií]n|reorden|reorder/i },
+  { key: 'perishable', label: 'Perecedero (SI/NO)', advanced: true, hint: /perecedero|perishable/i },
+  { key: 'lot', label: 'Lote', advanced: true, hint: /^lote|batch/i },
+  { key: 'expiration', label: 'Vencimiento (AAAA-MM-DD)', advanced: true, hint: /venc|expir|caduc/i },
+  { key: 'pres1Name', label: 'Presentación 1: nombre', advanced: true, hint: /pres\w*[ _-]?1.*(nombre|name)/i },
+  { key: 'pres1Qty', label: 'Presentación 1: unidades que contiene', advanced: true, hint: /pres\w*[ _-]?1.*(unid|cant|qty|factor)/i },
+  { key: 'pres1Price', label: 'Presentación 1: precio del paquete', advanced: true, hint: /pres\w*[ _-]?1.*(prec|price)/i },
+  { key: 'pres1Barcode', label: 'Presentación 1: código de barras', advanced: true, hint: /pres\w*[ _-]?1.*(cod|barra)/i },
+  { key: 'pres2Name', label: 'Presentación 2: nombre', advanced: true, hint: /pres\w*[ _-]?2.*(nombre|name)/i },
+  { key: 'pres2Qty', label: 'Presentación 2: unidades que contiene', advanced: true, hint: /pres\w*[ _-]?2.*(unid|cant|qty|factor)/i },
+  { key: 'pres2Price', label: 'Presentación 2: precio del paquete', advanced: true, hint: /pres\w*[ _-]?2.*(prec|price)/i },
+  { key: 'pres2Barcode', label: 'Presentación 2: código de barras', advanced: true, hint: /pres\w*[ _-]?2.*(cod|barra)/i },
 ];
+const BASIC_FIELDS = MAPPING_FIELDS.filter(field => !field.advanced);
+const ADVANCED_FIELDS = MAPPING_FIELDS.filter(field => field.advanced);
 
 const ACTION_STYLES = {
   CREATE: 'text-emerald-600',
@@ -32,7 +48,8 @@ const money = value =>
 function guessMapping(columns) {
   const used = new Set();
   const mapping = {};
-  MAPPING_FIELDS.forEach(field => {
+  // Primero los campos específicos (presentaciones, lote…): así «pres1_nombre» no se confunde con la descripción
+  [...ADVANCED_FIELDS, ...BASIC_FIELDS].forEach(field => {
     const match = columns.find(column => !used.has(column) && field.hint.test(column));
     if (match) {
       mapping[field.key] = match;
@@ -134,6 +151,23 @@ export default function ImportInventory() {
   const missingRequired = MAPPING_FIELDS.some(f => f.required && !mapping[f.key]);
   const needsCategory = !mapping.category && !defaultCategoryId;
 
+  const renderMappingField = field => (
+    <div key={field.key} className="space-y-1.5">
+      <label htmlFor={`map-${field.key}`} className={labelClass}>{field.label}</label>
+      <select
+        id={`map-${field.key}`}
+        value={mapping[field.key] || ''}
+        onChange={e => setMapping({ ...mapping, [field.key]: e.target.value })}
+        className={inputClass}
+      >
+        <option value="">{field.required ? 'Seleccione una columna...' : '— No usar —'}</option>
+        {staged.columns.map(column => (
+          <option key={column} value={column}>{column}</option>
+        ))}
+      </select>
+    </div>
+  );
+
   return (
     <div className="space-y-4 max-w-5xl" id="import-inventory-view">
       <div>
@@ -174,23 +208,17 @@ export default function ImportInventory() {
             <h4 className="font-semibold text-sm">Asignación de columnas</h4>
             <p className="text-xs text-slate-400">{staged.rowCount} filas detectadas. Las columnas sin asignar se descartan.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {MAPPING_FIELDS.map(field => (
-                <div key={field.key} className="space-y-1.5">
-                  <label htmlFor={`map-${field.key}`} className={labelClass}>{field.label}</label>
-                  <select
-                    id={`map-${field.key}`}
-                    value={mapping[field.key] || ''}
-                    onChange={e => setMapping({ ...mapping, [field.key]: e.target.value })}
-                    className={inputClass}
-                  >
-                    <option value="">{field.required ? 'Seleccione una columna...' : '— No usar —'}</option>
-                    {staged.columns.map(column => (
-                      <option key={column} value={column}>{column}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
+              {BASIC_FIELDS.map(renderMappingField)}
             </div>
+            <details className="rounded-lg border border-slate-100 p-3 dark:border-slate-800" open={ADVANCED_FIELDS.some(f => mapping[f.key])}>
+              <summary className="cursor-pointer text-xs font-semibold text-slate-600 dark:text-slate-300">
+                Datos de alimentos (opcional): unidad, perecedero, lote, vencimiento y presentaciones
+              </summary>
+              <p className="mt-2 text-[11px] text-slate-400">
+                Un producto perecedero puede ocupar varias filas con el mismo código y distinto lote. Los productos que ya existen conservan su unidad y presentaciones.
+              </p>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">{ADVANCED_FIELDS.map(renderMappingField)}</div>
+            </details>
           </div>
 
           <div className={cardClass}>
@@ -267,6 +295,7 @@ export default function ImportInventory() {
                   <th className="px-3 py-2 text-right">Costo</th>
                   <th className="px-3 py-2 text-right">Precio</th>
                   <th className="px-3 py-2 text-right">Existencia</th>
+                  <th className="px-3 py-2">Detalle</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -281,7 +310,15 @@ export default function ImportInventory() {
                     <td className="px-3 py-2">{row.name || '—'}</td>
                     <td className="px-3 py-2 text-right font-mono">{money(row.cost)}</td>
                     <td className="px-3 py-2 text-right font-mono">{money(row.price)}</td>
-                    <td className="px-3 py-2 text-right font-mono">{row.stock}</td>
+                    <td className="px-3 py-2 text-right font-mono">{row.stock}{row.unit && row.unit !== 'UND' ? ` ${row.unit.toLowerCase()}` : ''}</td>
+                    <td className="px-3 py-2 text-[11px] text-slate-500">
+                      {[
+                        row.isPerishable && 'Perecedero',
+                        row.lot && `Lote ${row.lot}${row.expiration ? ` · vence ${row.expiration}` : ''}`,
+                        row.extraLot && 'lote adicional',
+                        row.presentations?.length > 0 && `${row.presentations.length} presentación(es)`,
+                      ].filter(Boolean).join(' · ') || '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
