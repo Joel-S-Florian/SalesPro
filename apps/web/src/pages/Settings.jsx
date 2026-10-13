@@ -4,6 +4,8 @@ import { Loader2, Plus, Edit2, Power, Save } from 'lucide-react';
 import Modal from '../components/Modal';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
 import { notify } from '../utils/notify';
+import SmartSelect from '../components/ui/SmartSelect';
+import CardPaymentsSettings from '../components/payments/CardPaymentsSettings';
 
 const EcfSettings = lazy(() => import('../components/ecf/EcfSettings'));
 
@@ -231,7 +233,7 @@ function GeneralSettings() {
           </div>
           <div className="space-y-1.5">
             <label htmlFor="cfg-format" className={labelClass}>Formato de comprobante por defecto</label>
-            <select
+            <SmartSelect
               id="cfg-format"
               value={form.receiptFormat}
               onChange={e => setForm({ ...form, receiptFormat: e.target.value })}
@@ -240,7 +242,7 @@ function GeneralSettings() {
               <option value="A4">Carta (A4)</option>
               <option value="TICKET">Ticket 80 mm</option>
               <option value="BOTH">Ambos (A4 + Ticket)</option>
-            </select>
+            </SmartSelect>
             <p className="text-[11px] text-slate-400">Cada equipo puede cambiarlo localmente desde el POS.</p>
           </div>
         </div>
@@ -299,6 +301,16 @@ function GeneralSettings() {
         {message && <span className={`text-xs ${message.ok ? 'text-emerald-600' : 'text-rose-500'}`}>{message.text}</span>}
       </div>
     </form>
+  );
+}
+
+/** Ajustes generales + pagos con tarjeta (que se guardan por separado). */
+function GeneralWithPayments() {
+  return (
+    <div className="space-y-6">
+      <GeneralSettings />
+      <CardPaymentsSettings />
+    </div>
   );
 }
 
@@ -483,7 +495,7 @@ export default function Settings() {
           </button>
         ))}
       </div>
-      {tab === 'GENERAL' && <GeneralSettings />}
+      {tab === 'GENERAL' && <GeneralWithPayments />}
       {tab === 'TERMINALS' && <TerminalsSettings />}
       {tab === 'ECF' && (
         <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />}>

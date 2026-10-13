@@ -35,6 +35,8 @@ const TENANT_MODELS = new Set([
   'EcfSequence',
   'EcfDocument',
   'EcfInbox', 'ProductBatch', 'SaleBatchDetail', 'ProductPresentation',
+  'CardProviderConfig',
+  'CardPayment',
 ]);
 
 const FILTERED = new Set([

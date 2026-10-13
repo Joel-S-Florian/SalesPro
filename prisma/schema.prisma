@@ -40,6 +40,8 @@ model Company {
   productBatches   ProductBatch[]
   saleBatchDetails SaleBatchDetail[]
   presentations    ProductPresentation[]
+  cardConfig       CardProviderConfig?
+  cardPayments     CardPayment[]
 
   @@map("companies")
 }
@@ -217,6 +219,7 @@ model Sale {
   ecfSignedAt     DateTime?
   ecfStampUrl     String? // enlace del QR (timbre) de la representación impresa
   ecfDocuments    EcfDocument[]
+  cardPayment     CardPayment?
   createdAt       DateTime      @default(now())
   terminalId      String?
   cashierCloseId  String?
@@ -517,6 +520,61 @@ enum UserRole {
 enum PaymentMethod {
   EFECTIVO
   TARJETA
+}
+
+/// Cómo se cobra con tarjeta: NONE = solo se marca «tarjeta» (como siempre); MANUAL = el cajero captura la aprobación del voucher de un
+/// terminal independiente; SIMULATOR = pruebas; AZUL = terminal/servicio de Azul (pendiente de contrato y credenciales).
+enum CardProvider {
+  NONE
+  MANUAL
+  SIMULATOR
+  AZUL
+}
+
+enum CardPaymentStatus {
+  APPROVED
+  DECLINED
+  VOIDED
+  ERROR
+}
+
+/// Configuración del cobro con tarjeta por empresa. La clave del procesador se guarda cifrada (AES-256-GCM, ECF_MASTER_KEY) y nunca se devuelve.
+model CardProviderConfig {
+  id           String       @id @default(cuid())
+  companyId    String       @unique
+  company      Company      @relation(fields: [companyId], references: [id])
+  provider     CardProvider @default(NONE)
+  mode         String       @default("TEST") // TEST | PROD
+  merchantId   String?
+  terminalCode String?
+  secretEnc    String?
+  updatedAt    DateTime     @updatedAt
+
+  @@map("card_provider_configs")
+}
+
+/// Un cobro con tarjeta aprobado (o rechazado) antes de registrar la venta; la venta lo reclama al crearse.
+model CardPayment {
+  id         String            @id @default(cuid())
+  companyId  String
+  company    Company           @relation(fields: [companyId], references: [id])
+  provider   CardProvider
+  status     CardPaymentStatus
+  amount     Float
+  authCode   String?
+  last4      String?
+  brand      String?
+  reference  String? // identificador de la transacción en el procesador
+  message    String?
+  terminalId String? // caja donde se cobró
+  userId     String
+  saleId     String?           @unique
+  sale       Sale?             @relation(fields: [saleId], references: [id])
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([companyId, createdAt])
+  @@map("card_payments")
 }
 
 enum InventoryType {

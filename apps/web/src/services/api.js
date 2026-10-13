@@ -273,6 +273,13 @@ export const api = {
     update: (payload) => request('/config', { method: 'PUT', body: JSON.stringify(payload) }),
   },
 
+  payments: {
+    cardConfig: () => request('/payments/card/config'),
+    saveCardConfig: payload => request('/payments/card/config', { method: 'PUT', body: JSON.stringify(payload) }),
+    chargeCard: payload => request('/payments/card/charge', { method: 'POST', body: JSON.stringify(payload) }),
+    voidCard: id => request(`/payments/card/${id}/void`, { method: 'POST' }),
+  },
+
   terminals: {
     list: () => request('/terminals'),
     mine: () => request('/terminals/my'),

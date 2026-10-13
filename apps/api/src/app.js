@@ -23,6 +23,7 @@ import cashierRoutes from './modules/cashier/cashier.routes.js';
 import inventoryImportRoutes from './modules/inventory-import/inventory-import.routes.js';
 import publicRoutes from './modules/public/public.routes.js';
 import platformRoutes from './modules/platform/platform.routes.js';
+import paymentsRoutes from './modules/payments/payments.routes.js';
 import ecfRoutes from './modules/ecf/ecf.routes.js';
 import ecfReceiverRoutes from './modules/ecf/ecf.receiver.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
@@ -85,6 +86,7 @@ app.use('/terminals', terminalsRoutes);
 app.use('/cashier', cashierRoutes);
 app.use('/inventory-import', inventoryImportRoutes);
 app.use('/platform', platformRoutes);
+app.use('/payments', paymentsRoutes);
 app.use('/ecf', ecfRoutes);
 app.use('/ecf-receptor', ecfReceiverRoutes); // servicios públicos de recepción (sin sesión)
 app.use('/public', publicRoutes);

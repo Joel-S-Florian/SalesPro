@@ -10,6 +10,7 @@ import { CREDIT_NOTE_NCF } from '../../../../../packages/shared/constants.js';
 import { comparePassword } from '../../shared/utils/crypto.js';
 import { createAuditLog } from '../../shared/middleware/audit.js';
 import { getTenantId } from '../../config/tenant.js';
+import * as cardPayments from '../payments/payments.service.js';
 import { getConfig } from '../config/config.service.js';
 import { resolveShiftForSale } from '../cashier/cashier.service.js';
 import { ecfTypeForCustomer, issueEcf, loadIssuingContext, saleEcfFields, saveEcfDocuments } from '../ecf/ecf.issue.js';
@@ -79,6 +80,7 @@ export async function getSaleById(id, requester) {
     include: {
       customer: { select: { id: true, name: true, documentId: true, email: true, phone: true, address: true, rnc: true } },
       user: { select: { id: true, username: true, fullName: true } },
+      cardPayment: { select: { provider: true, brand: true, last4: true, authCode: true, reference: true } },
       details: {
         include: {
           product: { select: { id: true, code: true, name: true, costPrice: true } },
@@ -325,6 +327,9 @@ export async function createSale(data, userId, userName, requester = { userId, r
     throw AppError.badRequest('Método de pago no habilitado');
   }
 
+  // Con terminal de tarjeta configurado, la venta exige un cobro aprobado por el monto exacto (se reclama en la transacción)
+  const cardPayment = await cardPayments.requireForSale(normalizedPaymentMethod, data.cardPaymentId, total);
+
   // Con facturación electrónica activa el comprobante es un e-CF (se asigna dentro de la transacción);
   // si no, se usa el NCF de papel (serie B)
   const ecfContext = await loadIssuingContext();
@@ -392,6 +397,8 @@ export async function createSale(data, userId, userName, requester = { userId, r
         },
       },
     });
+
+    await cardPayments.claimForSale(tx, cardPayment, newSale.id);
 
     // Update product stock and create inventory logs
     const usedDetails = new Set();

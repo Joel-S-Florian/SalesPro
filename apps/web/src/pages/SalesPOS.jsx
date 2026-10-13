@@ -19,6 +19,7 @@ import Ticket from '../components/pos/Ticket';
 import MobileTicketSheet from '../components/pos/MobileTicketSheet';
 import CheckoutSuccessModal from '../components/pos/CheckoutSuccessModal';
 import RemoveItemModal from '../components/pos/RemoveItemModal';
+import CardPaymentModal from '../components/pos/CardPaymentModal';
 import NewCustomerModal from '../components/pos/NewCustomerModal';
 import { expiryPercentFor } from '../utils/expiry';
 import { isFractional, trimQty, unitInfo } from '../utils/units';
@@ -65,6 +66,25 @@ export default function SalesPOS({ onNavigate }) {
 
   const [submitting, setSubmitting] = useState(false);
   const [recentSale, setRecentSale] = useState(null);
+  // Cobro con tarjeta: configuración del terminal y ventana de cobro (se espera su resultado antes de registrar la venta)
+  const [cardConfig, setCardConfig] = useState({ provider: 'NONE' });
+  const [cardModal, setCardModal] = useState({ open: false, amount: 0 });
+  const cardResolver = useRef(null);
+
+  useEffect(() => {
+    api.payments.cardConfig().then(setCardConfig).catch(() => {});
+  }, []);
+
+  const requestCardPayment = amount =>
+    new Promise(resolve => {
+      cardResolver.current = resolve;
+      setCardModal({ open: true, amount });
+    });
+  const finishCardPayment = payment => {
+    setCardModal(prev => ({ ...prev, open: false }));
+    cardResolver.current?.(payment);
+    cardResolver.current = null;
+  };
   const [removeTarget, setRemoveTarget] = useState(null);
   const [newCustomerOpen, setNewCustomerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -179,8 +199,14 @@ export default function SalesPOS({ onNavigate }) {
       notify.warning('Seleccione un cliente para la venta.');
       return;
     }
+    let cardPayment = null;
     try {
       setSubmitting(true);
+      // Con terminal de tarjeta configurado, primero se cobra; la venta se registra solo si el cobro fue aprobado
+      if (activePayment === 'TARJETA' && cardConfig.provider !== 'NONE') {
+        cardPayment = await requestCardPayment(Number(cart.totals.total));
+        if (!cardPayment) return;
+      }
       const sale = await api.sales.create({
         customerId: customer.id,
         ...(shiftState.terminalId ? { terminalId: shiftState.terminalId } : {}),
@@ -192,6 +218,7 @@ export default function SalesPOS({ onNavigate }) {
         })),
         discount: Number(cart.globalDiscount || 0),
         paymentMethod: activePayment,
+        ...(cardPayment ? { cardPaymentId: cardPayment.id } : {}),
       });
       catalog.applySale(cart.items.map(item => ({ product: item.product, quantity: baseQuantityOf(item) })));
       setRecentSale(sale);
@@ -202,6 +229,13 @@ export default function SalesPOS({ onNavigate }) {
       catalog.refresh();
     } catch (err) {
       notify.error(err.message || 'No se pudo registrar la venta.');
+      // La tarjeta ya se cobró pero la venta no se registró: se anula el cobro para no dejar un cargo sin venta
+      if (cardPayment) {
+        api.payments
+          .voidCard(cardPayment.id)
+          .then(() => notify.warning('Se anuló el cobro con tarjeta porque la venta no se registró.'))
+          .catch(() => notify.error('Anule el cobro con tarjeta en el terminal: la venta no se registró.'));
+      }
     } finally {
       setSubmitting(false);
     }
@@ -215,7 +249,7 @@ export default function SalesPOS({ onNavigate }) {
   // ---- Atajos de teclado: "/" o F2 buscan, F9 cobra ----
   const checkoutRef = useRef(handleCheckout);
   checkoutRef.current = handleCheckout;
-  const blocked = !!(recentSale || removeTarget || newCustomerOpen || cameraOpen);
+  const blocked = !!(recentSale || removeTarget || newCustomerOpen || cameraOpen || cardModal.open);
 
   useEffect(() => {
     const onKeyDown = event => {
@@ -364,6 +398,14 @@ export default function SalesPOS({ onNavigate }) {
 
       <ProductOptionsModal product={optionsFor} onConfirm={confirmOptions} onClose={() => setOptionsFor(null)} />
 
+      <CardPaymentModal
+        isOpen={cardModal.open}
+        amount={cardModal.amount}
+        provider={cardConfig.provider}
+        terminalId={shiftState.terminalId}
+        onApproved={finishCardPayment}
+        onCancel={() => finishCardPayment(null)}
+      />
       <RemoveItemModal
         item={removeTarget}
         requiresAdmin={isVendedor}
