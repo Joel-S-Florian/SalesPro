@@ -220,6 +220,8 @@ model Sale {
   ecfStampUrl     String? // enlace del QR (timbre) de la representación impresa
   ecfDocuments    EcfDocument[]
   cardPayment     CardPayment?
+  cashReceived    Json? // efectivo recibido por denominación { "1000": 1, "50": 2 }
+  cashChange      Json? // devuelta entregada por denominación
   createdAt       DateTime      @default(now())
   terminalId      String?
   cashierCloseId  String?
@@ -410,6 +412,7 @@ model CashierClose {
   openedAt       DateTime    @default(now())
   closedAt       DateTime?
   openingBalance Float       @default(0)
+  openingCount   Json? // billetes y monedas con los que abrió la caja { "100": 5, "25": 8 }
   expectedCash   Float?
   declaredCash   Float?
   difference     Float?

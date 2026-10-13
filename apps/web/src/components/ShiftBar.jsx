@@ -3,6 +3,8 @@ import { Store, Lock, Unlock, Star } from 'lucide-react';
 import Modal from './Modal';
 import { printZReport } from '../utils/zReportPdf';
 import SmartSelect from './ui/SmartSelect';
+import DenominationCounter from './pos/DenominationCounter';
+import { sumBreakdown } from '../utils/cashChange';
 
 const inputClass =
   'w-full px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent text-xs outline-none focus:ring-1 focus:ring-indigo-500';
@@ -29,6 +31,7 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
 
   const [mode, setMode] = useState(null); // 'open' | 'close' | null
   const [amount, setAmount] = useState('');
+  const [count, setCount] = useState({}); // billetes y monedas con los que abre la caja (opcional)
   const [notes, setNotes] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,9 +48,12 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
   const summary = shift?.summary;
   const expectedCash = shift ? Number(shift.openingBalance || 0) + Number(summary?.cashSales || 0) : 0;
 
+  const counted = sumBreakdown(count);
+
   const startMode = next => {
     setMode(next);
     setAmount('');
+    setCount({});
     setNotes('');
     setError('');
     if (next === 'close') refreshShift();
@@ -59,7 +65,7 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
       setBusy(true);
       setError('');
       if (mode === 'open') {
-        await openShift(amount);
+        await openShift(counted > 0 ? counted : amount, count);
       } else {
         const closed = await closeShift({ declaredCash: amount, notes: notes.trim() || undefined });
         printZReport(closed);
@@ -164,11 +170,18 @@ export default function ShiftBar({ shiftState, requireOpenShift }) {
               step="0.01"
               required={mode === 'close'}
               autoFocus
-              value={amount}
+              value={mode === 'open' && counted > 0 ? counted : amount}
+              disabled={mode === 'open' && counted > 0}
               onChange={e => setAmount(e.target.value)}
               className={inputClass}
             />
           </div>
+          {mode === 'open' && (
+            <details className="rounded-lg border border-slate-100 p-3 dark:border-slate-800" open={counted > 0}>
+              <summary className="cursor-pointer text-xs font-semibold text-slate-600 dark:text-slate-300">Contar billetes y monedas (recomendado para la devuelta)</summary>
+              <div className="mt-3"><DenominationCounter value={count} onChange={setCount} compact /></div>
+            </details>
+          )}
           {mode === 'close' && (
             <div className="space-y-1.5">
               <label htmlFor="shift-notes" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">

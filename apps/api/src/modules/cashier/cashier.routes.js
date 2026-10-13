@@ -13,7 +13,13 @@ const cuid = z.string().cuid();
 const money = z.number().min(0).max(100000000);
 
 const currentSchema = { query: z.object({ terminalId: cuid }) };
-const openSchema = { body: z.object({ terminalId: cuid, openingBalance: money.default(0) }) };
+const openSchema = {
+  body: z.object({
+    terminalId: cuid,
+    openingBalance: money.default(0),
+    openingCount: z.record(z.string(), z.number().int().min(0).max(100000)).optional(),
+  }),
+};
 const closeSchema = {
   params: z.object({ id: cuid }),
   body: z.object({ declaredCash: money, notes: z.string().trim().max(500).optional() }),
@@ -47,6 +53,15 @@ router.post(
   auditLog('OPEN_SHIFT', 'cashier'),
   asyncHandler(async (req, res) => {
     res.status(201).json(await cashierService.openShift(req.user, req.body));
+  })
+);
+
+router.get(
+  '/:id/drawer',
+  authorize('ADMINISTRADOR', 'VENDEDOR'),
+  validate(idSchema),
+  asyncHandler(async (req, res) => {
+    res.json(await cashierService.getDrawer(req.user, req.params.id));
   })
 );
 

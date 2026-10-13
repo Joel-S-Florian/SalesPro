@@ -20,6 +20,7 @@ import MobileTicketSheet from '../components/pos/MobileTicketSheet';
 import CheckoutSuccessModal from '../components/pos/CheckoutSuccessModal';
 import RemoveItemModal from '../components/pos/RemoveItemModal';
 import CardPaymentModal from '../components/pos/CardPaymentModal';
+import CashTenderModal from '../components/pos/CashTenderModal';
 import NewCustomerModal from '../components/pos/NewCustomerModal';
 import { expiryPercentFor } from '../utils/expiry';
 import { isFractional, trimQty, unitInfo } from '../utils/units';
@@ -70,6 +71,19 @@ export default function SalesPOS({ onNavigate }) {
   const [cardConfig, setCardConfig] = useState({ provider: 'NONE' });
   const [cardModal, setCardModal] = useState({ open: false, amount: 0 });
   const cardResolver = useRef(null);
+  // Cobro en efectivo con devuelta por billetes y monedas (si está activado en Configuración)
+  const [cashModal, setCashModal] = useState({ open: false, total: 0 });
+  const cashResolver = useRef(null);
+  const requestCashTender = total =>
+    new Promise(resolve => {
+      cashResolver.current = resolve;
+      setCashModal({ open: true, total });
+    });
+  const finishCashTender = tender => {
+    setCashModal(prev => ({ ...prev, open: false }));
+    cashResolver.current?.(tender);
+    cashResolver.current = null;
+  };
 
   useEffect(() => {
     api.payments.cardConfig().then(setCardConfig).catch(() => {});
@@ -200,8 +214,13 @@ export default function SalesPOS({ onNavigate }) {
       return;
     }
     let cardPayment = null;
+    let cashTender = null;
     try {
       setSubmitting(true);
+      if (activePayment === 'EFECTIVO' && config.cashChange?.enabled) {
+        cashTender = await requestCashTender(Number(cart.totals.total));
+        if (!cashTender) return;
+      }
       // Con terminal de tarjeta configurado, primero se cobra; la venta se registra solo si el cobro fue aprobado
       if (activePayment === 'TARJETA' && cardConfig.provider !== 'NONE') {
         cardPayment = await requestCardPayment(Number(cart.totals.total));
@@ -219,6 +238,7 @@ export default function SalesPOS({ onNavigate }) {
         discount: Number(cart.globalDiscount || 0),
         paymentMethod: activePayment,
         ...(cardPayment ? { cardPaymentId: cardPayment.id } : {}),
+        ...(cashTender ? { cash: cashTender } : {}),
       });
       catalog.applySale(cart.items.map(item => ({ product: item.product, quantity: baseQuantityOf(item) })));
       setRecentSale(sale);
@@ -249,7 +269,7 @@ export default function SalesPOS({ onNavigate }) {
   // ---- Atajos de teclado: "/" o F2 buscan, F9 cobra ----
   const checkoutRef = useRef(handleCheckout);
   checkoutRef.current = handleCheckout;
-  const blocked = !!(recentSale || removeTarget || newCustomerOpen || cameraOpen || cardModal.open);
+  const blocked = !!(recentSale || removeTarget || newCustomerOpen || cameraOpen || cardModal.open || cashModal.open);
 
   useEffect(() => {
     const onKeyDown = event => {
@@ -398,6 +418,13 @@ export default function SalesPOS({ onNavigate }) {
 
       <ProductOptionsModal product={optionsFor} onConfirm={confirmOptions} onClose={() => setOptionsFor(null)} />
 
+      <CashTenderModal
+        isOpen={cashModal.open}
+        total={cashModal.total}
+        shiftId={shiftState.shift?.id}
+        onConfirm={finishCashTender}
+        onCancel={() => finishCashTender(null)}
+      />
       <CardPaymentModal
         isOpen={cardModal.open}
         amount={cardModal.amount}

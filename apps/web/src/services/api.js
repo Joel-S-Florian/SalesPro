@@ -295,6 +295,7 @@ export const api = {
     close: (id, payload) => request(`/cashier/${id}/close`, { method: 'POST', body: JSON.stringify(payload) }),
     list: (params = {}) => request(`/cashier?${toQuery(params)}`),
     get: (id) => request(`/cashier/${id}`),
+    drawer: (id) => request(`/cashier/${id}/drawer`),
   },
 
   suppliers: {

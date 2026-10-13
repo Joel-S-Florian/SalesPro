@@ -280,6 +280,14 @@ function GeneralSettings() {
             />
             Exigir una caja con turno abierto para poder vender
           </label>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.cashChange?.enabled || false}
+              onChange={e => setForm({ ...form, cashChange: { ...(form.cashChange || {}), enabled: e.target.checked } })}
+            />
+            Calcular la devuelta por billetes y monedas al cobrar en efectivo
+          </label>
         </div>
       </div>
 

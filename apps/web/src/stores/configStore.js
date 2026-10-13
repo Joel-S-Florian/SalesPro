@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG = {
   vendedorCanDiscount: false,
   requireOpenShift: false,
   security: { idleTimeoutMinutes: 30 },
+  cashChange: { enabled: false },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,

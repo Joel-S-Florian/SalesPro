@@ -8,6 +8,7 @@ import { money, dateTime } from '../../utils/format';
 import { formatTaxPercent } from '../../stores/configStore';
 import { api } from '../../services/api';
 import EcfStatusBadge from '../ecf/EcfStatusBadge';
+import { sumBreakdown } from '../../utils/cashChange';
 
 const NCF_LABELS = {
   B01: 'Crédito fiscal',
@@ -90,6 +91,11 @@ export default function CheckoutSuccessModal({ sale, onPrint, onNewSale }) {
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {sale.paymentMethod === 'TARJETA' ? 'Tarjeta' : 'Efectivo'} · {sale.customerName}
           </p>
+          {sale.paymentMethod === 'EFECTIVO' && sale.cashReceived && (
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              Recibido {money(sumBreakdown(sale.cashReceived))} · Devuelta {money(sumBreakdown(sale.cashChange))}
+            </p>
+          )}
         </div>
 
         <dl className="grid grid-cols-2 gap-3 rounded-xl bg-slate-50 p-3.5 text-sm dark:bg-slate-800/50">

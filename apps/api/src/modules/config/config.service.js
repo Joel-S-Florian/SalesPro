@@ -30,6 +30,11 @@ export const perishableSchema = z
     }
   });
 
+/** Devuelta por billetes y monedas al cobrar en efectivo en el POS. */
+export const cashChangeSchema = z.object({
+  enabled: z.boolean().default(false),
+});
+
 /** Seguridad de la sesión: minutos sin actividad antes de cerrarla (0 = nunca). */
 export const securitySchema = z.object({
   idleTimeoutMinutes: z.number().int().min(0).max(1440).default(30),
@@ -53,6 +58,7 @@ export const configSchema = z.object({
   requireOpenShift: z.boolean(),
   perishable: perishableSchema,
   security: securitySchema,
+  cashChange: cashChangeSchema,
 });
 
 export const DEFAULT_CONFIG = {
@@ -69,6 +75,7 @@ export const DEFAULT_CONFIG = {
   vendedorCanDiscount: false,
   requireOpenShift: false,
   security: { idleTimeoutMinutes: 30 },
+  cashChange: { enabled: false },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,
@@ -103,6 +110,7 @@ export async function getConfig() {
     business: { ...businessDefaults, ...(stored.business || {}) },
     perishable: { ...DEFAULT_CONFIG.perishable, ...(stored.perishable || {}) },
     security: { ...DEFAULT_CONFIG.security, ...(stored.security || {}) },
+    cashChange: { ...DEFAULT_CONFIG.cashChange, ...(stored.cashChange || {}) },
   };
 }
 

@@ -81,8 +81,12 @@ export function useShift() {
     setDefaultTerminalId(terminalId || null);
   };
 
-  const openShift = async openingBalance => {
-    await api.cashier.open({ terminalId, openingBalance: Number(openingBalance) || 0 });
+  const openShift = async (openingBalance, openingCount) => {
+    await api.cashier.open({
+      terminalId,
+      openingBalance: Number(openingBalance) || 0,
+      ...(openingCount && Object.keys(openingCount).length ? { openingCount } : {}),
+    });
     await loadShift(terminalId);
   };
 

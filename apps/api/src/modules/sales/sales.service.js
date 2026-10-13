@@ -11,6 +11,7 @@ import { comparePassword } from '../../shared/utils/crypto.js';
 import { createAuditLog } from '../../shared/middleware/audit.js';
 import { getTenantId } from '../../config/tenant.js';
 import * as cardPayments from '../payments/payments.service.js';
+import { changeDue, normalizeBreakdown, sumBreakdown } from '../../shared/utils/cashChange.js';
 import { getConfig } from '../config/config.service.js';
 import { resolveShiftForSale } from '../cashier/cashier.service.js';
 import { ecfTypeForCustomer, issueEcf, loadIssuingContext, saleEcfFields, saveEcfDocuments } from '../ecf/ecf.issue.js';
@@ -232,6 +233,24 @@ export async function getVendorStats(userId) {
 /**
  * Create new sale (POS)
  */
+/**
+ * Efectivo de la venta (opcional): lo recibido y la devuelta entregada, por billetes y monedas.
+ * Se exige que lo recibido cubra el total y que la devuelta sea la diferencia (a pesos enteros).
+ */
+function validateCashTender(raw, total) {
+  if (!raw) return null;
+  const received = normalizeBreakdown(raw.received);
+  const change = normalizeBreakdown(raw.change);
+  if (!received.ok) throw AppError.badRequest(received.error);
+  if (!change.ok) throw AppError.badRequest(change.error);
+  const receivedTotal = sumBreakdown(received.breakdown);
+  const changeTotal = sumBreakdown(change.breakdown);
+  if (receivedTotal + 0.001 < total) throw AppError.badRequest('El efectivo recibido no cubre el total de la venta');
+  const expected = changeDue(receivedTotal, total).due;
+  if (changeTotal !== expected) throw AppError.badRequest(`La devuelta (${changeTotal}) no coincide con lo que corresponde (${expected})`);
+  return { received: received.breakdown, change: change.breakdown };
+}
+
 export async function createSale(data, userId, userName, requester = { userId, role: 'VENDEDOR' }) {
   const { customerId, details, discount, paymentMethod, notes, terminalId } = data;
   const config = await getConfig();
@@ -329,6 +348,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
 
   // Con terminal de tarjeta configurado, la venta exige un cobro aprobado por el monto exacto (se reclama en la transacción)
   const cardPayment = await cardPayments.requireForSale(normalizedPaymentMethod, data.cardPaymentId, total);
+  const cash = normalizedPaymentMethod === 'EFECTIVO' ? validateCashTender(data.cash, total) : null;
 
   // Con facturación electrónica activa el comprobante es un e-CF (se asigna dentro de la transacción);
   // si no, se usa el NCF de papel (serie B)
@@ -368,6 +388,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
         discount: finalDiscount,
         total,
         paymentMethod: normalizedPaymentMethod,
+        ...(cash ? { cashReceived: cash.received, cashChange: cash.change } : {}),
         notes: notes || null,
         terminalId: shift.terminalId,
         cashierCloseId: shift.cashierCloseId,

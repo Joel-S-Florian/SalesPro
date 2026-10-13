@@ -2,6 +2,7 @@ import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { round2 } from '../../shared/utils/helpers.js';
 import { assertTerminalAccess } from '../terminals/terminals.service.js';
+import { addBreakdowns, normalizeBreakdown, sumBreakdown } from '../../shared/utils/cashChange.js';
 
 const closeInclude = {
   terminal: { select: { id: true, name: true } },
@@ -55,8 +56,21 @@ export async function getCurrentShift(requester, terminalId) {
   return { ...(await withLiveSummary(close)), ownedByMe: close.userId === requester.userId };
 }
 
-export async function openShift(requester, { terminalId, openingBalance = 0 }) {
+export async function openShift(requester, { terminalId, openingBalance = 0, openingCount }) {
   await assertTerminalAccess(requester, terminalId);
+
+  // Con el conteo por denominaciones, el fondo inicial es lo que suman los billetes y monedas
+  let count = null;
+  if (openingCount && Object.keys(openingCount).length > 0) {
+    const normalized = normalizeBreakdown(openingCount);
+    if (!normalized.ok) throw AppError.badRequest(normalized.error);
+    count = normalized.breakdown;
+    const counted = sumBreakdown(count);
+    if (openingBalance && Math.abs(openingBalance - counted) > 0.01) {
+      throw AppError.badRequest(`El fondo inicial (${openingBalance}) no coincide con el conteo de billetes y monedas (${counted})`);
+    }
+    openingBalance = counted;
+  }
 
   const [terminalOpen, userOpen] = await Promise.all([
     prisma.cashierClose.findFirst({ where: { terminalId, status: 'OPEN' } }),
@@ -66,9 +80,36 @@ export async function openShift(requester, { terminalId, openingBalance = 0 }) {
   if (userOpen) throw AppError.conflict('Ya tiene un turno abierto en otra caja. Ciérrelo primero');
 
   return prisma.cashierClose.create({
-    data: { terminalId, userId: requester.userId, openingBalance },
+    data: { terminalId, userId: requester.userId, openingBalance, ...(count ? { openingCount: count } : {}) },
     include: closeInclude,
   });
+}
+
+/**
+ * Billetes y monedas que debería haber en la caja del turno: conteo de apertura + efectivo recibido − devueltas entregadas.
+ * `complete` es falso si no hubo conteo de apertura o si alguna denominación quedó en negativo (el cajero movió efectivo sin registrarlo):
+ * las sugerencias de devuelta siguen funcionando con lo que se sabe.
+ */
+export async function getDrawer(requester, id) {
+  const close = await prisma.cashierClose.findUnique({ where: { id } });
+  if (!close) throw AppError.notFound('Turno no encontrado');
+  if (close.userId !== requester.userId && requester.role !== 'ADMINISTRADOR') throw AppError.forbidden('No tiene permisos para ver esta caja');
+
+  const sales = await prisma.sale.findMany({
+    where: { cashierCloseId: id, paymentMethod: 'EFECTIVO' },
+    select: { cashReceived: true, cashChange: true },
+  });
+  const opening = close.openingCount || {};
+  let received = {};
+  let given = {};
+  for (const sale of sales) {
+    received = addBreakdowns(received, sale.cashReceived);
+    given = addBreakdowns(given, sale.cashChange);
+  }
+  const exact = addBreakdowns(opening, received, given, { allowNegative: true });
+  const counts = addBreakdowns(opening, received, given);
+  const complete = Boolean(close.openingCount) && Object.values(exact).every(value => value >= 0);
+  return { counts, total: sumBreakdown(counts), complete, hasOpeningCount: Boolean(close.openingCount) };
 }
 
 export async function closeShift(requester, id, { declaredCash, notes }) {
