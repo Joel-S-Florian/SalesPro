@@ -1,11 +1,37 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Edit2, Power, History } from 'lucide-react';
+import { Loader2, Plus, Search, Edit2, Power, History, Phone, MessageCircle } from 'lucide-react';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
+import { telUrl, whatsappUrl } from '../utils/phone';
+
+/** Llamar y escribir por WhatsApp al proveedor: los botones ya están, pero se habilitan cuando esto pase a true. */
+const SUPPLIER_CONTACT_ENABLED = false;
+
+function ContactButtons({ supplier }) {
+  const call = telUrl(supplier.phone);
+  const chat = whatsappUrl(supplier.phone, `Hola ${supplier.contactName || supplier.name}, le escribimos para coordinar un pedido.`);
+  const base = 'p-1.5 rounded';
+  const render = (label, Icon, href, tone) =>
+    SUPPLIER_CONTACT_ENABLED && href ? (
+      <a aria-label={label} title={label} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${base} text-slate-400 ${tone} hover:bg-slate-100 dark:hover:bg-slate-800`}>
+        <Icon className="w-4 h-4" />
+      </a>
+    ) : (
+      <button type="button" disabled aria-label={`${label} (próximamente)`} title={supplier.phone ? 'Próximamente' : 'Este proveedor no tiene teléfono'} className={`${base} text-slate-300 dark:text-slate-600 cursor-not-allowed`}>
+        <Icon className="w-4 h-4" />
+      </button>
+    );
+  return (
+    <>
+      {render('Llamar', Phone, call, 'hover:text-emerald-600')}
+      {render('Escribir por WhatsApp', MessageCircle, chat, 'hover:text-green-600')}
+    </>
+  );
+}
 
 const EMPTY_FORM = {
   name: '',
@@ -189,6 +215,7 @@ export default function Suppliers() {
                   <td className="px-4 py-3 text-center font-mono">{s._count?.purchases ?? 0}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
+                      <ContactButtons supplier={s} />
                       <button aria-label="Historial de compras"
                         onClick={() => openHistory(s)}
                         title="Historial de compras"
