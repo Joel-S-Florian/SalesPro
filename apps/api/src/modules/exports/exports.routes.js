@@ -6,8 +6,9 @@ import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
-import { basePrisma } from '../../config/db.js';
+import { basePrisma, prisma } from '../../config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+import { createDecryptStream, plainSizeOf } from './exports.crypto.js';
 
 const router = express.Router();
 
@@ -30,12 +31,22 @@ router.get(
     const job = await service.jobFromToken(req.params.id, req.query.t);
     if (!fs.existsSync(job.filePath)) return res.status(404).json({ error: 'El archivo ya no está disponible' });
     await basePrisma.auditLog.create({
-      data: { companyId: job.companyId, userId: job.userId, action: 'EXPORT_DOWNLOAD', entity: 'export', entityId: job.id, newData: { type: job.type, format: job.format }, ipAddress: req.ip, userAgent: req.headers['user-agent'] },
+      data: { companyId: job.companyId, userId: job.auto ? null : job.userId, action: 'EXPORT_DOWNLOAD', entity: 'export', entityId: job.id, newData: { type: job.type, format: job.format, auto: job.auto }, ipAddress: req.ip, userAgent: req.headers['user-agent'] },
     }).catch(err => logger.warn(`Auditoría de descarga falló: ${err.message}`));
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${job.fileName || 'exportacion.zip'}"`);
-    res.setHeader('Content-Length', String(fs.statSync(job.filePath).size));
     res.setHeader('Cache-Control', 'private, no-store');
+    if (job.encrypted) {
+      // Respaldo automático: se guarda cifrado y se descifra al vuelo; si el archivo fue alterado el flujo falla y se corta la descarga
+      res.setHeader('Content-Length', String(plainSizeOf(fs.statSync(job.filePath).size)));
+      const plain = createDecryptStream(job.filePath);
+      plain.on('error', err => {
+        logger.error(`Respaldo ${job.id} no se pudo descifrar: ${err.message}`);
+        res.destroy(err);
+      });
+      return plain.pipe(res);
+    }
+    res.setHeader('Content-Length', String(fs.statSync(job.filePath).size));
     fs.createReadStream(job.filePath).pipe(res);
   })
 );
@@ -69,6 +80,10 @@ router.post(
   asyncHandler(async (req, res) => {
     const job = await service.getJob(req.params.id);
     if (job.status !== 'DONE') return res.status(409).json({ error: 'La exportación todavía no está lista' });
+    if (job.auto) {
+      // El archivo lo generó el sistema: queda registrado quién pidió el enlace de descarga
+      await prisma.auditLog.create({ data: { userId: req.user.userId, action: 'AUTO_BACKUP_LINK', entity: 'export', entityId: job.id } }).catch(() => {});
+    }
     res.json({ url: `/api/exports/${job.id}/file?t=${service.downloadToken(job.id)}` });
   })
 );

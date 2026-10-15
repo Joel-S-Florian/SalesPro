@@ -3,11 +3,22 @@
  * La usan el API (`apps/api`), el panel (`apps/web`) y la página de promoción (`apps/landing`):
  * para cambiar un número se edita SOLO este archivo.
  *
- * PROVISIONAL: los precios y los topes de ventas por mes no están decididos (ver Doc/Planes_y_Limites.md).
+ * PROVISIONAL: los precios (RD$ 1,200 y 2,500; la alternativa es 1,000 y 2,000) y los topes de ventas por mes no son definitivos
+ * (ver Doc/Decisiones_Factos.md y Doc/Planes_y_Limites.md).
  * Funciones puras, sin dependencias: sirven igual en Node y en el navegador.
  */
 
 export const PLAN_IDS = ['FREE', 'STARTER', 'BUSINESS'];
+
+/**
+ * Frecuencia del respaldo automático de los planes que lo incluyen (BUSINESS): `weekly` hoy. Para pasar a diario basta cambiar
+ * esta línea a `'daily'` (o poner BACKUP_FREQUENCY=daily en el servidor): no hay que tocar ninguna lógica.
+ */
+export const AUTO_BACKUP_FREQUENCY = 'weekly';
+export const BACKUP_FREQUENCY_DAYS = { daily: 1, weekly: 7 };
+
+/** Cuántos respaldos automáticos se conservan por empresa (valor único; también BACKUP_KEEP en el servidor). */
+export const AUTO_BACKUP_KEEP = 4;
 
 /** Días de gracia después de terminar la prueba, con los mismos límites y un aviso visible. */
 export const TRIAL_GRACE_DAYS = 7;
@@ -30,7 +41,7 @@ export const PLANS = {
   STARTER: {
     id: 'STARTER',
     name: 'Starter',
-    priceMonthlyDop: 1500,
+    priceMonthlyDop: 1200, // provisional
     priceProvisional: true,
     selfService: false,
     limits: { terminals: 3, users: 6, branches: 1, products: 3000, salesPerMonth: 2000 },
@@ -39,11 +50,11 @@ export const PLANS = {
   BUSINESS: {
     id: 'BUSINESS',
     name: 'Business',
-    priceMonthlyDop: 3500,
+    priceMonthlyDop: 2500, // provisional
     priceProvisional: true,
     selfService: false,
     limits: { terminals: 10, users: 25, branches: 3, products: NO_LIMIT, salesPerMonth: 10000 },
-    // autoBackup y whatsappApi son banderas para el futuro: todavía no hay nada implementado detrás
+    // autoBackup: respaldo automático (frecuencia en AUTO_BACKUP_FREQUENCY). whatsappApi es solo una bandera: no hay nada implementado detrás
     features: { ecf: true, labels: true, perishables: true, backup: 'full', whatsappLink: true, whatsappApi: true, autoBackup: true },
   },
 };
@@ -89,20 +100,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  *  - GRACE:   hasta 7 días después de `trialEndsAt` → mismos límites, con aviso y cuenta regresiva.
  *  - EXPIRED: pasada la gracia → límites del plan FREE (nunca se borran datos).
  *  - ACTIVE:  sin `trialEndsAt` (plan asignado a mano o gratis sin vencimiento) → límites del plan.
- * @param {{ plan: string, trialEndsAt?: Date|string|null }} company
- * @returns {{ plan: string, effectivePlan: string, status: 'TRIAL'|'GRACE'|'EXPIRED'|'ACTIVE', daysLeft: number|null, graceDaysLeft: number|null, trialEndsAt: Date|null, graceEndsAt: Date|null, downgraded: boolean }}
+ *  - `paidUntil` (pago registrado) y `trialEndsAt` se combinan: vale la fecha MÁS TARDÍA. Mientras `paidUntil` no haya pasado, el estado
+ *    es PAID (suscripción pagada); al pasar empiezan los 7 días de gracia y luego FREE, igual que con la prueba.
+ * @param {{ plan: string, trialEndsAt?: Date|string|null, paidUntil?: Date|string|null }} company
+ * @returns {{ plan: string, effectivePlan: string, status: 'TRIAL'|'PAID'|'GRACE'|'EXPIRED'|'ACTIVE', daysLeft: number|null, graceDaysLeft: number|null, trialEndsAt: Date|null, paidUntil: Date|null, graceEndsAt: Date|null, downgraded: boolean }}
  */
 export function getEffectivePlan(company, now = new Date()) {
   const plan = PLANS[company?.plan] ? company.plan : FALLBACK_PLAN;
-  const trialEndsAt = company?.trialEndsAt ? new Date(company.trialEndsAt) : null;
-  const base = { plan, trialEndsAt, graceEndsAt: null, daysLeft: null, graceDaysLeft: null };
+  const rawTrial = company?.trialEndsAt ? new Date(company.trialEndsAt) : null;
+  const paidUntil = company?.paidUntil ? new Date(company.paidUntil) : null;
+  const trialEndsAt = rawTrial && paidUntil ? (paidUntil > rawTrial ? paidUntil : rawTrial) : rawTrial || paidUntil;
+  const paid = Boolean(paidUntil) && trialEndsAt === paidUntil;
+  const base = { plan, trialEndsAt: rawTrial, paidUntil, paid, graceEndsAt: null, daysLeft: null, graceDaysLeft: null };
 
   if (!trialEndsAt) return { ...base, effectivePlan: plan, status: 'ACTIVE', downgraded: false };
 
   const graceEndsAt = new Date(trialEndsAt.getTime() + TRIAL_GRACE_DAYS * DAY_MS);
   const t = now.getTime();
   if (t < trialEndsAt.getTime()) {
-    return { ...base, graceEndsAt, effectivePlan: plan, status: 'TRIAL', daysLeft: Math.ceil((trialEndsAt.getTime() - t) / DAY_MS), downgraded: false };
+    return { ...base, graceEndsAt, effectivePlan: plan, status: paid ? 'PAID' : 'TRIAL', daysLeft: Math.ceil((trialEndsAt.getTime() - t) / DAY_MS), downgraded: false };
   }
   if (t < graceEndsAt.getTime()) {
     return { ...base, graceEndsAt, effectivePlan: plan, status: 'GRACE', graceDaysLeft: Math.ceil((graceEndsAt.getTime() - t) / DAY_MS), downgraded: false };
@@ -143,6 +159,7 @@ export function planFeatureLines(planId) {
   if (features.labels) lines.push('Etiquetas y códigos de barras');
   if (features.perishables) lines.push('Perecederos, lotes y FEFO');
   lines.push(features.backup === 'full' ? 'Respaldo completo (manual)' : 'Respaldo en CSV (manual)');
+  if (features.autoBackup) lines.push(`Respaldo automático ${AUTO_BACKUP_FREQUENCY === 'daily' ? 'diario' : 'semanal'}`);
   lines.push('WhatsApp por enlace con proveedores');
   return lines;
 }

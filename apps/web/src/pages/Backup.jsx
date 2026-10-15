@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, Download, FileSpreadsheet, Loader2, Lock, ShieldCheck, Trash2, X } from 'lucide-react';
+import { Archive, CalendarClock, Download, FileSpreadsheet, Loader2, Lock, ShieldCheck, Trash2, X } from 'lucide-react';
 import { api } from '../services/api';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
@@ -122,6 +122,22 @@ export default function Backup() {
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
 
+      {options && (
+        <div className={`${cardClass} flex items-start gap-3`}>
+          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" />
+          {options.autoBackup ? (
+            <p className="text-xs text-slate-500">
+              <strong className="text-slate-700 dark:text-slate-200">Respaldo automático {options.autoBackup.frequency === 'daily' ? 'diario' : 'semanal'} activo.</strong> El sistema genera un respaldo completo por su cuenta, lo guarda cifrado y conserva los últimos {options.autoBackup.keep}. Aparecen abajo con la marca «Automático» y se descargan igual que los demás.
+              Recuerda guardar una copia fuera del servidor: descarga el último de vez en cuando.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500">
+              <strong className="text-slate-700 dark:text-slate-200">Respaldo automático:</strong> disponible en el plan {PLAN_NAMES.BUSINESS}. Mientras tanto puedes generar y descargar tus respaldos a mano.
+            </p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label htmlFor="export-format" className="font-semibold text-slate-600 dark:text-slate-400">Formato</label>
         <SmartSelect id="export-format" value={format} onChange={e => setFormat(e.target.value)} className="rounded-lg border border-slate-200 bg-transparent px-3 py-2 text-xs dark:border-slate-700">
@@ -185,6 +201,7 @@ export default function Backup() {
                       <td className="px-3 py-2.5">
                         <span className="block font-medium">{job.label}</span>
                         <span className="text-[11px] text-slate-400">{job.format} · {job.userName}</span>
+                        {job.auto && <span className="ml-1.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/40">Automático{job.encrypted ? ' · cifrado' : ''}</span>}
                       </td>
                       <td className="min-w-40 px-3 py-2.5">
                         <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${tone}`}>{label}</span>
@@ -200,7 +217,7 @@ export default function Backup() {
                       </td>
                       <td className="px-3 py-2.5">{job.status === 'DONE' ? formatSize(job.fileSize) : '—'}</td>
                       <td className="px-3 py-2.5 text-slate-500">{formatDate(job.createdAt)}</td>
-                      <td className="px-3 py-2.5 text-slate-500">{job.status === 'DONE' ? formatDate(job.expiresAt) : '—'}</td>
+                      <td className="px-3 py-2.5 text-slate-500">{job.status === 'DONE' ? (job.auto ? 'Se conserva' : formatDate(job.expiresAt)) : '—'}</td>
                       <td className="px-3 py-2.5">
                         <div className="flex justify-end gap-1">
                           {job.status === 'DONE' && (

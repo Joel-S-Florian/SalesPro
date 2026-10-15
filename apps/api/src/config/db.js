@@ -38,6 +38,7 @@ const TENANT_MODELS = new Set([
   'CardProviderConfig',
   'CardPayment',
   'ExportJob',
+  'SubscriptionPayment',
 ]);
 
 const FILTERED = new Set([

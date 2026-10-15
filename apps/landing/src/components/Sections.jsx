@@ -251,7 +251,7 @@ const FAQ = [
   ['¿Puedo pasar mi inventario actual?', 'Sí. Importas tu lista en CSV, Excel o JSON, revisas lo que se va a cargar y recién entonces se aplica. Si una fila viene con un error, se omite y te explicamos el motivo.'],
   ['¿Mis datos se mezclan con los de otras empresas?', 'No. Cada empresa tiene sus productos, clientes, ventas y usuarios separados, y lo verificamos con pruebas automáticas en cada versión.'],
   ['¿Y la factura electrónica (e-CF)?', 'Está en desarrollo y aún no está disponible. Hoy emites comprobantes con ITBIS y secuencia propia; cuando el e-CF esté listo, lo habilitaremos primero a las empresas de la beta.'],
-  ['¿Cuánto cuesta?', 'Hoy puedes usar FACTOS gratis, sin tarjeta de crédito. Los planes de pago (precios provisionales, desde RD$ 1,500 al mes por empresa, sin cobro por usuario) se activarán más adelante, y te avisaremos antes de cualquier cambio.'],
+  ['¿Cuánto cuesta?', `Hoy puedes usar FACTOS gratis, sin tarjeta de crédito. Los planes de pago (precios provisionales, desde RD$ ${SHARED_PLANS.STARTER.priceMonthlyDop.toLocaleString('es-DO')} al mes por empresa, sin cobro por usuario) se activarán más adelante, y te avisaremos antes de cualquier cambio.`],
 ];
 
 export function Faq() {

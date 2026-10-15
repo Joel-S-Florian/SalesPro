@@ -8,6 +8,8 @@ import { assertFeature, getCompanyPlanState } from '../../shared/plans.js';
 import { minPlanForFeature, planHasFeature } from '@factos/shared/plans.js';
 import { EXPORT_TYPES } from './exports.tables.js';
 import { CancelledError, EXPORT_TTL_HOURS, removeFile, requestCancel, runExport } from './exports.runner.js';
+import { encryptFileInPlace } from './exports.crypto.js';
+import { backupFrequency, backupKeep, pruneAutoBackups, scheduleAutoBackups } from './exports.auto.js';
 
 const MAX_PER_DAY = 10;
 const ACTIVE = ['PENDING', 'RUNNING'];
@@ -25,6 +27,8 @@ const publicJob = job => ({
   fileSize: job.fileSize,
   error: job.error,
   userName: job.userName,
+  auto: job.auto,
+  encrypted: job.encrypted,
   createdAt: job.createdAt,
   finishedAt: job.finishedAt,
   expiresAt: job.expiresAt,
@@ -44,6 +48,7 @@ export async function getOptions() {
       allowed: spec.feature ? planHasFeature(effectivePlan, spec.feature) : true,
     })),
     jsonAllowed: planHasFeature(effectivePlan, 'fullBackup'),
+    autoBackup: planHasFeature(effectivePlan, 'autoBackup') ? { frequency: backupFrequency(), keep: backupKeep() } : null,
   };
 }
 
@@ -65,10 +70,10 @@ export async function createJob(requester, { type, format }) {
   if (spec.feature) await assertFeature(spec.feature);
   else if (format === 'JSON') await assertFeature('fullBackup');
 
-  if (await prisma.exportJob.findFirst({ where: { status: { in: ACTIVE } } })) {
+  if (await prisma.exportJob.findFirst({ where: { status: { in: ACTIVE }, auto: false } })) {
     throw AppError.conflict('Ya hay una exportación en curso. Espera a que termine o cancélala');
   }
-  const today = await prisma.exportJob.count({ where: { createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } });
+  const today = await prisma.exportJob.count({ where: { auto: false, createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } });
   if (today >= MAX_PER_DAY) throw AppError.tooManyRequests(`Máximo ${MAX_PER_DAY} exportaciones por día`);
 
   const job = await prisma.exportJob.create({
@@ -131,6 +136,11 @@ async function processQueue() {
       await basePrisma.exportJob.updateMany({ where: { id: job.id, status: 'PENDING' }, data: { status: 'RUNNING', startedAt: new Date() } });
       try {
         const result = await runExport(job);
+        // Los respaldos automáticos se guardan cifrados; si no se puede cifrar, el trabajo falla (nunca se deja en claro)
+        if (job.auto) result.fileSize = await encryptFileInPlace(result.filePath).catch(err => {
+          removeFile(result.filePath);
+          throw err;
+        });
         const still = await basePrisma.exportJob.findUnique({ where: { id: job.id }, select: { status: true } });
         if (still?.status === 'CANCELLED') {
           removeFile(result.filePath);
@@ -145,17 +155,20 @@ async function processQueue() {
             rowsDone: result.rowsDone,
             filePath: result.filePath,
             fileSize: result.fileSize,
-            fileName: `factos-${job.type.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.zip`,
+            fileName: `factos-${job.auto ? 'respaldo-automatico' : job.type.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.zip`,
             finishedAt: new Date(),
-            expiresAt: new Date(Date.now() + EXPORT_TTL_HOURS * 3600 * 1000),
+            encrypted: job.auto,
+            // Los automáticos no vencen a las 48 h: se conservan hasta rotarlos (AUTO_BACKUP_KEEP)
+            expiresAt: job.auto ? null : new Date(Date.now() + EXPORT_TTL_HOURS * 3600 * 1000),
           },
         });
         if (saved.count === 0) removeFile(result.filePath);
+        else if (job.auto) await pruneAutoBackups(job.companyId).catch(err => logger.warn(`Rotación de respaldos falló: ${err.message}`));
       } catch (err) {
         const wasCancelled = err instanceof CancelledError || (await basePrisma.exportJob.findUnique({ where: { id: job.id }, select: { status: true } }))?.status === 'CANCELLED';
         if (!wasCancelled) {
           logger.error(`Exportación ${job.id} falló: ${err.message}`);
-          await basePrisma.exportJob.updateMany({ where: { id: job.id }, data: { status: 'FAILED', error: 'No se pudo generar el archivo. Intenta de nuevo', finishedAt: new Date() } });
+          await basePrisma.exportJob.updateMany({ where: { id: job.id }, data: { status: 'FAILED', error: job.auto ? 'No se pudo generar el respaldo automático' : 'No se pudo generar el archivo. Intenta de nuevo', finishedAt: new Date() } });
         }
       }
     }
@@ -178,8 +191,12 @@ export async function startExportWorker() {
   await basePrisma.exportJob.updateMany({ where: { status: 'RUNNING' }, data: { status: 'PENDING' } });
   void kick();
   void cleanupExpired().catch(() => {});
+  const autoTick = () => scheduleAutoBackups().then(ids => ids.length && kick()).catch(err => logger.warn(`Respaldo automático: ${err.message}`));
+  void autoTick();
+  let ticks = 0;
   timer = setInterval(() => {
     void cleanupExpired().catch(() => {});
+    if (++ticks % 4 === 0) void autoTick(); // cada hora
     void kick();
   }, 15 * 60 * 1000);
   timer.unref?.();

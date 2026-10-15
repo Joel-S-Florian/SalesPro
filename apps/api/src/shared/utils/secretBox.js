@@ -24,6 +24,11 @@ export function generateMasterKey() {
   return crypto.randomBytes(32).toString('base64');
 }
 
+/** Llave derivada de la maestra para un propósito concreto (así un uso no comparte llave con otro). */
+export function deriveKey(label) {
+  return Buffer.from(crypto.hkdfSync('sha256', masterKey(), Buffer.alloc(0), String(label), 32));
+}
+
 export function isSecretBoxConfigured() {
   try {
     masterKey();

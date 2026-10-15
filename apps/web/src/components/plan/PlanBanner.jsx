@@ -11,15 +11,18 @@ export default function PlanBanner({ usage, onViewPlans }) {
   const messages = [];
   let tone = 'info';
 
-  if (usage.status === 'TRIAL' && usage.daysLeft <= 3) {
+  if (usage.status === 'PAID' && usage.daysLeft <= 5) {
+    tone = 'warn';
+    messages.push(`Tu suscripción del plan ${usage.planName} vence ${usage.daysLeft <= 1 ? 'en menos de un día' : `en ${usage.daysLeft} días`}. Después tendrás 7 días de gracia con los mismos límites. Escríbenos para renovarla.`);
+  } else if (usage.status === 'TRIAL' && usage.daysLeft <= 3) {
     tone = 'warn';
     messages.push(`Tu prueba del plan ${usage.planName} termina ${usage.daysLeft <= 1 ? 'en menos de un día' : `en ${usage.daysLeft} días`}. Después tendrás 7 días de gracia con los mismos límites.`);
   } else if (usage.status === 'GRACE') {
     tone = 'warn';
-    messages.push(`Tu prueba terminó. Te quedan ${usage.graceDaysLeft === 1 ? '1 día' : `${usage.graceDaysLeft} días`} de gracia con tu plan ${usage.planName}; luego pasarás a los límites del plan Gratis. No se borra ningún dato.`);
+    messages.push(`${usage.paid ? 'Tu suscripción venció' : 'Tu prueba terminó'}. Te quedan ${usage.graceDaysLeft === 1 ? '1 día' : `${usage.graceDaysLeft} días`} de gracia con tu plan ${usage.planName}; luego pasarás a los límites del plan Gratis. No se borra ningún dato.`);
   } else if (usage.status === 'EXPIRED' && usage.downgraded) {
     tone = 'warn';
-    messages.push('Tu prueba y la gracia terminaron: tu cuenta usa los límites del plan Gratis. No se borró nada y puedes exportar tus datos cuando quieras.');
+    messages.push(`${usage.paid ? 'Tu suscripción y la gracia terminaron' : 'Tu prueba y la gracia terminaron'}: tu cuenta usa los límites del plan Gratis. No se borró nada y puedes exportar tus datos cuando quieras.`);
   }
 
   const exceeded = Object.entries(usage.usage).filter(([resource, u]) => resource !== 'salesPerMonth' && u.exceeded);

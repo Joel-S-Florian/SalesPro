@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTO_BACKUP_FREQUENCY,
+  AUTO_BACKUP_KEEP,
+  BACKUP_FREQUENCY_DAYS,
   FALLBACK_PLAN,
   PLANS,
   PLAN_IDS,
@@ -37,6 +40,15 @@ describe('catálogo de planes', () => {
     expect(PLANS.BUSINESS.features.whatsappApi).toBe(true);
     expect(PLANS.STARTER.features.whatsappApi).toBe(false);
     expect(minPlanForFeature('ecf')).toBe('STARTER');
+  });
+
+  it('precios provisionales decididos y respaldo automático solo en BUSINESS', () => {
+    expect([PLANS.FREE.priceMonthlyDop, PLANS.STARTER.priceMonthlyDop, PLANS.BUSINESS.priceMonthlyDop]).toEqual([0, 1200, 2500]);
+    expect(PLANS.STARTER.priceProvisional && PLANS.BUSINESS.priceProvisional).toBe(true);
+    expect(['FREE', 'STARTER', 'BUSINESS'].map(p => planHasFeature(p, 'autoBackup'))).toEqual([false, false, true]);
+    expect(AUTO_BACKUP_FREQUENCY).toBe('weekly');
+    expect(BACKUP_FREQUENCY_DAYS).toEqual({ daily: 1, weekly: 7 });
+    expect(AUTO_BACKUP_KEEP).toBe(4);
   });
 
   it('un plan desconocido cae a FREE', () => {
@@ -102,6 +114,31 @@ describe('getEffectivePlan', () => {
 
   it('acepta la fecha como texto ISO y un plan inválido cae a FREE', () => {
     expect(getEffectivePlan({ plan: 'PRO', trialEndsAt: '2026-11-01T12:00:00Z' }, at('2026-10-31T12:00:00Z'))).toMatchObject({ plan: 'FREE', status: 'TRIAL' });
+  });
+});
+
+describe('getEffectivePlan con pagos (paidUntil)', () => {
+  it('un pago vigente deja el plan en PAID con los días que faltan', () => {
+    const s = getEffectivePlan({ plan: 'STARTER', trialEndsAt: null, paidUntil: at('2026-11-15T12:00:00Z') }, at('2026-10-16T12:00:00Z'));
+    expect(s).toMatchObject({ status: 'PAID', effectivePlan: 'STARTER', daysLeft: 30, paid: true });
+  });
+
+  it('vale la fecha más tardía entre la prueba y el pago', () => {
+    const company = { plan: 'BUSINESS', trialEndsAt: at('2026-12-01T12:00:00Z'), paidUntil: at('2026-11-01T12:00:00Z') };
+    expect(getEffectivePlan(company, at('2026-11-20T12:00:00Z'))).toMatchObject({ status: 'TRIAL', paid: false });
+    const paidLater = { ...company, paidUntil: at('2027-01-01T12:00:00Z') };
+    expect(getEffectivePlan(paidLater, at('2026-12-10T12:00:00Z'))).toMatchObject({ status: 'PAID', paid: true });
+  });
+
+  it('al vencer el pago hay 7 días de gracia y luego FREE, sin perder el plan guardado', () => {
+    const company = { plan: 'BUSINESS', trialEndsAt: null, paidUntil: at('2026-11-01T12:00:00Z') };
+    expect(getEffectivePlan(company, at('2026-11-01T12:00:00Z'))).toMatchObject({ status: 'GRACE', effectivePlan: 'BUSINESS', graceDaysLeft: 7, paid: true });
+    expect(getEffectivePlan(company, at('2026-11-08T11:59:59Z'))).toMatchObject({ status: 'GRACE', effectivePlan: 'BUSINESS' });
+    expect(getEffectivePlan(company, at('2026-11-08T12:00:00Z'))).toMatchObject({ status: 'EXPIRED', effectivePlan: 'FREE', downgraded: true, plan: 'BUSINESS' });
+  });
+
+  it('sin paidUntil nada cambia', () => {
+    expect(getEffectivePlan({ plan: 'STARTER', trialEndsAt: null }, at('2027-01-01T00:00:00Z'))).toMatchObject({ status: 'ACTIVE', paid: false, paidUntil: null });
   });
 });
 

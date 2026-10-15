@@ -33,7 +33,7 @@ export function monthStartDr(now = new Date()) {
 /** Plan y estado efectivo de una empresa (por defecto, la del contexto de la petición). */
 export async function getCompanyPlanState(companyId = getTenantId(), now = new Date()) {
   // basePrisma a propósito: `Company` no tiene `companyId` (ver Doc/Arquitectura_Multicliente.md)
-  const company = await basePrisma.company.findUnique({ where: { id: companyId }, select: { plan: true, trialEndsAt: true } });
+  const company = await basePrisma.company.findUnique({ where: { id: companyId }, select: { plan: true, trialEndsAt: true, paidUntil: true } });
   if (!company) throw AppError.notFound('Empresa no encontrada');
   return getEffectivePlan(company, now);
 }
@@ -101,6 +101,8 @@ export async function getPlanUsage() {
     daysLeft: state.daysLeft,
     graceDaysLeft: state.graceDaysLeft,
     trialEndsAt: state.trialEndsAt,
+    paidUntil: state.paidUntil,
+    paid: state.paid,
     graceEndsAt: state.graceEndsAt,
     downgraded: state.downgraded,
     priceProvisional: PLANS[state.plan]?.priceProvisional ?? true,

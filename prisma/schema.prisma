@@ -8,43 +8,45 @@ datasource db {
 }
 
 model Company {
-  id               String                @id @default(cuid())
-  name             String
-  rnc              String?               @unique
-  email            String?
-  phone            String?
-  address          String?
-  active           Boolean               @default(true)
-  plan             PlanType              @default(STARTER)
-  trialEndsAt      DateTime?
-  termsAcceptedAt  DateTime? // aceptación de los términos al registrarse
-  termsVersion     String?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  users            User[]
-  categories       Category[]
-  products         Product[]
-  customers        Customer[]
-  sales            Sale[]
-  saleDetails      SaleDetail[]
-  inventoryLogs    InventoryLog[]
-  suppliers        Supplier[]
-  configs          SystemConfig[]
-  terminals        Terminal[]
-  cashierCloses    CashierClose[]
-  imports          InventoryImport[]
-  ncfSequences     NCFSequence[]
-  auditLogs        AuditLog[]
-  ecfConfig        EcfConfig?
-  ecfSequences     EcfSequence[]
-  exportJobs       ExportJob[]
-  ecfDocuments     EcfDocument[]
-  ecfInbox         EcfInbox[]
-  productBatches   ProductBatch[]
-  saleBatchDetails SaleBatchDetail[]
-  presentations    ProductPresentation[]
-  cardConfig       CardProviderConfig?
-  cardPayments     CardPayment[]
+  id                   String                @id @default(cuid())
+  name                 String
+  rnc                  String?               @unique
+  email                String?
+  phone                String?
+  address              String?
+  active               Boolean               @default(true)
+  plan                 PlanType              @default(STARTER)
+  trialEndsAt          DateTime?
+  paidUntil            DateTime? // hasta cuándo está pagado el plan (pago manual por transferencia, o suscripción cuando exista)
+  termsAcceptedAt      DateTime? // aceptación de los términos al registrarse
+  termsVersion         String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  users                User[]
+  categories           Category[]
+  products             Product[]
+  customers            Customer[]
+  sales                Sale[]
+  saleDetails          SaleDetail[]
+  inventoryLogs        InventoryLog[]
+  suppliers            Supplier[]
+  configs              SystemConfig[]
+  terminals            Terminal[]
+  cashierCloses        CashierClose[]
+  imports              InventoryImport[]
+  ncfSequences         NCFSequence[]
+  auditLogs            AuditLog[]
+  ecfConfig            EcfConfig?
+  ecfSequences         EcfSequence[]
+  exportJobs           ExportJob[]
+  subscriptionPayments SubscriptionPayment[]
+  ecfDocuments         EcfDocument[]
+  ecfInbox             EcfInbox[]
+  productBatches       ProductBatch[]
+  saleBatchDetails     SaleBatchDetail[]
+  presentations        ProductPresentation[]
+  cardConfig           CardProviderConfig?
+  cardPayments         CardPayment[]
 
   @@map("companies")
 }
@@ -79,34 +81,58 @@ enum PlanType {
 }
 
 model User {
-  id                 String          @id @default(cuid())
-  username           String          @unique
-  passwordHash       String
-  email              String?         @unique // para recuperar la contraseña (opcional)
-  mustChangePassword Boolean         @default(false) // clave temporal generada por el servidor
+  id                    String          @id @default(cuid())
+  username              String          @unique
+  passwordHash          String
+  email                 String?         @unique // para recuperar la contraseña (opcional)
+  mustChangePassword    Boolean         @default(false) // clave temporal generada por el servidor
   tempPasswordExpiresAt DateTime? // la clave temporal caduca (48 h); null = sin caducidad (claves temporales antiguas)
-  fullName           String
-  documentId         String? // cédula (solo dígitos)
-  phone              String?
-  role               UserRole        @default(VENDEDOR)
-  active             Boolean         @default(true)
-  createdAt          DateTime        @default(now())
-  updatedAt          DateTime        @updatedAt
-  auditLogs          AuditLog[]
-  inventoryLogs      InventoryLog[]
-  sales              Sale[]          @relation("SaleUser")
-  sessions           Session[]
-  passwordResets     PasswordReset[]
-  terminals          Terminal[]      @relation("TerminalUsers")
-  defaultTerminalId  String?
-  defaultTerminal    Terminal?       @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
-  cashierCloses      CashierClose[]  @relation("CloseCashier")
-  companyId          String?
-  company            Company?        @relation(fields: [companyId], references: [id])
+  fullName              String
+  documentId            String? // cédula (solo dígitos)
+  phone                 String?
+  role                  UserRole        @default(VENDEDOR)
+  active                Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  auditLogs             AuditLog[]
+  inventoryLogs         InventoryLog[]
+  sales                 Sale[]          @relation("SaleUser")
+  sessions              Session[]
+  passwordResets        PasswordReset[]
+  terminals             Terminal[]      @relation("TerminalUsers")
+  defaultTerminalId     String?
+  defaultTerminal       Terminal?       @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
+  cashierCloses         CashierClose[]  @relation("CloseCashier")
+  companyId             String?
+  company               Company?        @relation(fields: [companyId], references: [id])
 
   @@unique([companyId, documentId])
   @@index([companyId])
   @@map("users")
+}
+
+/// Pago de la suscripción de una empresa (hoy: transferencia registrada a mano por el SUPERADMIN). Cada pago extiende `Company.paidUntil`.
+model SubscriptionPayment {
+  id             String   @id @default(cuid())
+  receiptNumber  Int      @unique @default(autoincrement()) // correlativo propio del recibo (R-000001)
+  provider       String   @default("MANUAL") // MANUAL | AZUL (futuro)
+  method         String   @default("TRANSFER")
+  status         String   @default("PAID") // PAID | VOIDED
+  amount         Float
+  currency       String   @default("DOP")
+  plan           PlanType
+  reference      String? // número de la transferencia
+  periodStart    DateTime
+  periodEnd      DateTime
+  note           String?
+  recordedById   String
+  recordedByName String
+  createdAt      DateTime @default(now())
+  companyId      String
+  company        Company  @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@map("subscription_payments")
 }
 
 /// Exportación o respaldo de los datos de una empresa: se genera en segundo plano y queda un ZIP descargable por tiempo limitado.
@@ -118,6 +144,8 @@ model ExportJob {
   progress   Int          @default(0)
   rowsDone   Int          @default(0)
   rowsTotal  Int          @default(0)
+  auto       Boolean      @default(false) // respaldo automático programado (BUSINESS); se conserva hasta rotarlo, no vence a las 48 h
+  encrypted  Boolean      @default(false) // el archivo se guarda cifrado (AES-256-GCM) y se descifra al descargarlo
   fileName   String?
   filePath   String?
   fileSize   Int?
