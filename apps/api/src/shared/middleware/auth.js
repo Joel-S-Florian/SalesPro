@@ -34,6 +34,7 @@ export async function authenticate(req, res, next) {
         role: true,
         active: true,
         companyId: true,
+        branchId: true,
         company: { select: { active: true } },
       },
     });
@@ -60,7 +61,10 @@ export async function authenticate(req, res, next) {
     };
 
     // Todo lo que sigue (controladores, servicios) corre dentro del contexto de la empresa
-    tenantStore.run({ companyId: user.companyId }, () => next());
+    // La sucursal de trabajo (inventario, lotes) sale del usuario o, si no tiene una asignada, del encabezado X-Branch-Id
+    // Reportes por sucursal: solo lecturas de reportes, ventas, caja y finanzas con ?branchId=
+    const reportBranchId = req.method === 'GET' && /\/(reports|sales|cashier|finance)$/.test(req.baseUrl || '') && /^[a-z0-9_]{10,40}$/i.test(String(req.query.branchId || '')) ? String(req.query.branchId) : null;
+    tenantStore.run({ companyId: user.companyId, userBranchId: user.branchId, requestedBranchId: req.headers['x-branch-id'] || null, reportBranchId }, () => next());
   } catch (error) {
     next(error);
   }

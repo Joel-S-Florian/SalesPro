@@ -59,6 +59,15 @@ export const useSubscription = () => {
 };
 
 /** Canal de contacto (WhatsApp Business) configurado en el servidor: `link` es null si no hay número. */
+/** Sucursales de la empresa (activas; con `all` también las inactivas, solo administrador). */
+export const useBranches = ({ all = false } = {}) =>
+  useQuery({
+    queryKey: ['branches', { all }],
+    queryFn: () => api.branches.list({ all }),
+    staleTime: 60 * 1000,
+    enabled: useAuthStore(state => !!state.accessToken && state.user?.role !== 'SUPERADMIN'),
+  });
+
 export const useContact = () =>
   useQuery({
     queryKey: ['public', 'contact'],

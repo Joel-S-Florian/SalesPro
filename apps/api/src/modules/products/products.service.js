@@ -6,6 +6,8 @@ import { getConfig } from '../config/config.service.js';
 import { assertFeature, assertWithinPlan } from '../../shared/plans.js';
 import { adjustStock as adjustInventoryStock } from '../inventory/inventory.service.js';
 import { addBatchStock, addUnbatchedStock, attachNearestBatch, requireBatchFields } from '../inventory/batches.service.js';
+import { changeBranchStock, getBranchStockMap } from '../inventory/branchStock.js';
+import { getWorkingBranchId, resolveBranchId } from '../branches/branches.service.js';
 import { DEFAULT_UNIT, isFractional, isValidUnit, quantityError, roundQty } from '../../shared/utils/units.js';
 import { buildPaginationQuery, getPaginationMeta, round2, cleanFilterString } from '../../shared/utils/helpers.js';
 
@@ -48,7 +50,7 @@ async function savePresentations(tx, productId, presentations) {
 /**
  * Get all products with pagination, search, and filters
  */
-export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q, categoryId, active, lowStock, stockStatus }) {
+export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q, categoryId, active, lowStock, stockStatus, branchId: requestedBranchId }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
   const where = {};
@@ -74,15 +76,22 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
 
   const onlyLowStock = lowStock === true || lowStock === 'true';
 
-  // OUT se resuelve en la base; OK y LOW comparan dos columnas (stock vs minStock) y se filtran en memoria
-  if (stockStatus === 'OUT') where.stock = 0;
+  // El stock que se muestra y se filtra es el de la sucursal de trabajo, así que los filtros por stock se aplican en memoria
   const memoryFilter = onlyLowStock
     ? p => p.stock <= p.minStock
-    : stockStatus === 'LOW'
-      ? p => p.stock > 0 && p.stock <= p.minStock
-      : stockStatus === 'OK'
-        ? p => p.stock > p.minStock
-        : null;
+    : stockStatus === 'OUT'
+      ? p => p.stock === 0
+      : stockStatus === 'LOW'
+        ? p => p.stock > 0 && p.stock <= p.minStock
+        : stockStatus === 'OK'
+          ? p => p.stock > p.minStock
+          : null;
+  // `branchId` en la consulta (p. ej. el origen de una transferencia) manda sobre la sucursal de trabajo
+  const branchId = requestedBranchId ? await resolveBranchId(requestedBranchId) : await getWorkingBranchId();
+  const withBranchStock = async list => {
+    const stocks = await getBranchStockMap(prisma, list.map(p => p.id), branchId);
+    return list.map(p => ({ ...p, totalStock: p.stock, stock: stocks.get(p.id) ?? 0 }));
+  };
 
   const [products, total] = await Promise.all([
     prisma.product.findMany({
@@ -98,7 +107,8 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
     prisma.product.count({ where }),
   ]);
 
-  const filtered = memoryFilter ? products.filter(memoryFilter) : products;
+  const located = await withBranchStock(products);
+  const filtered = memoryFilter ? located.filter(memoryFilter) : located;
   const paginated = memoryFilter ? filtered.slice(skip, skip + take) : filtered;
   const finalTotal = memoryFilter ? filtered.length : total;
 
@@ -111,7 +121,7 @@ export async function getProducts({ page = 1, limit = 20, sortBy = 'name', sortO
   }));
 
   return {
-    data: await attachNearestBatch(productsWithMargin),
+    data: await attachNearestBatch(productsWithMargin, { branchId }),
     pagination: getPaginationMeta(page, limit, finalTotal),
   };
 }
@@ -132,11 +142,17 @@ export async function getProductById(id) {
     throw AppError.notFound('Producto no encontrado');
   }
 
+  const rows = await prisma.branchStock.findMany({ where: { productId: id }, include: { branch: { select: { id: true, name: true } } } });
+  const branchId = await getWorkingBranchId();
+  const here = rows.find(r => r.branchId === branchId)?.stock ?? 0;
   return {
     ...product,
+    stock: here,
+    totalStock: product.stock,
+    branchStocks: rows.map(r => ({ branchId: r.branchId, branchName: r.branch.name, stock: r.stock })),
     margin: product.costPrice > 0 ? round2(((Number(product.salePrice) - Number(product.costPrice)) / Number(product.salePrice)) * 100) : 0,
     marginAmount: round2(Number(product.salePrice) - Number(product.costPrice)),
-    isLowStock: product.active && product.stock <= product.minStock,
+    isLowStock: product.active && here <= product.minStock,
   };
 }
 
@@ -171,6 +187,7 @@ export async function createProduct(data, userId, userName) {
     throw AppError.conflict('El código de producto ya existe', ERROR_CODES.DUPLICATE_ENTRY);
   }
 
+  const branchId = await getWorkingBranchId();
   const product = await prisma.$transaction(async tx => {
     const created = await tx.product.create({
       data: {
@@ -180,7 +197,7 @@ export async function createProduct(data, userId, userName) {
         categoryId,
         costPrice,
         salePrice,
-        stock: stock || 0,
+        stock: 0, // el stock inicial entra a la sucursal de trabajo más abajo
         minStock: minStock || 0,
         active: active ?? true,
         isPerishable: Boolean(isPerishable),
@@ -190,10 +207,11 @@ export async function createProduct(data, userId, userName) {
     });
     await savePresentations(tx, created.id, presentations);
     if (isPerishable && stock > 0) {
-      if (initialBatch) await addBatchStock(tx, { productId: created.id, ...initialBatch, quantity: stock, costPrice });
-      else await addUnbatchedStock(tx, { productId: created.id, quantity: stock, costPrice });
+      if (initialBatch) await addBatchStock(tx, { productId: created.id, branchId, ...initialBatch, quantity: stock, costPrice });
+      else await addUnbatchedStock(tx, { productId: created.id, branchId, quantity: stock, costPrice });
     }
-    return created;
+    if (stock > 0) await changeBranchStock(tx, { productId: created.id, branchId, delta: stock, productName: name });
+    return stock > 0 ? { ...created, stock } : created;
   });
 
   // Create initial inventory log if stock > 0
@@ -201,6 +219,7 @@ export async function createProduct(data, userId, userName) {
     await prisma.inventoryLog.create({
       data: {
         productId: product.id,
+        branchId,
         productName: product.name,
         type: 'ENTRADA',
         quantity: stock,
@@ -269,7 +288,10 @@ export async function updateProduct(id, data, userId, userName) {
     if (presentations) await savePresentations(tx, id, presentations);
     // Al pasar a perecedero, el stock actual queda en un lote genérico (SIN-LOTE, sin vencimiento)
     if (isPerishable && !product.isPerishable && product.stock > 0) {
-      await addUnbatchedStock(tx, { productId: id, quantity: product.stock, costPrice: Number(product.costPrice) });
+      const holders = await tx.branchStock.findMany({ where: { productId: id, stock: { gt: 0 } } });
+      for (const holder of holders) {
+        await addUnbatchedStock(tx, { productId: id, branchId: holder.branchId, quantity: holder.stock, costPrice: Number(product.costPrice) });
+      }
     }
     return result;
   });
@@ -324,11 +346,13 @@ async function assertPerishableEnabled() {
  * Get low stock products
  */
 export async function getLowStockProducts() {
-  const products = await prisma.product.findMany({
+  const branchId = await getWorkingBranchId();
+  const found = await prisma.product.findMany({
     where: { active: true },
     include: { category: { select: { id: true, name: true } } },
-    orderBy: { stock: 'asc' },
   });
+  const stocks = await getBranchStockMap(prisma, found.map(p => p.id), branchId);
+  const products = found.map(p => ({ ...p, totalStock: p.stock, stock: stocks.get(p.id) ?? 0 })).sort((a, b) => a.stock - b.stock);
 
   return products
     .filter(p => p.stock <= p.minStock)

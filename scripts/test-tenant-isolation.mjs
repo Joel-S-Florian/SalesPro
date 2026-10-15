@@ -281,6 +281,31 @@ async function newModulesCoverage(A, B, st, dataA, dataB) {
   await db.exportJob.deleteMany({ where: { companyId: { in: [A.id, B.id] } } });
 }
 
+async function branchesCoverage(A, B, dataA) {
+  console.log('\nSucursales, stock por sucursal y transferencias');
+  const mainA = await db.branch.findFirst({ where: { companyId: A.id, isMain: true } });
+  const secondA = await db.branch.create({ data: { companyId: A.id, name: 'ZZTEST Sucursal A2', code: 'A2' } });
+  const transferA = await db.stockTransfer.create({
+    data: { companyId: A.id, fromBranchId: mainA.id, toBranchId: secondA.id, createdById: 'x', createdByName: 'Prueba', lines: { create: [{ companyId: A.id, productId: dataA.product.id, productName: 'Producto A', quantity: 1 }] } },
+  });
+  const branchesB = JSON.stringify((await call('GET', '/branches?all=1', B.token)).data);
+  check('B no ve las sucursales de A', !branchesB.includes(secondA.id) && !branchesB.includes(mainA.id));
+  check('B no puede editar una sucursal de A', (await call('PUT', `/branches/${secondA.id}`, B.token, { name: 'hack' })).status === 404);
+  check('B no ve las transferencias de A', JSON.stringify((await call('GET', '/transfers', B.token)).data).includes(transferA.id) === false);
+  check('B no puede leer, recibir ni anular una transferencia de A', (await call('GET', `/transfers/${transferA.id}`, B.token)).status === 404 && (await call('POST', `/transfers/${transferA.id}/receive`, B.token)).status === 404 && (await call('POST', `/transfers/${transferA.id}/void`, B.token)).status === 404);
+  check('B no puede transferir con las sucursales ni el producto de A', (await call('POST', '/transfers', B.token, { fromBranchId: mainA.id, toBranchId: secondA.id, lines: [{ productId: dataA.product.id, quantity: 1 }] })).status === 400);
+  const asA = await fetch(`${API}/products?limit=5`, { headers: { Authorization: `Bearer ${B.token}`, 'X-Branch-Id': secondA.id } });
+  check('B no puede trabajar con la sucursal de A por el encabezado X-Branch-Id (400)', asA.status === 400);
+  const asOwn = await fetch(`${API}/products/${dataA.product.id}`, { headers: { Authorization: `Bearer ${A.token}`, 'X-Branch-Id': secondA.id } });
+  const detailA = await asOwn.json();
+  check('A ve el stock de cada una de sus sucursales y nada de B', asOwn.status === 200 && detailA.branchStocks.every(x => [mainA.id, secondA.id].includes(x.branchId)) && detailA.stock === 0);
+  check('el filtro ?branchId= de reportes con una sucursal de A no deja ver ventas a B', (await call('GET', `/sales?branchId=${mainA.id}`, B.token)).data?.data?.length === 0);
+  check('B no ve las filas de stock por sucursal de A en la base', (await db.branchStock.findMany({ where: { companyId: B.id, productId: dataA.product.id } })).length === 0);
+  await db.stockTransferLine.deleteMany({ where: { transferId: transferA.id } });
+  await db.stockTransfer.delete({ where: { id: transferA.id } });
+  await db.branch.delete({ where: { id: secondA.id } });
+}
+
 async function cleanup() {
   const prisma = new PrismaClient();
   try {
@@ -307,6 +332,7 @@ async function cleanup() {
       await prisma.systemConfig.deleteMany({ where });
       await prisma.session.deleteMany({ where: { user: { companyId } } });
       await prisma.user.deleteMany({ where });
+      await prisma.branch.deleteMany({ where });
       await prisma.company.delete({ where: { id: companyId } });
     }
     console.log(`\nLimpieza: ${companies.length} empresas de prueba eliminadas`);
@@ -360,6 +386,7 @@ async function main() {
 
   await extendedCoverage(A, B, dataA, dataB);
   await newModulesCoverage(A, B, st, dataA, dataB);
+  await branchesCoverage(A, B, dataA);
 
   console.log('\nConfiguración independiente');
   await call('PUT', '/config', A.token, { taxRate: 0.05 });

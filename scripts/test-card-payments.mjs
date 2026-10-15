@@ -1,6 +1,7 @@
 // Prueba de integración del cobro con tarjeta (proveedores manual / simulador / Azul) y su vínculo con la venta.
 // Usa solo la empresa «Empresa Prueba» y deja todo como estaba.
 // Uso: node --env-file=apps/api/.env scripts/test-card-payments.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
 const { basePrisma, prisma } = await load('config/db.js');
@@ -34,6 +35,7 @@ await runInTenant(company.id, async () => {
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-CARD' } });
     created.category = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-CARD-1', name: 'Producto prueba tarjeta', categoryId: category.id, costPrice: 10, salePrice: 100, stock: 50, minStock: 1 } });
+    await giveStock(prisma, product);
     created.product = product.id;
     const req = { userId: admin.id, role: 'ADMINISTRADOR' };
     const seller = { userId: admin.id, role: 'VENDEDOR' };

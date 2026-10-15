@@ -2,10 +2,11 @@ import { prisma } from '../../config/db.js';
 import { getTenantId } from '../../config/tenant.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { getConfig } from '../config/config.service.js';
+import { getWorkingBranchId } from '../branches/branches.service.js';
 import { allocateFefo, batchStatus, sortFefo, daysLeft, DEFAULT_BATCH_NUMBER, discountPercentFor, parseExpiration } from './batches.logic.js';
 
 /**
- * Lotes de productos perecederos. Invariante: Product.stock = suma de currentStock de sus lotes.
+ * Lotes de productos perecederos, cada uno en una sucursal. Invariante: BranchStock.stock = suma de currentStock de los lotes de esa sucursal.
  * Las funciones con `tx` solo tocan lotes; quien las llama actualiza Product.stock y el kárdex.
  */
 
@@ -23,8 +24,8 @@ export function requireBatchFields({ batchNumber, expirationDate }) {
 }
 
 /** Suma stock a un lote (lo crea si no existe). No modifica Product.stock. */
-export async function addBatchStock(tx, { productId, batchNumber, expiration, quantity, costPrice = 0, supplierId = null }) {
-  const existing = await tx.productBatch.findFirst({ where: { productId, batchNumber } });
+export async function addBatchStock(tx, { productId, branchId, batchNumber, expiration, quantity, costPrice = 0, supplierId = null }) {
+  const existing = await tx.productBatch.findFirst({ where: { productId, branchId, batchNumber } });
   if (existing) {
     const sameDate = (existing.expirationDate?.getTime() ?? null) === (expiration?.getTime() ?? null);
     if (!sameDate) throw AppError.badRequest(`El lote ${batchNumber} ya existe con otra fecha de vencimiento`);
@@ -37,6 +38,7 @@ export async function addBatchStock(tx, { productId, batchNumber, expiration, qu
     data: {
       companyId: getTenantId(),
       productId,
+      branchId,
       batchNumber,
       expirationDate: expiration || null,
       initialStock: quantity,
@@ -48,13 +50,13 @@ export async function addBatchStock(tx, { productId, batchNumber, expiration, qu
 }
 
 /** Stock sin lote (SIN-LOTE, sin vencimiento): al marcar perecedero un producto con stock o en importaciones sin lote. */
-export function addUnbatchedStock(tx, { productId, quantity, costPrice = 0 }) {
-  return addBatchStock(tx, { productId, batchNumber: DEFAULT_BATCH_NUMBER, expiration: null, quantity, costPrice });
+export function addUnbatchedStock(tx, { productId, branchId, quantity, costPrice = 0 }) {
+  return addBatchStock(tx, { productId, branchId, batchNumber: DEFAULT_BATCH_NUMBER, expiration: null, quantity, costPrice });
 }
 
 /** Reparte una salida FEFO y descuenta los lotes de forma atómica. Devuelve las asignaciones. */
-export async function consumeFefo(tx, product, quantity, perishable, { allowExpired } = {}) {
-  const batches = await tx.productBatch.findMany({ where: { productId: product.id, currentStock: { gt: EPS } } });
+export async function consumeFefo(tx, product, quantity, perishable, { allowExpired, branchId } = {}) {
+  const batches = await tx.productBatch.findMany({ where: { productId: product.id, branchId, currentStock: { gt: EPS } } });
   const { allocations, missing } = allocateFefo(batches, quantity, { allowExpired: allowExpired ?? !perishable.blockExpiredSales });
   if (missing > 0) {
     throw AppError.badRequest(`Stock insuficiente para ${product.name} (lotes vigentes: ${round2(quantity - missing)})`, ERROR_CODES.INSUFFICIENT_STOCK);
@@ -71,8 +73,8 @@ export async function consumeFefo(tx, product, quantity, perishable, { allowExpi
 }
 
 /** Baja de un lote concreto (merma por vencimiento, rotura...). */
-export async function consumeBatch(tx, product, batchId, quantity) {
-  const batch = await tx.productBatch.findFirst({ where: { id: batchId, productId: product.id } });
+export async function consumeBatch(tx, product, batchId, quantity, { branchId } = {}) {
+  const batch = await tx.productBatch.findFirst({ where: { id: batchId, productId: product.id, ...(branchId ? { branchId } : {}) } });
   if (!batch) throw AppError.notFound('Lote no encontrado para este producto');
   const { count } = await tx.productBatch.updateMany({
     where: { id: batchId, currentStock: { gte: quantity - EPS } },
@@ -87,8 +89,8 @@ export async function consumeBatch(tx, product, batchId, quantity) {
  * Vista previa (sin escribir) de la asignación FEFO de una línea de venta y de su descuento por vencimiento.
  * Sirve para fijar el precio antes de la transacción; consumeFefo vuelve a validar al descontar.
  */
-export async function previewSaleLine(product, quantity, unitPrice, perishable) {
-  const batches = await prisma.productBatch.findMany({ where: { productId: product.id, currentStock: { gt: EPS } } });
+export async function previewSaleLine(product, quantity, unitPrice, perishable, branchId) {
+  const batches = await prisma.productBatch.findMany({ where: { productId: product.id, branchId, currentStock: { gt: EPS } } });
   const { allocations, missing } = allocateFefo(batches, quantity, { allowExpired: !perishable.blockExpiredSales });
   if (missing > 0) {
     throw AppError.badRequest(`Stock insuficiente para ${product.name}. Disponible (lotes vigentes): ${round2(quantity - missing)}`, ERROR_CODES.INSUFFICIENT_STOCK);
@@ -107,7 +109,7 @@ export async function previewSaleLine(product, quantity, unitPrice, perishable) 
  * Lo que no se pueda rastrear (ventas anteriores a los lotes) vuelve al lote SIN-LOTE.
  * Devuelve las asignaciones para que la nota de crédito las registre.
  */
-export async function restoreToBatches(tx, { originalSaleId, productId, quantity, costPrice = 0 }) {
+export async function restoreToBatches(tx, { originalSaleId, productId, branchId, quantity, costPrice = 0 }) {
   const sold = await tx.saleBatchDetail.findMany({
     where: { saleDetail: { saleId: originalSaleId, productId }, quantity: { gt: 0 } },
     orderBy: { id: 'desc' },
@@ -131,7 +133,7 @@ export async function restoreToBatches(tx, { originalSaleId, productId, quantity
     remaining = round2(remaining - take);
   }
   if (remaining > EPS) {
-    const fallback = await addUnbatchedStock(tx, { productId, quantity: remaining, costPrice });
+    const fallback = await addUnbatchedStock(tx, { productId, branchId, quantity: remaining, costPrice });
     restored.push({ batchId: fallback.id, quantity: remaining });
   }
   return restored;
@@ -151,12 +153,13 @@ export function decorate(batch, perishable, now = new Date()) {
  * Agrega a cada producto perecedero su lote más próximo (el que FEFO venderá primero) con estado y descuento,
  * para que el POS y el catálogo muestren la alerta y el precio con descuento sin otra consulta.
  */
-export async function attachNearestBatch(products) {
+export async function attachNearestBatch(products, { branchId } = {}) {
   const perishableIds = products.filter(p => p.isPerishable).map(p => p.id);
   if (!perishableIds.length) return products;
   const { perishable } = await getConfig();
+  const where = { productId: { in: perishableIds }, branchId: branchId || (await getWorkingBranchId()), currentStock: { gt: EPS } };
   const batches = await prisma.productBatch.findMany({
-    where: { productId: { in: perishableIds }, currentStock: { gt: EPS } },
+    where,
     orderBy: [{ expirationDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
   });
   // Lotes vendibles por producto, en orden FEFO (los vencidos se excluyen si la empresa los bloquea)
@@ -197,11 +200,12 @@ export async function attachNearestBatch(products) {
 }
 
 /** Lotes de un producto (más próximos a vencer primero) con su estado. */
-export async function listBatches(productId, { includeEmpty = false } = {}) {
+export async function listBatches(productId, { includeEmpty = false, branchId } = {}) {
+  const where = { productId, branchId: branchId || (await getWorkingBranchId()) };
   const [config, batches] = await Promise.all([
     getConfig(),
     prisma.productBatch.findMany({
-      where: { productId, ...(includeEmpty ? {} : { currentStock: { gt: EPS } }) },
+      where: { ...where, ...(includeEmpty ? {} : { currentStock: { gt: EPS } }) },
       orderBy: [{ expirationDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
       include: { supplier: { select: { id: true, name: true } } },
     }),
@@ -213,13 +217,13 @@ export async function listBatches(productId, { includeEmpty = false } = {}) {
  * Lotes en riesgo: vencidos, críticos (rojo) y por vencer (amarillo), con existencias.
  * status: ALL | EXPIRED | RED | YELLOW
  */
-export async function getExpiringBatches({ status = 'ALL', page = 1, limit = 50 } = {}) {
+export async function getExpiringBatches({ status = 'ALL', page = 1, limit = 50, branchId } = {}) {
   const { perishable } = await getConfig();
   const cutoff = new Date(Date.now() + (perishable.yellowThresholdDays + 1) * 86400000);
   const rows = await prisma.productBatch.findMany({
-    where: { currentStock: { gt: EPS }, expirationDate: { not: null, lte: cutoff }, product: { active: true } },
+    where: { currentStock: { gt: EPS }, expirationDate: { not: null, lte: cutoff }, product: { active: true }, ...(branchId ? { branchId } : {}) },
     orderBy: { expirationDate: 'asc' },
-    include: { product: { select: { id: true, code: true, name: true, costPrice: true } }, supplier: { select: { id: true, name: true } } },
+    include: { branch: { select: { id: true, name: true } }, product: { select: { id: true, code: true, name: true, costPrice: true } }, supplier: { select: { id: true, name: true } } },
   });
   const all = rows.map(row => decorate(row, perishable)).filter(row => row.status !== 'OK' && row.status !== 'NO_EXPIRY');
   const summary = { expired: 0, red: 0, yellow: 0, valueAtRisk: 0 };

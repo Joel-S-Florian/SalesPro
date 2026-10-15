@@ -75,6 +75,9 @@ export async function signup({ plan, account, company, settings, termsVersion })
   });
 
   await bootstrapCompany(created.id);
+  // La primera caja se creó antes que la sucursal Principal: se le asigna ahora
+  const mainBranch = await basePrisma.branch.findFirst({ where: { companyId: created.id, isMain: true } });
+  await basePrisma.terminal.updateMany({ where: { companyId: created.id, branchId: null }, data: { branchId: mainBranch.id } });
 
   // Aviso al equipo de la cuenta nueva (no espera ni afecta el registro)
   void sendMail({

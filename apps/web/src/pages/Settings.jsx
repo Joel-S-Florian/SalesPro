@@ -7,7 +7,7 @@ import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
 import CardPaymentsSettings from '../components/payments/CardPaymentsSettings';
 import PlanUsageCard from '../components/plan/PlanUsageCard';
-import { usePlanUsage } from '../hooks/queries';
+import { useBranches, usePlanUsage } from '../hooks/queries';
 import { planName } from '@factos/shared/plans.js';
 
 const EcfSettings = lazy(() => import('../components/ecf/EcfSettings'));
@@ -368,6 +368,8 @@ function TerminalsSettings() {
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [userIds, setUserIds] = useState([]);
+  const [branchId, setBranchId] = useState('');
+  const { data: branches = [] } = useBranches();
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -393,6 +395,7 @@ function TerminalsSettings() {
     setEditingId(terminal?.id || null);
     setName(terminal?.name || '');
     setUserIds(terminal ? terminal.users.map(u => u.id) : []);
+    setBranchId(terminal?.branchId || branches.find(b => b.isMain)?.id || '');
     setFormError('');
     setIsFormOpen(true);
   };
@@ -405,7 +408,7 @@ function TerminalsSettings() {
     try {
       setSaving(true);
       setFormError('');
-      const payload = { name: name.trim(), userIds };
+      const payload = { name: name.trim(), userIds, ...(branchId ? { branchId } : {}) };
       if (editingId) await api.terminals.update(editingId, payload);
       else await api.terminals.create(payload);
       notify.success(editingId ? 'Caja actualizada' : 'Caja creada');
@@ -452,6 +455,7 @@ function TerminalsSettings() {
           <thead className="text-slate-500 uppercase tracking-wider">
             <tr>
               <th className="py-2">Caja</th>
+              {branches.length > 1 && <th className="py-2">Sucursal</th>}
               <th className="py-2">Cajeros asignados</th>
               <th className="py-2 text-center">Ventas</th>
               <th className="py-2 text-right">Acciones</th>
@@ -461,6 +465,7 @@ function TerminalsSettings() {
             {terminals.map(t => (
               <tr key={t.id} className={t.active ? '' : 'opacity-50'}>
                 <td className="py-2.5 font-medium">{t.name}{!t.active && ' (inactiva)'}</td>
+                {branches.length > 1 && <td className="py-2.5">{t.branch?.name || '—'}</td>}
                 <td className="py-2.5">{t.users.map(u => u.fullName).join(', ') || 'Solo administradores'}</td>
                 <td className="py-2.5 text-center font-mono">{t._count?.sales ?? 0}</td>
                 <td className="py-2.5 text-right">
@@ -483,6 +488,16 @@ function TerminalsSettings() {
             <label htmlFor="terminal-name" className={labelClass}>Nombre *</label>
             <input id="terminal-name" required maxLength={60} placeholder="Ej. Caja 1" value={name} onChange={e => setName(e.target.value)} className={inputClass} />
           </div>
+          {branches.length > 1 && (
+            <div className="space-y-1.5">
+              <label htmlFor="terminal-branch" className={labelClass}>Sucursal *</label>
+              <SmartSelect id="terminal-branch" value={branchId} onChange={e => setBranchId(e.target.value)} className={inputClass}>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </SmartSelect>
+            </div>
+          )}
           <div className="space-y-1.5">
             <span className={labelClass}>Cajeros con acceso</span>
             <div className="max-h-48 overflow-y-auto space-y-1 border border-slate-200 dark:border-slate-800 rounded-lg p-2">

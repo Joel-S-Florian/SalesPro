@@ -13,6 +13,7 @@ const idParam = z.object({ id: z.string().cuid() });
 const createSchema = {
   body: z.object({
     name: z.string().trim().min(1, 'Nombre requerido').max(60),
+    branchId: z.string().cuid().optional(),
     userIds: z.array(z.string().cuid()).optional(),
   }),
 };
@@ -22,6 +23,7 @@ const updateSchema = {
     .object({
       name: z.string().trim().min(1).max(60),
       active: z.boolean(),
+      branchId: z.string().cuid(),
       userIds: z.array(z.string().cuid()),
     })
     .partial()

@@ -14,6 +14,8 @@ import * as cardPayments from '../payments/payments.service.js';
 import { changeDue, normalizeBreakdown, sumBreakdown } from '../../shared/utils/cashChange.js';
 import { getConfig } from '../config/config.service.js';
 import { resolveShiftForSale } from '../cashier/cashier.service.js';
+import { changeBranchStock, getBranchStockMap } from '../inventory/branchStock.js';
+import { getMainBranchId } from '../branches/branches.service.js';
 import { ecfTypeForCustomer, issueEcf, loadIssuingContext, saleEcfFields, saveEcfDocuments } from '../ecf/ecf.issue.js';
 import { kickEcfWorker } from '../ecf/ecf.outbox.js';
 
@@ -56,6 +58,7 @@ export async function getSales({ page = 1, limit = 20, sortBy = 'createdAt', sor
       include: {
         customer: { select: { id: true, name: true, documentId: true } },
         user: { select: { id: true, username: true, fullName: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true, isMain: true } },
         details: {
           include: {
             product: { select: { id: true, code: true, name: true } },
@@ -81,6 +84,7 @@ export async function getSaleById(id, requester) {
     include: {
       customer: { select: { id: true, name: true, documentId: true, email: true, phone: true, address: true, rnc: true } },
       user: { select: { id: true, username: true, fullName: true } },
+      branch: { select: { id: true, name: true, code: true, address: true, phone: true, isMain: true } },
       cardPayment: { select: { provider: true, brand: true, last4: true, authCode: true, reference: true } },
       details: {
         include: {
@@ -141,6 +145,7 @@ export async function getMySales(userId, { page = 1, limit = 20, sortBy = 'creat
       include: {
         customer: { select: { id: true, name: true, documentId: true } },
         user: { select: { id: true, username: true, fullName: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true, isMain: true } },
         details: {
           include: {
             product: { select: { id: true, code: true, name: true } },
@@ -284,6 +289,8 @@ export async function createSale(data, userId, userName, requester = { userId, r
     throw AppError.notFound('Cliente no encontrado');
   }
 
+  const branchStocks = await getBranchStockMap(prisma, details.map(d => d.productId), shift.branchId);
+
   // Validate products and calculate totals
   let subtotal = 0;
   let lineDiscounts = 0;
@@ -318,9 +325,13 @@ export async function createSale(data, userId, userName, requester = { userId, r
     // Perecederos: la asignación por lotes (FEFO) y el descuento por vencimiento los decide el servidor
     let preview = null;
     if (product.isPerishable) {
-      preview = await previewSaleLine(product, quantity, unitPrice, config.perishable);
-    } else if (product.stock + QTY_EPS < quantity) {
-      throw AppError.badRequest(`Stock insuficiente para ${product.name}. Stock disponible: ${roundQty(product.stock)}`, ERROR_CODES.INSUFFICIENT_STOCK);
+      preview = await previewSaleLine(product, quantity, unitPrice, config.perishable, shift.branchId);
+    } else {
+      // El stock que cuenta es el de la sucursal de la caja (una sola consulta para todas las líneas)
+      const available = branchStocks.get(product.id) ?? 0;
+      if (available + QTY_EPS < quantity) {
+        throw AppError.badRequest(`Stock insuficiente para ${product.name}. Stock disponible: ${roundQty(available)}`, ERROR_CODES.INSUFFICIENT_STOCK);
+      }
     }
 
     const expiryDiscount = preview?.autoDiscount || 0;
@@ -369,6 +380,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
   // Con facturación electrónica activa el comprobante es un e-CF (se asigna dentro de la transacción);
   // si no, se usa el NCF de papel (serie B)
   const ecfContext = await loadIssuingContext({ purpose: 'sign-ecf', userId });
+  const branch = ecfContext ? await prisma.branch.findUnique({ where: { id: shift.branchId }, select: { code: true } }) : null; // código <Sucursal> del e-CF
   const ncfType = determineNCFType(customer);
   let invoiceNumber = ecfContext ? null : await getNextNCF(ncfType);
 
@@ -377,6 +389,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
     let ecf = null;
     if (ecfContext) {
       ecf = await issueEcf(tx, ecfContext, {
+        branchCode: branch?.code,
         ecfType: ecfTypeForCustomer(customer),
         customer,
         lines: saleDetails.map(d => ({ name: d.productName, quantity: d.quantity, unitPrice: d.unitPrice, unitCode: unitInfo(d.unit).ecf })),
@@ -407,6 +420,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
         ...(cash ? { cashReceived: cash.received, cashChange: cash.change } : {}),
         notes: notes || null,
         terminalId: shift.terminalId,
+        branchId: shift.branchId,
         cashierCloseId: shift.cashierCloseId,
         details: {
           create: saleDetails.map(d => ({
@@ -427,6 +441,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
       include: {
         customer: { select: { id: true, name: true, documentId: true, rnc: true } },
         user: { select: { id: true, username: true, fullName: true } },
+        branch: { select: { id: true, name: true, code: true, address: true, phone: true, isMain: true } },
         details: {
           include: {
             product: { select: { id: true, code: true, name: true, costPrice: true } },
@@ -443,7 +458,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
     for (const item of [...saleDetails].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0))) {
       // Perecederos: descuenta los lotes de forma atómica (FEFO) y deja la trazabilidad por lote vendido
       if (item.product.isPerishable) {
-        const allocations = await consumeFefo(tx, item.product, item.quantity, config.perishable);
+        const allocations = await consumeFefo(tx, item.product, item.quantity, config.perishable, { branchId: shift.branchId });
         const created = newSale.details.find(
           d => !usedDetails.has(d.id) && d.productId === item.productId && d.quantity === item.quantity && Number(d.discount) === item.discount
         );
@@ -460,20 +475,14 @@ export async function createSale(data, userId, userName, requester = { userId, r
         });
       }
 
-      // Descuento atómico: si otra venta se llevó el stock mientras tanto, esta se rechaza (no queda stock negativo)
-      const { count } = await tx.product.updateMany({
-        where: { id: item.productId, stock: { gte: item.quantity - QTY_EPS } },
-        data: { stock: { decrement: item.quantity } },
-      });
-      if (count !== 1) {
-        throw AppError.badRequest(`Stock insuficiente para ${item.productName}`, ERROR_CODES.INSUFFICIENT_STOCK);
-      }
-      await tx.product.updateMany({ where: { id: item.productId, stock: { lt: QTY_EPS, gt: -QTY_EPS } }, data: { stock: 0 } });
+      // Descuento atómico en la sucursal de la caja: si otra venta se llevó el stock mientras tanto, esta se rechaza (no queda stock negativo)
+      await changeBranchStock(tx, { productId: item.productId, branchId: shift.branchId, delta: -item.quantity, productName: item.productName });
 
       await tx.inventoryLog.create({
         data: {
           productId: item.productId,
           productName: item.productName,
+          branchId: shift.branchId,
           type: 'SALIDA',
           quantity: item.quantity,
           reason: `Venta ${invoiceNumber}`,
@@ -513,6 +522,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
   if (original.ncfType === CREDIT_NOTE_NCF) throw AppError.badRequest('No se puede crear una nota de crédito sobre otra nota de crédito');
 
   const shift = await resolveShiftForSale(requester, terminalId, config);
+  const stockBranchId = original.branchId || (await getMainBranchId());
 
   // Cantidad vendida y ya devuelta por producto
   const sold = new Map();
@@ -561,6 +571,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
 
   // Devolución de una venta electrónica -> nota de crédito electrónica (E34) que referencia el e-CF original
   const ecfContext = await loadIssuingContext({ purpose: 'sign-ecf', userId });
+  const branch = ecfContext ? await prisma.branch.findUnique({ where: { id: shift.branchId }, select: { code: true } }) : null; // código <Sucursal> del e-CF
   if (original.eNcf && !ecfContext) {
     throw AppError.badRequest('La venta original es un comprobante electrónico: active la facturación electrónica para emitir su nota de crédito');
   }
@@ -573,6 +584,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
     let ecf = null;
     if (useEcf) {
       ecf = await issueEcf(tx, ecfContext, {
+        branchCode: branch?.code,
         ecfType: 'E34',
         customer: buyer,
         lines: lines.map(l => ({ name: l.name, quantity: l.quantity, unitPrice: l.unitPrice, unitCode: unitInfo(l.unit).ecf })),
@@ -609,6 +621,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
         paymentMethod: original.paymentMethod,
         notes: `NOTA DE CRÉDITO - Ref: ${original.invoiceNumber} - ${reason}`,
         terminalId: shift.terminalId,
+        branchId: shift.branchId,
         cashierCloseId: shift.cashierCloseId,
         details: {
           create: lines.map(l => ({
@@ -631,17 +644,19 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
       // Perecederos: la devolución vuelve a los lotes de donde salió y queda registrada (cantidad negativa)
       const product = await tx.product.findUnique({ where: { id: l.productId }, select: { isPerishable: true, costPrice: true } });
       if (product?.isPerishable) {
-        const restored = await restoreToBatches(tx, { originalSaleId: original.id, productId: l.productId, quantity: l.quantity, costPrice: Number(product.costPrice) });
+        const restored = await restoreToBatches(tx, { originalSaleId: original.id, productId: l.productId, branchId: stockBranchId, quantity: l.quantity, costPrice: Number(product.costPrice) });
         const noteDetail = note.details.find(d => d.productId === l.productId);
         await tx.saleBatchDetail.createMany({
           data: restored.map(r => ({ companyId: getTenantId(), saleDetailId: noteDetail.id, batchId: r.batchId, quantity: -r.quantity })),
         });
       }
-      await tx.product.update({ where: { id: l.productId }, data: { stock: { increment: l.quantity } } });
+      // La mercancía vuelve a la sucursal de donde salió en la venta original
+      await changeBranchStock(tx, { productId: l.productId, branchId: stockBranchId, delta: l.quantity, productName: l.name });
       await tx.inventoryLog.create({
         data: {
           productId: l.productId,
           productName: l.name,
+          branchId: stockBranchId,
           type: 'DEVOLUCION',
           quantity: l.quantity,
           reason: `Nota de crédito ${invoiceNumber} (venta ${original.invoiceNumber})`,

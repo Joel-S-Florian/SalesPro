@@ -75,7 +75,6 @@ export default function PlanUsageCard() {
                   </div>
                 )}
                 {resource === 'salesPerMonth' && <p className="text-[11px] text-slate-400">Informativo: nunca bloquea una venta.</p>}
-                {resource === 'branches' && <p className="text-[11px] text-slate-400">El módulo de sucursales todavía no está disponible.</p>}
                 {u.exceeded && resource !== 'salesPerMonth' && <p className="text-[11px] text-rose-500">Por encima del tope: no se desactivó nada, pero no podrás agregar más.</p>}
               </div>
             );

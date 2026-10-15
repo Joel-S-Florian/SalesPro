@@ -1,6 +1,7 @@
 // Prueba de integración de ventas y notas de crédito (B01/B02/B04) contra la base real.
 // Usa solo la empresa «Empresa Prueba» y deja todo como estaba.
 // Uso: node --env-file=apps/api/.env scripts/test-credit-notes.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
 const { basePrisma, prisma } = await load('config/db.js');
@@ -33,6 +34,7 @@ await runInTenant(company.id, async () => {
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-CN' } });
     created.category = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-CN-1', name: 'Producto prueba NC', categoryId: category.id, costPrice: 50, salePrice: 100, stock: 10, minStock: 1 } });
+    await giveStock(prisma, product);
     created.product = product.id;
     const rncCustomer = await prisma.customer.create({ data: { documentId: '131880738', name: 'ZZ Cliente RNC', rnc: '131880738' } });
     created.customer = rncCustomer.id;

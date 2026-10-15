@@ -1,6 +1,7 @@
 // Prueba de integración de perecederos: lotes, FEFO, descuento por vencimiento, devoluciones y alertas.
 // Usa solo la empresa «Empresa Prueba» y deja todo como estaba.
 // Uso: node --env-file=apps/api/.env scripts/test-batches-fefo.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
 const { basePrisma, prisma } = await load('config/db.js');
@@ -129,6 +130,7 @@ await runInTenant(company.id, async () => {
 
     // Un producto existente pasa a perecedero: su stock queda en SIN-LOTE
     const plain = await prisma.product.create({ data: { code: 'ZZ-PER-2', name: 'Queso ZZ', categoryId: category.id, costPrice: 20, salePrice: 40, stock: 7, minStock: 1 } });
+    await giveStock(prisma, plain);
     created.products.push(plain.id);
     await products.updateProduct(plain.id, { isPerishable: true }, admin.id, admin.fullName);
     const generic = await batchOf(plain.id, 'SIN-LOTE');

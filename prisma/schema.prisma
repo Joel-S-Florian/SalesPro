@@ -47,6 +47,10 @@ model Company {
   presentations        ProductPresentation[]
   cardConfig           CardProviderConfig?
   cardPayments         CardPayment[]
+  branches             Branch[]
+  branchStocks         BranchStock[]
+  stockTransfers       StockTransfer[]
+  stockTransferLines   StockTransferLine[]
 
   @@map("companies")
 }
@@ -102,6 +106,8 @@ model User {
   terminals             Terminal[]      @relation("TerminalUsers")
   defaultTerminalId     String?
   defaultTerminal       Terminal?       @relation("DefaultTerminal", fields: [defaultTerminalId], references: [id])
+  branchId              String? // sucursal asignada; null = todas (administradores)
+  branch                Branch?         @relation("BranchUsers", fields: [branchId], references: [id])
   cashierCloses         CashierClose[]  @relation("CloseCashier")
   companyId             String?
   company               Company?        @relation(fields: [companyId], references: [id])
@@ -232,6 +238,7 @@ model Product {
   updatedAt     DateTime              @updatedAt
   inventoryLogs InventoryLog[]
   batches       ProductBatch[]
+  branchStocks  BranchStock[]
   category      Category              @relation(fields: [categoryId], references: [id])
   saleDetails   SaleDetail[]
   companyId     String
@@ -293,6 +300,8 @@ model Sale {
   cashChange      Json? // devuelta entregada por denominación
   createdAt       DateTime      @default(now())
   terminalId      String?
+  branchId        String? // sucursal de la caja donde se hizo la venta
+  branch          Branch?       @relation(fields: [branchId], references: [id])
   cashierCloseId  String?
   details         SaleDetail[]
   terminal        Terminal?     @relation(fields: [terminalId], references: [id])
@@ -352,6 +361,8 @@ model InventoryLog {
   product       Product       @relation(fields: [productId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
   supplierRef   Supplier?     @relation(fields: [supplierId], references: [id])
+  branchId      String? // sucursal del movimiento (se usa desde el stock por sucursal)
+  branch        Branch?       @relation(fields: [branchId], references: [id])
   companyId     String
   company       Company       @relation(fields: [companyId], references: [id])
 
@@ -409,6 +420,7 @@ model ProductPresentation {
 model ProductBatch {
   id             String            @id @default(cuid())
   productId      String
+  branchId       String // sucursal donde está el lote (el mismo número de lote puede existir en varias)
   batchNumber    String
   expirationDate DateTime?
   initialStock   Float
@@ -418,15 +430,83 @@ model ProductBatch {
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
   product        Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch         Branch            @relation(fields: [branchId], references: [id])
   supplier       Supplier?         @relation(fields: [supplierId], references: [id])
   saleDetails    SaleBatchDetail[]
   companyId      String
   company        Company           @relation(fields: [companyId], references: [id])
 
-  @@unique([companyId, productId, batchNumber])
+  @@unique([companyId, productId, branchId, batchNumber])
   @@index([companyId, productId])
+  @@index([companyId, branchId])
   @@index([companyId, expirationDate])
   @@map("product_batches")
+}
+
+/// Existencias de un producto en una sucursal. Invariante: Product.stock = suma del stock de todas sus sucursales.
+model BranchStock {
+  id        String   @id @default(cuid())
+  productId String
+  branchId  String
+  stock     Float    @default(0)
+  minStock  Float? // mínimo propio de la sucursal; null = usa el del producto
+  updatedAt DateTime @updatedAt
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+
+  @@unique([branchId, productId])
+  @@index([companyId, productId])
+  @@index([companyId, branchId])
+  @@map("branch_stocks")
+}
+
+enum TransferStatus {
+  ENVIADA // salió de la sucursal origen y va en camino (no cuenta en ninguna sucursal)
+  RECIBIDA
+  ANULADA // se canceló en tránsito y volvió al origen
+}
+
+/// Traslado de mercancía entre dos sucursales de la misma empresa.
+model StockTransfer {
+  id             String              @id @default(cuid())
+  number         Int                 @default(autoincrement())
+  fromBranchId   String
+  toBranchId     String
+  status         TransferStatus      @default(ENVIADA)
+  note           String?
+  createdById    String
+  createdByName  String
+  createdAt      DateTime            @default(now())
+  receivedById   String?
+  receivedByName String?
+  receivedAt     DateTime?
+  voidedAt       DateTime?
+  fromBranch     Branch              @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranch       Branch              @relation("TransferTo", fields: [toBranchId], references: [id])
+  lines          StockTransferLine[]
+  companyId      String
+  company        Company             @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, status])
+  @@index([companyId, createdAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id          String        @id @default(cuid())
+  transferId  String
+  productId   String
+  productName String
+  quantity    Float // unidades base
+  lots        Json? // perecederos: [{ batchNumber, expirationDate, quantity, costPrice }] para reconstruir los lotes en destino
+  transfer    StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company       @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, transferId])
+  @@map("stock_transfer_lines")
 }
 
 /// Qué lote(s) se descontaron en cada línea de venta (trazabilidad y devoluciones).
@@ -457,6 +537,35 @@ model SystemConfig {
   @@map("system_config")
 }
 
+/// Sucursal de una empresa. Cada empresa tiene una «Principal» (isMain) que no se borra ni se desactiva.
+model Branch {
+  id            String          @id @default(cuid())
+  name          String
+  code          String // código corto (también sale como <Sucursal> en el e-CF), único por empresa
+  address       String?
+  phone         String?
+  active        Boolean         @default(true)
+  isMain        Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  users         User[]          @relation("BranchUsers")
+  terminals     Terminal[]
+  sales         Sale[]
+  cashierCloses CashierClose[]
+  inventoryLogs InventoryLog[]
+  stocks        BranchStock[]
+  batches       ProductBatch[]
+  transfersOut  StockTransfer[] @relation("TransferFrom")
+  transfersIn   StockTransfer[] @relation("TransferTo")
+  companyId     String
+  company       Company         @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, code])
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("branches")
+}
+
 model Terminal {
   id            String         @id @default(cuid())
   name          String
@@ -467,6 +576,8 @@ model Terminal {
   defaultFor    User[]         @relation("DefaultTerminal")
   sales         Sale[]
   cashierCloses CashierClose[]
+  branchId      String? // sucursal a la que pertenece la caja
+  branch        Branch?        @relation(fields: [branchId], references: [id])
   companyId     String
   company       Company        @relation(fields: [companyId], references: [id])
 
@@ -490,6 +601,8 @@ model CashierClose {
   status         CloseStatus @default(OPEN)
   notes          String?
   summary        Json?
+  branchId       String? // sucursal de la caja al abrir el turno
+  branch         Branch?     @relation(fields: [branchId], references: [id])
   terminal       Terminal    @relation(fields: [terminalId], references: [id])
   user           User        @relation("CloseCashier", fields: [userId], references: [id])
   sales          Sale[]
@@ -657,6 +770,8 @@ enum InventoryType {
   AJUSTE
   DEVOLUCION
   MERMA // baja por vencimiento, daño o pérdida (con costo perdido)
+  TRANSFER_OUT // sale de una sucursal hacia otra (transferencia)
+  TRANSFER_IN // entra a una sucursal desde otra (transferencia)
 }
 
 enum NCFType {

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { getTenantId } from './tenant.js';
+import { getReportBranchId, getTenantId } from './tenant.js';
 
 const globalForPrisma = globalThis;
 
@@ -39,7 +39,20 @@ const TENANT_MODELS = new Set([
   'CardPayment',
   'ExportJob',
   'SubscriptionPayment',
+  'Branch',
+  'BranchStock',
+  'StockTransfer',
+  'StockTransferLine',
 ]);
+
+// Modelos que se pueden acotar por sucursal en los reportes y cómo se filtra cada uno
+const BRANCH_FILTER = {
+  Sale: branchId => ({ branchId }),
+  SaleDetail: branchId => ({ sale: { branchId } }),
+  InventoryLog: branchId => ({ branchId }),
+  CashierClose: branchId => ({ branchId }),
+};
+const BRANCH_FILTERED_READS = new Set(['findFirst', 'findMany', 'count', 'aggregate', 'groupBy']);
 
 const FILTERED = new Set([
   'findFirst',
@@ -76,8 +89,15 @@ export const prisma = basePrisma.$extends({
         const companyId = getTenantId();
         const next = { ...args };
 
+        // Reportes por sucursal: si la petición trae ?branchId= (ver authenticate), las LECTURAS de estos modelos se acotan a esa sucursal.
+        // Se combina con AND para no pisar los filtros propios de cada consulta.
+        const reportBranchId = getReportBranchId();
+        if (reportBranchId && BRANCH_FILTERED_READS.has(operation) && BRANCH_FILTER[model]) {
+          next.where = { AND: [args.where || {}, BRANCH_FILTER[model](reportBranchId)] };
+        }
+
         if (FILTERED.has(operation)) {
-          next.where = { ...(args.where || {}), companyId };
+          next.where = { ...(next.where || args.where || {}), companyId };
         } else if (operation === 'create') {
           next.data = stamp(args.data, companyId);
         } else if (operation === 'createMany' || operation === 'createManyAndReturn') {

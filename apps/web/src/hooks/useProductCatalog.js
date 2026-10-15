@@ -16,7 +16,7 @@ function useDebounced(value, delay) {
  * Catálogo del POS con búsqueda y filtro por categoría en el servidor, paginado.
  * (El API devuelve como máximo 100 por página: no se carga todo el inventario en el navegador.)
  */
-export function useProductCatalog() {
+export function useProductCatalog(branchKey = null) {
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [products, setProducts] = useState([]);
@@ -58,7 +58,8 @@ export function useProductCatalog() {
         }
       }
     },
-    [debouncedSearch, categoryId]
+    // branchKey: al cambiar la sucursal de la caja el catálogo se vuelve a pedir (el encabezado X-Branch-Id ya cambió)
+    [debouncedSearch, categoryId, branchKey]
   );
 
   useEffect(() => {

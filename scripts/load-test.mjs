@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { syncMainBranchStock } from './lib/branch-stock.mjs';
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -90,6 +91,7 @@ console.log(`Creando ${COMPANIES} empresas con ${TERMINALS} cajas y ${PRODUCTS} 
 const world = [];
 for (let c = 0; c < COMPANIES; c++) {
   const company = await db.company.create({ data: { name: `Carga ${c + 1}`, plan: 'FREE' } });
+  const mainBranch = await db.branch.create({ data: { name: 'Principal', code: '001', isMain: true, companyId: company.id } });
   const category = await db.category.create({ data: { name: 'General', companyId: company.id } });
   const consumer = await db.customer.create({ data: { documentId: '000000000', name: 'Consumidor Final', companyId: company.id } });
   // Las secuencias de comprobantes las crea el propio API al arrancar (initializeNCFSequences)
@@ -97,11 +99,12 @@ for (let c = 0; c < COMPANIES; c++) {
   await db.product.createMany({
     data: Array.from({ length: PRODUCTS }, (_, i) => ({ code: `L${c}-${String(i).padStart(4, '0')}`, name: `Producto ${c + 1}-${i}`, categoryId: category.id, costPrice: 50, salePrice: 100 + (i % 50), stock: INITIAL_STOCK, minStock: 1, companyId: company.id })),
   });
+  await syncMainBranchStock(db, company.id); // el stock vive por sucursal
   const products = await db.product.findMany({ where: { companyId: company.id }, select: { id: true, code: true }, orderBy: { code: 'asc' } });
   const cashiers = [];
   for (let t = 0; t < TERMINALS; t++) {
     const user = await db.user.create({ data: { username: `load_c${c}_t${t}`, passwordHash, fullName: `Cajero ${c + 1}-${t + 1}`, role: 'VENDEDOR', companyId: company.id } });
-    const terminal = await db.terminal.create({ data: { name: `Caja ${t + 1}`, companyId: company.id, users: { connect: { id: user.id } } } });
+    const terminal = await db.terminal.create({ data: { name: `Caja ${t + 1}`, companyId: company.id, branchId: mainBranch.id, users: { connect: { id: user.id } } } });
     cashiers.push({ username: user.username, userId: user.id, terminalId: terminal.id });
   }
   if (ECF) {
@@ -331,6 +334,9 @@ try {
     const wrong = products.filter(p => p.stock !== INITIAL_STOCK - (soldMap.get(p.id) || 0));
     check(`${w.name}: el inventario cuadra producto por producto (sin ventas «perdidas» por competencia)`, wrong.length === 0, wrong.length ? `${wrong.length} productos descuadrados` : '');
     check(`${w.name}: ningún stock negativo`, products.every(p => p.stock >= 0));
+    const branchSums = await db.branchStock.groupBy({ by: ['productId'], where, _sum: { stock: true } });
+    const branchMap = new Map(branchSums.map(r => [r.productId, r._sum.stock]));
+    check(`${w.name}: Product.stock = suma de sucursales en todos los productos`, products.every(p => Math.abs((branchMap.get(p.id) ?? 0) - p.stock) < 0.001));
 
     // Aislamiento: el administrador solo ve lo suyo y no puede leer ventas de otra empresa
     const mine = await http('listar ventas (admin)', 'GET', '/sales?limit=100', { token: w.adminToken });

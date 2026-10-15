@@ -5,6 +5,7 @@ import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
+import { useBranches } from '../hooks/queries';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
 import TempPasswordModal from '../components/auth/TempPasswordModal';
@@ -28,6 +29,8 @@ export default function Users() {
   const [documentId, setDocumentId] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState('VENDEDOR');
+  const [branchId, setBranchId] = useState('');
+  const { data: branches = [] } = useBranches();
   const [tempPassword, setTempPassword] = useState(null); // clave temporal recién generada (se muestra una sola vez)
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,6 +43,7 @@ export default function Users() {
     setDocumentId('');
     setPhone('');
     setRole('VENDEDOR');
+    setBranchId('');
     setActive(true);
     setIsFormOpen(true);
   };
@@ -52,6 +56,7 @@ export default function Users() {
     setDocumentId(u.documentId ? formatDocument(DocumentType.CEDULA, u.documentId) : '');
     setPhone(u.phone || '');
     setRole(u.role || 'VENDEDOR');
+    setBranchId(u.branchId || '');
     setActive(u.active !== false);
     setIsFormOpen(true);
   };
@@ -82,13 +87,14 @@ export default function Users() {
         username,
         role,
         active,
+        ...(role === 'VENDEDOR' && branchId ? { branchId } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(documentId.trim() ? { documentId: documentId.trim() } : {}),
         ...(phone.trim() ? { phone: phone.trim() } : {}),
       };
       if (editingId) {
         // Edit
-        await api.auth.updateUser(editingId, { fullName, role, active, email: email.trim() || null, documentId: documentId.trim() || null, phone: phone.trim() || null });
+        await api.auth.updateUser(editingId, { fullName, role, active, branchId: role === 'VENDEDOR' ? branchId || null : null, email: email.trim() || null, documentId: documentId.trim() || null, phone: phone.trim() || null });
         notify.success('Usuario actualizado');
       } else {
         // Create: la clave temporal la genera el servidor y se muestra una sola vez
@@ -321,6 +327,24 @@ export default function Users() {
                 <option value="ADMINISTRADOR" className="dark:bg-slate-950">Administrador</option>
               </SmartSelect>
             </div>
+
+            {role === 'VENDEDOR' && branches.length > 1 && (
+              <div className="col-span-2 space-y-1.5">
+                <label htmlFor="usr-branch" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Sucursal asignada</label>
+                <SmartSelect
+                  id="usr-branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+                >
+                  <option value="" className="dark:bg-slate-950">Todas las sucursales</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id} className="dark:bg-slate-950">{b.name}</option>
+                  ))}
+                </SmartSelect>
+                <p className="text-[11px] text-slate-400">Un vendedor con sucursal solo usa las cajas de esa sucursal.</p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <label htmlFor="usr-active" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">

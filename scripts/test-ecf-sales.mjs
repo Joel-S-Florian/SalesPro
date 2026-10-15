@@ -3,6 +3,7 @@
 // así no compite con la cola de e-CF del API de desarrollo ni con otras pruebas.
 //
 //   node --env-file=apps/api/.env scripts/test-ecf-sales.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 import http from 'node:http';
 
 import { createIsolatedDb } from './lib/isolated-db.mjs';
@@ -91,7 +92,9 @@ try {
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-ECF' } });
     created.categoryId = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-ECF-1', name: 'Producto "prueba" & café', categoryId: category.id, costPrice: 50, salePrice: 100, stock: 1000, minStock: 1 } });
+    await giveStock(prisma, product);
     const big = await prisma.product.create({ data: { code: 'ZZ-ECF-2', name: 'Equipo costoso', categoryId: category.id, costPrice: 100000, salePrice: 300000, stock: 10, minStock: 1 } });
+    await giveStock(prisma, big);
     created.productIds.push(product.id, big.id);
     const consumer = await prisma.customer.findFirst({ where: { documentId: '000000000' } });
     const rncCustomer = await prisma.customer.create({ data: { documentId: '131880738', name: 'FERRETERIA DEL CIBAO SRL', rnc: '131880738' } });

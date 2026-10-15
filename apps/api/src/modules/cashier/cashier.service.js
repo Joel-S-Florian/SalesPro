@@ -2,10 +2,12 @@ import { prisma } from '../../config/db.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { round2 } from '../../shared/utils/helpers.js';
 import { assertTerminalAccess } from '../terminals/terminals.service.js';
+import { getMainBranchId } from '../branches/branches.service.js';
 import { addBreakdowns, normalizeBreakdown, sumBreakdown } from '../../shared/utils/cashChange.js';
 
 const closeInclude = {
   terminal: { select: { id: true, name: true } },
+  branch: { select: { id: true, name: true } },
   user: { select: { id: true, username: true, fullName: true } },
 };
 
@@ -57,7 +59,7 @@ export async function getCurrentShift(requester, terminalId) {
 }
 
 export async function openShift(requester, { terminalId, openingBalance = 0, openingCount }) {
-  await assertTerminalAccess(requester, terminalId);
+  const terminal = await assertTerminalAccess(requester, terminalId);
 
   // Con el conteo por denominaciones, el fondo inicial es lo que suman los billetes y monedas
   let count = null;
@@ -80,7 +82,7 @@ export async function openShift(requester, { terminalId, openingBalance = 0, ope
   if (userOpen) throw AppError.conflict('Ya tiene un turno abierto en otra caja. Ciérrelo primero');
 
   return prisma.cashierClose.create({
-    data: { terminalId, userId: requester.userId, openingBalance, ...(count ? { openingCount: count } : {}) },
+    data: { terminalId, branchId: terminal.branchId || (await getMainBranchId()), userId: requester.userId, openingBalance, ...(count ? { openingCount: count } : {}) },
     include: closeInclude,
   });
 }
@@ -206,10 +208,10 @@ export async function getShift(requester, id) {
 export async function resolveShiftForSale(requester, terminalId, { requireOpenShift }) {
   if (!terminalId) {
     if (requireOpenShift) throw AppError.badRequest('Seleccione una caja y abra su turno para vender');
-    return { terminalId: null, cashierCloseId: null };
+    return { terminalId: null, cashierCloseId: null, branchId: await getMainBranchId() };
   }
 
-  await assertTerminalAccess(requester, terminalId);
+  const terminal = await assertTerminalAccess(requester, terminalId);
   const open = await prisma.cashierClose.findFirst({ where: { terminalId, status: 'OPEN' } });
 
   if (open && open.userId !== requester.userId) {
@@ -218,5 +220,5 @@ export async function resolveShiftForSale(requester, terminalId, { requireOpenSh
   if (!open && requireOpenShift) {
     throw AppError.badRequest('Debe abrir el turno de la caja antes de vender');
   }
-  return { terminalId, cashierCloseId: open?.id || null };
+  return { terminalId, cashierCloseId: open?.id || null, branchId: terminal.branchId || (await getMainBranchId()) };
 }

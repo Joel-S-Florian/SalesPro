@@ -2,8 +2,10 @@ import { prisma } from '../../config/db.js';
 import { getTenantId } from '../../config/tenant.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { assertWithinPlan } from '../../shared/plans.js';
+import { resolveBranchId } from '../branches/branches.service.js';
 
 const withUsers = {
+  branch: { select: { id: true, name: true, code: true } },
   users: { select: { id: true, username: true, fullName: true } },
   _count: { select: { sales: true } },
 };
@@ -19,12 +21,14 @@ export function listTerminals() {
   return prisma.terminal.findMany({ orderBy: { name: 'asc' }, include: withUsers });
 }
 
-export async function createTerminal({ name, userIds = [] }) {
+export async function createTerminal({ name, branchId, userIds = [] }) {
   await assertWithinPlan('terminals');
   await assertNameAvailable(name);
+  const resolvedBranchId = await resolveBranchId(branchId);
   return prisma.terminal.create({
     data: {
       name,
+      branch: { connect: { id: resolvedBranchId } },
       company: { connect: { id: getTenantId() } },
       users: { connect: userIds.map(id => ({ id })) },
     },
@@ -32,17 +36,24 @@ export async function createTerminal({ name, userIds = [] }) {
   });
 }
 
-export async function updateTerminal(id, { name, active, userIds }) {
+export async function updateTerminal(id, { name, active, userIds, branchId }) {
   const terminal = await prisma.terminal.findUnique({ where: { id } });
   if (!terminal) throw AppError.notFound('Caja no encontrada');
   if (name) await assertNameAvailable(name, id);
   // Reactivar una caja cuenta contra el tope del plan
   if (active === true && !terminal.active) await assertWithinPlan('terminals');
 
+  if (branchId && branchId !== terminal.branchId) {
+    // Cambiar de sucursal una caja con turno abierto mezclaría las ventas del turno
+    if (await prisma.cashierClose.findFirst({ where: { terminalId: id, status: 'OPEN' } })) throw AppError.conflict('La caja tiene un turno abierto. Ciérrelo antes de cambiarla de sucursal');
+    await resolveBranchId(branchId);
+  }
+
   return prisma.terminal.update({
     where: { id },
     data: {
       ...(name && { name }),
+      ...(branchId && { branchId }),
       ...(active !== undefined && { active }),
       ...(userIds && { users: { set: userIds.map(userId => ({ id: userId })) } }),
     },
@@ -55,13 +66,14 @@ export async function updateTerminal(id, { name, active, userIds }) {
  */
 export async function getMyTerminals(requester) {
   const isAdmin = requester.role === 'ADMINISTRADOR';
-  const [terminals, user] = await Promise.all([
+  const user = await prisma.user.findUnique({ where: { id: requester.userId }, select: { defaultTerminalId: true, branchId: true } });
+  // Un vendedor con sucursal asignada solo ve las cajas de esa sucursal
+  const [terminals] = await Promise.all([
     prisma.terminal.findMany({
-      where: { active: true, ...(isAdmin ? {} : { users: { some: { id: requester.userId } } }) },
+      where: { active: true, branch: { active: true }, ...(isAdmin ? {} : { users: { some: { id: requester.userId } }, ...(user?.branchId ? { branchId: user.branchId } : {}) }) },
       orderBy: { name: 'asc' },
-      select: { id: true, name: true },
+      select: { id: true, name: true, branchId: true, branch: { select: { name: true } } },
     }),
-    prisma.user.findUnique({ where: { id: requester.userId }, select: { defaultTerminalId: true } }),
   ]);
   return { terminals, defaultTerminalId: user?.defaultTerminalId || null };
 }
@@ -91,5 +103,9 @@ export async function assertTerminalAccess(requester, terminalId) {
   const allowed =
     requester.role === 'ADMINISTRADOR' || terminal.users.some(u => u.id === requester.userId);
   if (!allowed) throw AppError.forbidden('No tiene acceso a esa caja');
+  if (requester.role !== 'ADMINISTRADOR') {
+    const user = await prisma.user.findUnique({ where: { id: requester.userId }, select: { branchId: true } });
+    if (user?.branchId && user.branchId !== terminal.branchId) throw AppError.forbidden('Esa caja es de otra sucursal');
+  }
   return terminal;
 }

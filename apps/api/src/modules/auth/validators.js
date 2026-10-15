@@ -50,6 +50,7 @@ export const createUserSchema = {
     email: emailField.nullish(),
     documentId: cedulaField.nullish(),
     phone: phoneField.nullish(),
+    branchId: z.string().cuid().nullish(),
     active: z.boolean().default(true),
   }),
 };
@@ -64,6 +65,7 @@ export const updateUserSchema = {
       email: emailField.nullish(),
       documentId: cedulaField.nullish(),
       phone: phoneField.nullish(),
+      branchId: z.string().cuid().nullish(),
     })
     .refine(data => Object.keys(data).length > 0, 'Al menos un campo es requerido'),
 };

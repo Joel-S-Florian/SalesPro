@@ -6,15 +6,18 @@ import { getConfig } from '../config/config.service.js';
 import { assertFeature } from '../../shared/plans.js';
 import { getSystemSupplier } from '../suppliers/suppliers.service.js';
 import { addBatchStock, consumeBatch, consumeFefo, requireBatchFields } from './batches.service.js';
+import { changeBranchStock, getBranchStock, getBranchStockMap } from './branchStock.js';
+import { getWorkingBranchId } from '../branches/branches.service.js';
 import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilterString } from '../../shared/utils/helpers.js';
 
 /**
  * Get inventory logs with pagination and filters
  */
-export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc', productId, type, userId, startDate, endDate, q }) {
+export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'createdAt', sortOrder = 'desc', productId, type, userId, startDate, endDate, q, branchId }) {
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy, sortOrder });
 
-  const where = {};
+  // Por omisión, los movimientos de la sucursal de trabajo; branchId=ALL trae los de toda la empresa
+  const where = branchId === 'ALL' ? {} : { branchId: branchId || (await getWorkingBranchId()) };
 
   const cleanQ = cleanFilterString(q);
   if (cleanQ) {
@@ -41,6 +44,7 @@ export async function getInventoryLogs({ page = 1, limit = 50, sortBy = 'created
       include: {
         product: { select: { id: true, code: true, name: true } },
         user: { select: { id: true, username: true, fullName: true } },
+        branch: { select: { id: true, name: true } },
       },
     }),
     prisma.inventoryLog.count({ where }),
@@ -66,10 +70,13 @@ export async function getProductKardex(productId, { page = 1, limit = 100 }) {
   }
 
   const { skip, take, orderBy } = buildPaginationQuery({ page, limit, sortBy: 'createdAt', sortOrder: 'asc' });
+  const branchId = await getWorkingBranchId();
+  const logWhere = { productId, branchId };
+  const branchStock = await getBranchStock(prisma, productId, branchId);
 
   const [logs, total] = await Promise.all([
     prisma.inventoryLog.findMany({
-      where: { productId },
+      where: logWhere,
       skip,
       take,
       orderBy,
@@ -77,13 +84,13 @@ export async function getProductKardex(productId, { page = 1, limit = 100 }) {
         user: { select: { id: true, username: true, fullName: true } },
       },
     }),
-    prisma.inventoryLog.count({ where: { productId } }),
+    prisma.inventoryLog.count({ where: logWhere }),
   ]);
 
   // Calculate running balance
   let runningBalance = 0;
   const logsWithBalance = logs.map(log => {
-    if (log.type === 'ENTRADA' || log.type === 'DEVOLUCION') {
+    if (log.type === 'ENTRADA' || log.type === 'DEVOLUCION' || log.type === 'TRANSFER_IN') {
       runningBalance += log.quantity;
     } else {
       runningBalance -= log.quantity;
@@ -92,7 +99,8 @@ export async function getProductKardex(productId, { page = 1, limit = 100 }) {
   });
 
   return {
-    product,
+    // `stock` es el de la sucursal de trabajo; `totalStock` el de toda la empresa
+    product: { ...product, stock: branchStock, totalStock: product.stock },
     data: logsWithBalance,
     pagination: getPaginationMeta(page, limit, total),
   };
@@ -113,42 +121,38 @@ export async function adjustStock(data, userId, userName) {
   const qtyError = type === 'AJUSTE' && Number(quantity) === 0 ? null : quantityError(quantity, product.unit);
   if (qtyError) throw AppError.badRequest(qtyError);
 
+  const branchId = await getWorkingBranchId();
+  const currentStock = await getBranchStock(prisma, productId, branchId);
   const isOut = type === 'SALIDA' || type === 'MERMA';
-  if (isOut && product.stock + 0.004 < quantity) {
+  if (isOut && currentStock + 0.004 < quantity) {
     throw AppError.badRequest('El stock disponible no cubre la salida', ERROR_CODES.INSUFFICIENT_STOCK);
   }
 
   const { perishable } = await getConfig();
   // Perecederos: la entrada pide lote y vencimiento; la salida descuenta por FEFO (se permiten lotes vencidos: es una baja)
-  const delta = roundQty(type === 'AJUSTE' ? quantity - product.stock : isOut ? -quantity : quantity);
+  const delta = roundQty(type === 'AJUSTE' ? quantity - currentStock : isOut ? -quantity : quantity);
   if (product.isPerishable && delta > 0) await assertFeature('perishables'); // crear o sumar a un lote
   const entryBatch = product.isPerishable && delta > 0 ? requireBatchFields(data) : null;
 
   return prisma.$transaction(async (tx) => {
-    let newStock = product.stock;
-    if (type === 'ENTRADA') newStock = roundQty(newStock + quantity);
-    else if (isOut) newStock = roundQty(newStock - quantity);
-    else if (type === 'AJUSTE') newStock = roundQty(quantity);
-    else if (type === 'DEVOLUCION') newStock = roundQty(newStock + quantity);
+    const newStock = roundQty(currentStock + delta);
 
     if (product.isPerishable && delta !== 0) {
       if (delta > 0) {
-        await addBatchStock(tx, { productId, ...entryBatch, quantity: delta, costPrice: Number(product.costPrice) });
+        await addBatchStock(tx, { productId, branchId, ...entryBatch, quantity: delta, costPrice: Number(product.costPrice) });
       } else if (data.batchId) {
-        await consumeBatch(tx, product, data.batchId, -delta); // baja de un lote concreto
+        await consumeBatch(tx, product, data.batchId, -delta, { branchId }); // baja de un lote concreto
       } else {
-        await consumeFefo(tx, product, -delta, perishable, { allowExpired: true });
+        await consumeFefo(tx, product, -delta, perishable, { allowExpired: true, branchId });
       }
     }
 
-    const updated = await tx.product.update({
-      where: { id: productId },
-      data: { stock: newStock },
-    });
+    await changeBranchStock(tx, { productId, branchId, delta, productName: product.name });
 
     const log = await tx.inventoryLog.create({
       data: {
         productId,
+        branchId,
         productName: product.name,
         type,
         quantity,
@@ -193,7 +197,8 @@ export async function registerPurchase(data, userId, userName) {
   const batchFields = product.isPerishable ? requireBatchFields(data) : null;
   const totalCost = Math.round(quantity * Number(unitCost) * 100) / 100;
 
-  // Weighted average cost: ((current stock x current cost) + (qty x new unit cost)) / new stock
+  const branchId = await getWorkingBranchId();
+  // Costo promedio ponderado con el stock de toda la empresa (el costo es del producto, no de la sucursal)
   const currentStock = product.stock || 0;
   const currentCost = Number(product.costPrice) || 0;
   const newStock = roundQty(currentStock + quantity);
@@ -202,21 +207,18 @@ export async function registerPurchase(data, userId, userName) {
     : Number(unitCost);
 
   return prisma.$transaction(async (tx) => {
-    const updated = await tx.product.update({
-      where: { id: productId },
-      data: {
-        stock: newStock,
-        costPrice: weightedAverageCost,
-      },
-    });
+    await tx.product.update({ where: { id: productId }, data: { costPrice: weightedAverageCost } });
 
     if (batchFields) {
-      await addBatchStock(tx, { productId, ...batchFields, quantity, costPrice: Number(unitCost), supplierId: supplierId || null });
+      await addBatchStock(tx, { productId, branchId, ...batchFields, quantity, costPrice: Number(unitCost), supplierId: supplierId || null });
     }
+    await changeBranchStock(tx, { productId, branchId, delta: quantity, productName: product.name });
+    const branchStockNow = await getBranchStock(tx, productId, branchId);
 
     const log = await tx.inventoryLog.create({
       data: {
         productId,
+        branchId,
         productName: product.name,
         type: 'ENTRADA',
         quantity,
@@ -231,52 +233,39 @@ export async function registerPurchase(data, userId, userName) {
       },
     });
 
-    return { success: true, updatedStock: updated.stock, totalCost, newPurchasePrice: weightedAverageCost, log };
+    return { success: true, updatedStock: branchStockNow, totalCost, newPurchasePrice: weightedAverageCost, log };
   });
 }
 
 /**
- * Get inventory summary
+ * Resumen del inventario de la sucursal de trabajo (existencias, valor, bajo mínimo y agotados).
  */
 export async function getInventorySummary() {
-  const [
-    totalProducts,
-    activeProducts,
-    outOfStockProducts,
-    totalValue,
-    activeList,
-  ] = await Promise.all([
+  const branchId = await getWorkingBranchId();
+  const [totalProducts, products] = await Promise.all([
     prisma.product.count(),
-    prisma.product.count({ where: { active: true } }),
-    prisma.product.count({ where: { active: true, stock: 0 } }),
-    prisma.product.aggregate({
-      where: { active: true },
-      _sum: {
-        stock: true,
-      },
-    }),
-    prisma.product.findMany({
-      where: { active: true },
-      select: { stock: true, minStock: true },
-    }),
+    prisma.product.findMany({ where: { active: true }, select: { id: true, minStock: true, costPrice: true } }),
   ]);
+  const stocks = await getBranchStockMap(prisma, products.map(p => p.id), branchId);
 
-  const lowStockProducts = activeList.filter(p => p.stock <= p.minStock).length;
-
-  // Calculate total inventory value (stock * costPrice)
-  const products = await prisma.product.findMany({
-    where: { active: true },
-    select: { stock: true, costPrice: true },
-  });
-
-  const inventoryValue = products.reduce((sum, p) => sum + (p.stock * Number(p.costPrice)), 0);
+  let totalStockUnits = 0;
+  let inventoryValue = 0;
+  let lowStockProducts = 0;
+  let outOfStockProducts = 0;
+  for (const p of products) {
+    const stock = stocks.get(p.id) ?? 0;
+    totalStockUnits += stock;
+    inventoryValue += stock * Number(p.costPrice);
+    if (stock <= p.minStock) lowStockProducts += 1;
+    if (stock === 0) outOfStockProducts += 1;
+  }
 
   return {
     totalProducts,
-    activeProducts,
+    activeProducts: products.length,
     lowStockProducts,
     outOfStockProducts,
-    totalStockUnits: totalValue._sum.stock || 0,
+    totalStockUnits,
     inventoryValue: Math.round(inventoryValue * 100) / 100,
   };
 }

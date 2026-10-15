@@ -146,6 +146,7 @@ try {
   await basePrisma.auditLog.deleteMany({ where: { OR: [{ companyId: { in: companies } }, { userId: { in: users } }] } });
   await basePrisma.session.deleteMany({ where: { userId: { in: users } } });
   await basePrisma.user.deleteMany({ where: { id: { in: users } } });
+  await basePrisma.branch.deleteMany({ where: { companyId: { in: companies } } });
   await basePrisma.company.deleteMany({ where: { id: { in: companies } } });
   await basePrisma.$disconnect();
 }

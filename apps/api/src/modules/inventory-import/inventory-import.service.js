@@ -1,4 +1,6 @@
 import { addBatchStock, addUnbatchedStock } from '../inventory/batches.service.js';
+import { changeBranchStock } from '../inventory/branchStock.js';
+import { getWorkingBranchId } from '../branches/branches.service.js';
 import { parseExpiration } from '../inventory/batches.logic.js';
 import { getConfig } from '../config/config.service.js';
 import { getSystemSupplier } from '../suppliers/suppliers.service.js';
@@ -277,6 +279,8 @@ export async function previewImport(importId, { mapping, marginPercent, defaultC
  * Paso 3: carga definitiva (upsert) de las filas válidas, con entradas de inventario.
  */
 export async function applyImport(importId, requester) {
+  // Las existencias entran a la sucursal de trabajo
+  const branchId = await getWorkingBranchId();
   const batch = await getStagedBatch(importId);
   if (!batch.summary || !batch.options) {
     throw AppError.badRequest('Genere la vista previa antes de aplicar la importación');
@@ -355,7 +359,7 @@ export async function applyImport(importId, requester) {
               categoryId: category ? categoryIds.get(category.toLowerCase()) : defaultCategoryId,
               costPrice: cost,
               salePrice: price,
-              stock: perishable ? 0 : stock,
+              stock: 0, // las existencias entran a la sucursal más abajo
               unit: unit || 'UND',
               minStock: minStock ?? 0,
               isPerishable: perishable,
@@ -376,10 +380,12 @@ export async function applyImport(importId, requester) {
           productName = created.name;
           counts.created += 1;
           if (perishable && stock > 0) {
-            await addBatchStock(tx, { productId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
-            await tx.product.update({ where: { id: productId }, data: { stock: { increment: stock } } });
-            product.stock = stock;
+            await addBatchStock(tx, { productId, branchId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
             counts.lots += 1;
+          }
+          if (stock > 0) {
+            await changeBranchStock(tx, { productId, branchId, delta: stock, productName });
+            product.stock = stock;
           }
         } else {
           // Costo promedio ponderado cuando entra mercancía
@@ -391,11 +397,11 @@ export async function applyImport(importId, requester) {
           await tx.product.update({
             where: { id: product.id },
             data: {
-              stock: newStock,
               costPrice,
               ...(updatePrices ? { salePrice: price } : {}),
             },
           });
+          if (stock > 0) await changeBranchStock(tx, { productId: product.id, branchId, delta: stock, productName: product.name });
           productId = product.id;
           productName = product.name;
           if (!createdNow.has(code)) counts.updated += 1;
@@ -403,8 +409,8 @@ export async function applyImport(importId, requester) {
           product.costPrice = costPrice;
           // Perecedero: con lote y vencimiento entra a ese lote; sin ellos, como stock sin lote (SIN-LOTE)
           if (product.isPerishable && stock > 0) {
-            if (lot && expirationDate) await addBatchStock(tx, { productId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
-            else await addUnbatchedStock(tx, { productId, quantity: stock, costPrice: cost });
+            if (lot && expirationDate) await addBatchStock(tx, { productId, branchId, batchNumber: lot, expiration: expirationDate, quantity: stock, costPrice: cost, supplierId });
+            else await addUnbatchedStock(tx, { productId, branchId, quantity: stock, costPrice: cost });
             counts.lots += 1;
           }
         }
@@ -413,6 +419,7 @@ export async function applyImport(importId, requester) {
           await tx.inventoryLog.create({
             data: {
               productId,
+              branchId,
               productName,
               type: 'ENTRADA',
               quantity: stock,

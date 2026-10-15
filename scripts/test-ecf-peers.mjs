@@ -3,6 +3,7 @@
 // Usa «Empresa Prueba» y el simulador de la DGII (que además simula a otro contribuyente, RNC 101010101).
 //
 //   node --env-file=apps/api/.env scripts/test-ecf-peers.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 import http from 'node:http';
 import express from 'express';
 
@@ -97,6 +98,7 @@ try {
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-PEER' } });
     created.categoryId = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-PEER-1', name: 'Producto de prueba', categoryId: category.id, costPrice: 50, salePrice: 100, stock: 500, minStock: 1 } });
+    await giveStock(prisma, product);
     created.productIds.push(product.id);
     const mk = async (documentId, name) => {
       const c = await prisma.customer.create({ data: { documentId, name, rnc: documentId } });

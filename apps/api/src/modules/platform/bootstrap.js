@@ -1,5 +1,6 @@
 import { basePrisma } from '../../config/db.js';
 import { initializeNCFSequences } from '../../shared/utils/ncf.js';
+import { ensureMainBranch } from '../branches/branches.service.js';
 
 export const SYSTEM_SUPPLIER_NAME = 'Compra sin proveedor';
 
@@ -10,6 +11,7 @@ export const SYSTEM_SUPPLIER_NAME = 'Compra sin proveedor';
  */
 export async function bootstrapCompany(companyId) {
   await initializeNCFSequences(companyId);
+  await ensureMainBranch(basePrisma, companyId);
 
   await basePrisma.customer.upsert({
     where: { companyId_documentId: { companyId, documentId: '000000000' } },

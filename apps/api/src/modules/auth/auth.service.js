@@ -340,6 +340,8 @@ export async function getProfile(userId) {
       email: true,
       documentId: true,
       phone: true,
+      branchId: true,
+      branch: { select: { id: true, name: true } },
       mustChangePassword: true,
       fullName: true,
       role: true,
@@ -354,6 +356,14 @@ export async function getProfile(userId) {
   }
 
   return user;
+}
+
+/** Sucursal asignada a un usuario: solo aplica a vendedores; el administrador ve todas (null). Debe existir y estar activa. */
+async function userBranchId(branchId, role) {
+  if (!branchId || role === 'ADMINISTRADOR') return null;
+  const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+  if (!branch || !branch.active) throw AppError.badRequest('Sucursal no encontrada o inactiva');
+  return branch.id;
 }
 
 /** El correo se usa para recuperar la contraseña: debe tener forma válida y no estar en otra cuenta. */
@@ -400,6 +410,7 @@ export async function createUser(data) {
       email,
       documentId,
       phone: phoneOrNull(data.phone),
+      branchId: await userBranchId(data.branchId, role),
       fullName,
       role,
       passwordHash,
@@ -412,6 +423,8 @@ export async function createUser(data) {
       email: true,
       documentId: true,
       phone: true,
+      branchId: true,
+      branch: { select: { id: true, name: true } },
       fullName: true,
       role: true,
       active: true,
@@ -473,6 +486,8 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
         email: true,
         documentId: true,
         phone: true,
+        branchId: true,
+        branch: { select: { id: true, name: true } },
         mustChangePassword: true,
         tempPasswordExpiresAt: true,
         fullName: true,
@@ -545,6 +560,7 @@ export async function updateUser(id, data, actorId) {
     updateData.documentId = documentId;
   }
   if (data.phone !== undefined) updateData.phone = phoneOrNull(data.phone);
+  if (data.branchId !== undefined || role === 'ADMINISTRADOR') updateData.branchId = await userBranchId(data.branchId, role || user.role);
 
   const updated = await prisma.user.update({
     where: { id },
@@ -555,6 +571,8 @@ export async function updateUser(id, data, actorId) {
       email: true,
       documentId: true,
       phone: true,
+      branchId: true,
+      branch: { select: { id: true, name: true } },
       mustChangePassword: true,
       fullName: true,
       role: true,

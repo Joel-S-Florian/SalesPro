@@ -1,6 +1,7 @@
 // Prueba de integración de la devuelta por billetes y monedas: conteo de apertura, efectivo recibido/devuelto y caja resultante.
 // Usa solo la empresa «Empresa Prueba» y deja todo como estaba.
 // Uso: node --env-file=apps/api/.env scripts/test-cash-change.mjs
+import { giveStock } from './lib/branch-stock.mjs';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
 const { basePrisma, prisma } = await load('config/db.js');
@@ -34,6 +35,7 @@ await runInTenant(company.id, async () => {
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-CASH' } });
     created.category = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-CASH-1', name: 'Producto prueba efectivo', categoryId: category.id, costPrice: 10, salePrice: 100, stock: 100, minStock: 1 } });
+    await giveStock(prisma, product);
     created.product = product.id;
     const terminal = await prisma.terminal.create({ data: { name: 'ZZ Caja efectivo' } });
     created.terminal = terminal.id;

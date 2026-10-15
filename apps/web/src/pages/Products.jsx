@@ -325,6 +325,9 @@ export default function Products() {
                         }`}>
                           {p.unit && p.unit !== 'UND' ? formatQty(p.stock, p.unit) : `${p.stock} uds.`}
                         </span>
+                        {p.totalStock !== undefined && p.totalStock !== p.stock && (
+                          <span className="text-[9px] text-slate-400 font-mono">Empresa: {p.totalStock}</span>
+                        )}
                         {isLow && (
                           <span className="text-[9px] text-amber-500 font-mono font-bold flex items-center gap-0.5">
                             <AlertTriangle className="w-2.5 h-2.5" /> Mín. {p.minStock}

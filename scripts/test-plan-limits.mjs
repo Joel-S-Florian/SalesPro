@@ -2,6 +2,7 @@
 // ventas que NUNCA se bloquean, importación masiva parcial, exceso tras expirar la prueba y gracia.
 // Crea empresas de prueba («ZZ Plan …») y las borra al terminar.
 // Uso: node --env-file=apps/api/.env scripts/test-plan-limits.mjs
+import { syncMainBranchStock } from './lib/branch-stock.mjs';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
 const { basePrisma, prisma } = await load('config/db.js');
@@ -55,6 +56,7 @@ async function cleanup(companyIds) {
     const users = (await basePrisma.user.findMany({ where: w, select: { id: true } })).map(u => u.id);
     await basePrisma.session.deleteMany({ where: { userId: { in: users } } });
     await basePrisma.user.deleteMany({ where: w });
+    await basePrisma.branch.deleteMany({ where: w });
     await basePrisma.company.delete({ where: { id: companyId } }).catch(e => console.log('limpieza:', e.message.split('\n').pop()));
   }
 }
@@ -102,6 +104,7 @@ try {
     // Productos: tope 200
     const catId = await category(free.company.id);
     await basePrisma.product.createMany({ data: Array.from({ length: 199 }, (_, i) => ({ code: `ZZP-${i}`, name: `P${i}`, categoryId: catId, costPrice: 1, salePrice: 2, stock: 1000, minStock: 0, companyId: free.company.id })) });
+    await syncMainBranchStock(basePrisma, free.company.id);
     const p200 = await products.createProduct({ code: 'ZZP-200', name: 'Producto 200', categoryId: catId, costPrice: 1, salePrice: 2, stock: 1000, minStock: 0 }, free.admin.id, 'Admin');
     check('FREE: el producto 200 entra', Boolean(p200.id));
     await expectCode('FREE: el producto 201 se rechaza', () => products.createProduct({ code: 'ZZP-201', name: 'Producto 201', categoryId: catId, costPrice: 1, salePrice: 2, stock: 1, minStock: 0 }, free.admin.id, 'Admin'), 'PLAN_LIMIT', e => e.extra.resource === 'products' && e.extra.limit === 200 && e.extra.current === 200);

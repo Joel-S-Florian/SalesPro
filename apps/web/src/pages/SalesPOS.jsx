@@ -9,6 +9,7 @@ import { useBarcodeScanner } from '../hooks/useBarcodeScanner';
 import { useSerialScanner } from '../hooks/useSerialScanner';
 import { useCustomerDisplaySync } from '../hooks/useCustomerDisplaySync';
 import { useConfigStore, formatTaxPercent } from '../stores/configStore';
+import { useBranchStore } from '../stores/branchStore';
 import { openCustomerDisplay } from '../utils/customerDisplay';
 import { printReceipt } from '../utils/receiptPdf';
 import { notify } from '../utils/notify';
@@ -54,7 +55,14 @@ export default function SalesPOS({ onNavigate }) {
   const { isVendedor } = useAuthorization();
   const config = useConfigStore(state => state.config);
   const shiftState = useShift();
-  const catalog = useProductCatalog();
+  // El catálogo muestra el stock de la sucursal de la caja elegida (la venta descuenta de esa sucursal)
+  const terminalBranchId = shiftState.terminals?.find(t => t.id === shiftState.terminalId)?.branchId || null;
+  const setBranchOverride = useBranchStore(state => state.setOverride);
+  useEffect(() => {
+    setBranchOverride(terminalBranchId);
+    return () => setBranchOverride(null);
+  }, [terminalBranchId, setBranchOverride]);
+  const catalog = useProductCatalog(terminalBranchId);
   const cart = usePosCart(config.taxRate);
 
   const canDiscount = !isVendedor || config.vendedorCanDiscount;

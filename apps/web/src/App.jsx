@@ -5,6 +5,8 @@ import { useAuthStore } from './stores/authStore';
 import { useAuthMe, usePlanUsage } from './hooks/queries';
 import { useQueryClient } from '@tanstack/react-query';
 import PlanBanner from './components/plan/PlanBanner';
+import BranchSwitcher, { ReportBranchFilter } from './components/branches/BranchSwitcher';
+import { useBranchStore } from './stores/branchStore';
 import PlanLocked from './components/plan/PlanLocked';
 import { planName } from '@factos/shared/plans.js';
 import { useConfigStore } from './stores/configStore';
@@ -13,6 +15,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const SalesPOS = lazy(() => import('./pages/SalesPOS'));
 const Products = lazy(() => import('./pages/Products'));
 const Categories = lazy(() => import('./pages/Categories'));
+const Branches = lazy(() => import('./pages/Branches'));
+const Transfers = lazy(() => import('./pages/Transfers'));
 const Customers = lazy(() => import('./pages/Customers'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Suppliers = lazy(() => import('./pages/Suppliers'));
@@ -65,7 +69,8 @@ import {
   Inbox,
   FileCheck2,
   KeyRound,
-  DatabaseBackup
+  DatabaseBackup,
+  Store
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -163,6 +168,14 @@ export default function App() {
   const [password, setPassword] = useState('');
 
   const [activeTab, setActiveTab] = useState('DASHBOARD');
+  // Al cambiar de sucursal de trabajo la página actual se vuelve a cargar con los datos de esa sucursal
+  const activeBranchId = useBranchStore(state => state.activeBranchId);
+  const reportBranchId = useBranchStore(state => state.reportBranchId);
+  const setReportBranch = useBranchStore(state => state.setReportBranch);
+  // El filtro por sucursal de los reportes no se arrastra de una pantalla a otra
+  useEffect(() => {
+    setReportBranch(null);
+  }, [activeTab, setReportBranch]);
   const openPlans = useCallback(() => {
     try {
       sessionStorage.setItem('factos-settings-tab', 'PLAN');
@@ -508,6 +521,8 @@ export default function App() {
     { id: 'BARCODE_LABELS', label: 'Etiquetas / Códigos', icon: Barcode, roles: ['ADMINISTRADOR'], planTag: planUsage && !planUsage.features.labels.allowed ? planName(planUsage.features.labels.requiredPlan) : null },
     { id: 'SUPPLIERS', label: 'Proveedores', icon: Truck, roles: ['ADMINISTRADOR'] },
     { id: 'INVENTORY', label: 'Inventario / Kárdex', icon: Archive, roles: ['ADMINISTRADOR'] },
+    { id: 'BRANCHES', label: 'Sucursales', icon: Store, roles: ['ADMINISTRADOR'] },
+    { id: 'TRANSFERS', label: 'Transferencias', icon: Truck, roles: ['ADMINISTRADOR'] },
     { id: 'USERS', label: 'Personal / Roles', icon: UserCheck, roles: ['ADMINISTRADOR'] },
     { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR'] },
     { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] },
@@ -560,6 +575,10 @@ export default function App() {
         return <Suppliers />;
       case 'INVENTORY':
         return <Inventory />;
+      case 'BRANCHES':
+        return <Branches />;
+      case 'TRANSFERS':
+        return <Transfers />;
       case 'USERS':
         return <UsersPage />;
       case 'REPORTS':
@@ -831,6 +850,8 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            {userRole === 'ADMINISTRADOR' && ['DASHBOARD', 'REPORTS', 'SALES_HISTORY', 'CASHIER_CLOSES', 'FINANCE'].includes(activeTab) && <ReportBranchFilter />}
+            {userRole === 'ADMINISTRADOR' && <BranchSwitcher />}
             <div className="text-right">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200 block leading-tight">{user.fullName}</span>
               <span className="text-[9px] bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded font-bold font-mono uppercase">
@@ -845,14 +866,14 @@ export default function App() {
           <PlanBanner usage={planUsage} onViewPlans={openPlans} />
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={`${activeTab}:${activeBranchId || ''}:${reportBranchId || ''}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12, ease: 'easeOut' }}
               className="max-w-7xl mx-auto h-full"
             >
-              <ErrorBoundary key={activeTab}>
+              <ErrorBoundary key={`${activeTab}:${activeBranchId || ''}:${reportBranchId || ''}`}>
                 <Suspense fallback={<PageFallback />}>{renderTabContent()}</Suspense>
               </ErrorBoundary>
             </motion.div>

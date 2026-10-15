@@ -41,8 +41,7 @@ export async function getCompanyPlanState(companyId = getTenantId(), now = new D
 const counters = {
   terminals: () => prisma.terminal.count({ where: { active: true } }),
   users: () => prisma.user.count({ where: { active: true } }),
-  // Todavía no existe el módulo de sucursales: cada empresa tiene una
-  branches: async () => 1,
+  branches: () => prisma.branch.count({ where: { active: true } }),
   products: () => prisma.product.count({ where: { active: true } }),
   // Ventas del mes sin contar notas de crédito (llevan `relatedSaleId`)
   salesPerMonth: () => prisma.sale.count({ where: { createdAt: { gte: monthStartDr() }, relatedSaleId: null } }),

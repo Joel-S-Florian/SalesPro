@@ -1,4 +1,5 @@
 import { useAuthStore } from '../stores/authStore';
+import { effectiveBranchId, useBranchStore } from '../stores/branchStore';
 
 const API_BASE = '/api';
 
@@ -10,6 +11,9 @@ function buildHeaders(extra = {}) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  // Sucursal de trabajo (inventario, lotes): el servidor la valida y la ignora si el usuario tiene una asignada
+  const branchId = effectiveBranchId();
+  if (branchId) headers['X-Branch-Id'] = branchId;
   return headers;
 }
 
@@ -123,6 +127,13 @@ async function request(path, options = {}, { isRetry = false } = {}) {
     } catch {
       // Si falla doRefresh, deslogueará automáticamente
     }
+  }
+
+  // Filtro de sucursal de las pantallas de reportes: solo lecturas de reportes, ventas, caja y finanzas
+  const reportBranchId = useBranchStore.getState().reportBranchId;
+  const isReportRead = !options.method || options.method === 'GET';
+  if (reportBranchId && isReportRead && /^\/(reports|sales|cashier|finance)(\/|\?|$)/.test(path) && !/[?&]branchId=/.test(path)) {
+    path += `${path.includes('?') ? '&' : '?'}branchId=${encodeURIComponent(reportBranchId)}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -285,6 +296,20 @@ export const api = {
     saveCardConfig: payload => request('/payments/card/config', { method: 'PUT', body: JSON.stringify(payload) }),
     chargeCard: payload => request('/payments/card/charge', { method: 'POST', body: JSON.stringify(payload) }),
     voidCard: id => request(`/payments/card/${id}/void`, { method: 'POST' }),
+  },
+
+  branches: {
+    list: ({ all } = {}) => request(`/branches${all ? '?all=1' : ''}`),
+    create: payload => request('/branches', { method: 'POST', body: JSON.stringify(payload) }),
+    update: (id, payload) => request(`/branches/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  },
+
+  transfers: {
+    list: (params = {}) => request(`/transfers?${toQuery(params)}`),
+    get: id => request(`/transfers/${id}`),
+    create: payload => request('/transfers', { method: 'POST', body: JSON.stringify(payload) }),
+    receive: id => request(`/transfers/${id}/receive`, { method: 'POST' }),
+    void: id => request(`/transfers/${id}/void`, { method: 'POST' }),
   },
 
   terminals: {

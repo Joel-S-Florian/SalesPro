@@ -11,6 +11,14 @@ export function runInTenant(companyId, fn) {
   return tenantStore.run({ companyId }, fn);
 }
 
+/**
+ * Sucursal por la que se filtran las consultas de lectura de ventas, movimientos y turnos de la petición en curso
+ * (reportes por sucursal). La fija `authenticate` desde `?branchId=` en las rutas de reportes, ventas, caja y finanzas.
+ */
+export function getReportBranchId() {
+  return tenantStore.getStore()?.reportBranchId ?? null;
+}
+
 /** companyId del contexto actual, o null si no hay contexto. */
 export function getTenantIdOrNull() {
   return tenantStore.getStore()?.companyId ?? null;
