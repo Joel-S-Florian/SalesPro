@@ -23,9 +23,13 @@ const SLACK_MS = 10 * 60 * 1000;
  * Crea un respaldo automático pendiente por cada empresa cuyo plan efectivo lo incluye y que ya lo necesita.
  * Siempre con `companyId` explícito (aquí no hay contexto de empresa). Devuelve los ids de las empresas programadas.
  */
-export async function scheduleAutoBackups(now = new Date()) {
+export async function scheduleAutoBackups(now = new Date(), { companyIds } = {}) {
   const intervalMs = BACKUP_FREQUENCY_DAYS[backupFrequency()] * 24 * 3600 * 1000 - SLACK_MS;
-  const companies = await basePrisma.company.findMany({ where: { active: true }, select: { id: true, plan: true, trialEndsAt: true, paidUntil: true } });
+  // `companyIds` limita la revisión a esas empresas (lo usan las pruebas para no tocar las demás); en producción no se pasa
+  const companies = await basePrisma.company.findMany({
+    where: { active: true, ...(companyIds ? { id: { in: companyIds } } : {}) },
+    select: { id: true, plan: true, trialEndsAt: true, paidUntil: true },
+  });
   const scheduled = [];
   for (const company of companies) {
     const { effectivePlan } = getEffectivePlan(company, now);

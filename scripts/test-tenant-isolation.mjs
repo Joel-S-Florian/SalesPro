@@ -209,6 +209,78 @@ async function extendedCoverage(A, B, dataA, dataB) {
   await db.supplier.deleteMany({ where: { id: aSupplier.id } });
 }
 
+/**
+ * Etiquetas, pagos de suscripción y respaldos automáticos: cada empresa solo ve y toca lo suyo.
+ * Los respaldos automáticos se programan solo para A y B (nunca para otras empresas de la base) y se procesan en este proceso.
+ */
+async function newModulesCoverage(A, B, st, dataA, dataB) {
+  console.log('\nCobertura de etiquetas, pagos de suscripción y respaldos automáticos');
+  const apiSrc = new URL('../apps/api/src/', import.meta.url);
+  const { scheduleAutoBackups } = await import(new URL('modules/exports/exports.auto.js', apiSrc).href);
+  const { kick } = await import(new URL('modules/exports/exports.service.js', apiSrc).href);
+
+  // --- Etiquetas: la elección se recuerda por empresa ---
+  const labelsA = { presetId: 'CUSTOM', layout: { pageW: 123.4, pageH: 234.5, cols: 2, rows: 5, marginTop: 3, marginLeft: 4, gapX: 1, gapY: 1 }, showName: false, showPrice: true, split: 'chunk', maxPerFile: 77, defaultCopies: 3 };
+  const putA = await call('PUT', '/config', A.token, { labels: labelsA });
+  check('A guarda su elección de etiquetas (papel, medidas y opciones)', putA.status === 200 && putA.data?.labels?.presetId === 'CUSTOM', JSON.stringify(putA.data?.labels));
+  const cfgA = (await call('GET', '/config', A.token)).data;
+  check('A recupera exactamente lo que guardó', cfgA?.labels?.layout?.pageW === 123.4 && cfgA?.labels?.maxPerFile === 77 && cfgA?.labels?.defaultCopies === 3);
+  const cfgBText = JSON.stringify((await call('GET', '/config', B.token)).data);
+  const cfgB = JSON.parse(cfgBText);
+  check('B sigue con el rollo 50 × 25 por defecto y no ve las medidas de A', cfgB?.labels?.presetId === 'ROLL_50x25' && cfgB?.labels?.layout === null && !cfgBText.includes('123.4'));
+  const bad = await call('PUT', '/config', A.token, { labels: { ...labelsA, layout: { ...labelsA.layout, cols: 0 } } });
+  check('una medida imposible se rechaza y no pisa lo guardado', bad.status === 422 && (await call('GET', '/config', A.token)).data?.labels?.layout?.cols === 2, String(bad.status));
+
+  // --- Pagos de suscripción ---
+  const ref = `ZZ-SECRETO-A-${stamp}`;
+  const pay = await call('POST', `/platform/companies/${A.id}/payments`, st, { plan: 'BUSINESS', amount: 2500, method: 'TRANSFER', reference: ref, months: 1, note: `nota-secreta-A-${stamp}` });
+  check('el super-admin registra un pago de A', pay.status === 201, JSON.stringify(pay.data));
+  const subB = JSON.stringify((await call('GET', '/company/subscription', B.token)).data);
+  check('B no ve ningún pago de A en su historial', !subB.includes(ref) && !subB.includes(`nota-secreta-A-${stamp}`) && (JSON.parse(subB).payments || []).length === 0, subB.slice(0, 150));
+  check('B no puede abrir el recibo de A', (await call('GET', `/company/payments/${pay.data?.id}/receipt`, B.token)).status === 404);
+  check('A ve su pago y su recibo', JSON.stringify((await call('GET', '/company/subscription', A.token)).data).includes(ref) && (await call('GET', `/company/payments/${pay.data?.id}/receipt`, A.token)).status === 200);
+  const usageA = (await call('GET', '/company/plan-usage', A.token)).data;
+  const usageBpay = (await call('GET', '/company/plan-usage', B.token)).data;
+  check('el pago de A mueve solo la fecha pagada de A', usageA?.status === 'PAID' && usageA?.paidUntil && !usageBpay?.paidUntil);
+  check('un administrador de empresa no puede registrar ni anular pagos', (await call('POST', `/platform/companies/${B.id}/payments`, B.token, { plan: 'BUSINESS', amount: 1, method: 'CASH' })).status === 403 && (await call('POST', `/platform/companies/${A.id}/payments/${pay.data?.id}/void`, B.token, { reason: 'intento' })).status === 403);
+  const platB = JSON.stringify((await call('GET', `/platform/companies/${B.id}/payments`, st)).data);
+  check('la plataforma, al pedir los pagos de B, no trae los de A', !platB.includes(ref));
+  check('un recibo de A pedido con la empresa B responde 404', (await call('GET', `/platform/companies/${B.id}/payments/${pay.data?.id}/receipt`, st)).status === 404);
+  check('anular con la empresa equivocada responde 404 y no toca el pago', (await call('POST', `/platform/companies/${B.id}/payments/${pay.data?.id}/void`, st, { reason: 'empresa equivocada' })).status === 404 && (await db.subscriptionPayment.findUnique({ where: { id: pay.data?.id } })).status === 'PAID');
+
+  // --- Respaldos automáticos ---
+  const scheduled = await scheduleAutoBackups(new Date(), { companyIds: [A.id, B.id] });
+  check('el planificador programa un respaldo automático para cada empresa Business', scheduled.length === 2, JSON.stringify(scheduled));
+  await kick();
+  const autoA = (list(await call('GET', '/exports', A.token))).find(j => j.auto);
+  const autoB = (list(await call('GET', '/exports', B.token))).find(j => j.auto);
+  check('cada empresa ve su propio respaldo automático, cifrado y terminado', autoA?.status === 'DONE' && autoA?.encrypted === true && autoB?.status === 'DONE' && autoA.id !== autoB.id, JSON.stringify([autoA, autoB]));
+  check('B no ve el respaldo automático de A en su lista', !JSON.stringify((await call('GET', '/exports', B.token)).data).includes(autoA?.id));
+  check('B no puede consultar, descargar ni borrar el respaldo automático de A', (await call('GET', `/exports/${autoA?.id}`, B.token)).status === 404 && (await call('POST', `/exports/${autoA?.id}/link`, B.token)).status === 404 && (await call('DELETE', `/exports/${autoA?.id}`, B.token)).status === 404);
+  const dl = async (company, job) => {
+    const link = await call('POST', `/exports/${job.id}/link`, company.token);
+    const res = await fetch(`${API.replace(/\/api$/, '')}${link.data?.url}`);
+    return { status: res.status, buf: Buffer.from(await res.arrayBuffer()) };
+  };
+  const fileA = await dl(A, autoA);
+  const zipOfA = await JSZip.loadAsync(fileA.buf);
+  const salesOfA = await zipOfA.files['ventas.csv'].async('string');
+  const usersOfA = await zipOfA.files['usuarios.csv'].async('string');
+  check('el respaldo automático de A se descarga descifrado (ZIP válido) con la venta de A y nada de B', fileA.status === 200 && salesOfA.includes(dataA.sale.id) && !salesOfA.includes(dataB.sale.id) && !JSON.stringify(Object.keys(zipOfA.files)).includes('certificado'));
+  check('el respaldo no trae contraseñas ni a los usuarios de B', !usersOfA.includes('passwordHash') && !usersOfA.includes(B.admin.username.toLowerCase()));
+  const raw = fs.readFileSync((await db.exportJob.findUnique({ where: { id: autoA.id } })).filePath);
+  check('el archivo en disco está cifrado (no es un ZIP legible)', raw.subarray(0, 4).toString() === 'FXB1' && !raw.includes('Producto A') && !raw.includes(dataA.sale.id));
+  const fileB = await dl(B, autoB);
+  const salesOfB = await (await JSZip.loadAsync(fileB.buf)).files['ventas.csv'].async('string');
+  check('el respaldo automático de B trae su venta y nada de A', salesOfB.includes(dataB.sale.id) && !salesOfB.includes(dataA.sale.id));
+  const linkOfA = await call('POST', `/exports/${autoA.id}/link`, A.token);
+  check('el enlace de descarga del respaldo de A no sirve para el de B', (await fetch(`${API.replace(/\/api$/, '')}/api/exports/${autoB.id}/file?t=${linkOfA.data?.url.split('t=')[1]}`)).status === 401);
+
+  // Limpieza de lo sembrado aquí (los respaldos y sus archivos)
+  for (const job of await db.exportJob.findMany({ where: { companyId: { in: [A.id, B.id] } } })) if (job.filePath) fs.rmSync(job.filePath, { force: true });
+  await db.exportJob.deleteMany({ where: { companyId: { in: [A.id, B.id] } } });
+}
+
 async function cleanup() {
   const prisma = new PrismaClient();
   try {
@@ -224,6 +296,7 @@ async function cleanup() {
       await prisma.terminal.deleteMany({ where });
       await prisma.inventoryImport.deleteMany({ where });
       await prisma.exportJob.deleteMany({ where });
+      await prisma.subscriptionPayment.deleteMany({ where });
       await prisma.ecfInbox.deleteMany({ where });
       await prisma.productBatch.deleteMany({ where });
       await prisma.product.deleteMany({ where });
@@ -286,6 +359,7 @@ async function main() {
   check('El producto de A sigue intacto', stillA.data?.name === 'Producto A' && stillA.data?.stock === 48);
 
   await extendedCoverage(A, B, dataA, dataB);
+  await newModulesCoverage(A, B, st, dataA, dataB);
 
   console.log('\nConfiguración independiente');
   await call('PUT', '/config', A.token, { taxRate: 0.05 });
