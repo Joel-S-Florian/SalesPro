@@ -1,4 +1,5 @@
 import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
+import { TERMS_VERSION } from '@factos/shared/legal.js';
 import { basePrisma } from '../../config/db.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { hashPassword } from '../../shared/utils/crypto.js';
@@ -15,7 +16,12 @@ const SELF_SERVICE_PLANS = PLAN_IDS.filter(id => PLANS[id].selfService);
  * ITBIS, métodos de pago, formato de comprobante y primera caja) y devuelve la sesión ya iniciada.
  * El correo del administrador es su usuario de acceso.
  */
-export async function signup({ plan, account, company, settings }) {
+export async function signup({ plan, account, company, settings, termsVersion }) {
+  // La versión aceptada debe ser la vigente: si los términos cambiaron mientras la persona llenaba el formulario, vuelve a aceptarlos
+  if (termsVersion !== TERMS_VERSION) {
+    throw AppError.badRequest('Los términos de servicio cambiaron. Recarga la página y vuelve a aceptarlos.');
+  }
+
   if (!SELF_SERVICE_PLANS.includes(plan)) {
     throw AppError.badRequest('Ese plan todavía no está disponible para contratación en línea');
   }
@@ -46,6 +52,8 @@ export async function signup({ plan, account, company, settings }) {
         phone: company.phone || null,
         address: company.address || null,
         plan,
+        termsAcceptedAt: new Date(),
+        termsVersion: TERMS_VERSION,
       },
     });
 

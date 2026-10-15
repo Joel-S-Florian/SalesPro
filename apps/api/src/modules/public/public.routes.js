@@ -84,6 +84,9 @@ const signupSchema = {
       receiptFormat: z.enum(['A4', 'TICKET', 'BOTH']).default('A4'),
       terminalName: text(1, 60).default('Caja 1'),
     }),
+    // Aceptación de los términos (borradores pendientes de revisión legal): se guarda con su versión y fecha
+    termsAccepted: z.boolean().refine(value => value === true, 'Debes aceptar los términos de servicio y la política de privacidad'),
+    termsVersion: z.string().trim().min(1).max(40),
     website: z.string().max(200).optional(),
   }).superRefine((body, ctx) => {
     // Quien se registra queda como ADMINISTRADOR: 12 caracteres mínimo y sin su correo, su empresa ni «factos»

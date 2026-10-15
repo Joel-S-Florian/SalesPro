@@ -8,6 +8,10 @@ import { Field, inputClass } from '../ui/form';
 import SmartSelect from '../ui/SmartSelect';
 import Logo from '../ui/Logo';
 import { PLANS as SHARED_PLANS, PLAN_IDS, planFeatureLines } from '@factos/shared/plans.js';
+import { LEGAL_PAGES, TERMS_VERSION } from '@factos/shared/legal.js';
+
+// La página de promoción (con los documentos legales) vive en otra dirección que el sistema
+const LANDING_URL = (import.meta.env.VITE_LANDING_URL || 'http://localhost:5190').replace(/\/$/, '');
 
 const STEPS = ['Plan', 'Tu cuenta', 'Tu negocio', 'Configuración', 'Confirmar'];
 
@@ -44,6 +48,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const [plan, setPlan] = useState('FREE');
   const [account, setAccount] = useState({ fullName: '', email: '', password: '' });
@@ -64,6 +69,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
     if (step === 1) {
       if (!rules.every(([, ok]) => ok)) return 'La contraseña no cumple los requisitos.';
     }
+    if (step === STEPS.length - 1 && !acceptedTerms) return 'Debes aceptar los términos de servicio y la política de privacidad para crear tu cuenta.';
     if (step === 2 && company.rnc && !validateDocument(DocumentType.RNC, company.rnc)) {
       return 'El RNC no es válido. Déjalo vacío si aún no lo tienes.';
     }
@@ -91,6 +97,8 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
         plan,
         account,
         company: { ...company, rnc: company.rnc || '' },
+        termsAccepted: true,
+        termsVersion: TERMS_VERSION,
         settings: {
           taxRate: Number(settings.taxPercent) / 100,
           paymentMethods: methods,
@@ -330,6 +338,19 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
                       </div>
                     ))}
                   </dl>
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 p-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                    <input id="su-terms" type="checkbox" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 h-4 w-4" />
+                    <span>
+                      Acepto los{' '}
+                      <a href={`${LANDING_URL}${LEGAL_PAGES[0].path}`} target="_blank" rel="noreferrer" className="font-medium text-indigo-600 underline underline-offset-2">términos de servicio</a>
+                      {' '}y la{' '}
+                      <a href={`${LANDING_URL}${LEGAL_PAGES[1].path}`} target="_blank" rel="noreferrer" className="font-medium text-indigo-600 underline underline-offset-2">política de privacidad</a>
+                      . También puedes leer la{' '}
+                      <a href={`${LANDING_URL}${LEGAL_PAGES[2].path}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">política de seguridad</a>
+                      {' '}y el{' '}
+                      <a href={`${LANDING_URL}${LEGAL_PAGES[3].path}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">tratamiento de datos personales</a>.
+                    </span>
+                  </label>
                 </>
               )}
 
@@ -370,7 +391,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
           </div>
         </form>
 
-        <p className="text-center text-xs text-slate-500">Al crear tu cuenta aceptas usar FACTOS de forma legítima para tu negocio.</p>
+        <p className="text-center text-xs text-slate-500">Los documentos legales son borradores pendientes de revisión.</p>
       </div>
     </div>
   );

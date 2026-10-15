@@ -3,7 +3,7 @@ import { Footer, Nav } from './components/Chrome';
 import Hero from './components/Hero';
 import Tour from './components/Tour';
 import Contact from './components/Contact';
-import { Audience, Faq, Features, Fiscal, Pricing, Steps } from './components/Sections';
+import { Audience, CertificateGuide, Faq, Features, Fiscal, Pricing, Steps } from './components/Sections';
 
 export default function App() {
   return (
@@ -19,6 +19,7 @@ export default function App() {
         <Features />
         <Steps />
         <Fiscal />
+        <CertificateGuide />
         <Pricing />
         <Faq />
         <Contact />

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, BadgeCheck, CircleAlert, Copy, Eye, EyeOff, FileKey2, KeyRound, Loader2, PlugZap, Plus, Power, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { CERTIFICATE_PROVIDERS } from '@factos/shared/legal.js';
 import { api } from '../../services/api';
 import Modal from '../Modal';
 import { Skeleton } from '../Skeleton';
@@ -111,7 +112,7 @@ function FiscalData({ config, onSaved }) {
 /* ------------------------------- 2. Certificado -------------------------------- */
 
 const fileSize = bytes => (bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`);
-const CERT_PROVIDERS = ['Avansi', 'DigiFirma', 'Cámara de Comercio'];
+const CERT_PROVIDERS = CERTIFICATE_PROVIDERS;
 
 /** Zona para soltar o elegir el .p12/.pfx: muestra el archivo elegido y deja quitarlo. */
 function CertificateDropzone({ file, onFile, disabled }) {
@@ -321,9 +322,26 @@ function Certificate({ config, onSaved }) {
       ) : (
         <form onSubmit={upload} className="space-y-5">
           <p className="text-sm text-slate-600 dark:text-slate-300">
-            El certificado digital identifica a su empresa ante la DGII y firma cada comprobante. Se obtiene con una entidad certificadora autorizada
-            ({CERT_PROVIDERS.join(', ')}…) y llega como un archivo <strong>.p12</strong> o <strong>.pfx</strong> con su contraseña.
+            El certificado digital identifica a su empresa ante la DGII y firma cada comprobante. Se obtiene con una entidad certificadora y llega como un archivo{' '}
+            <strong>.p12</strong> o <strong>.pfx</strong> con su contraseña.
           </p>
+          <details className="rounded-lg border border-slate-200 p-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <summary className="cursor-pointer font-semibold">Dónde comprar tu certificado digital para e-CF</summary>
+            <ul className="mt-2 space-y-1">
+              {CERT_PROVIDERS.map(provider => (
+                <li key={provider.host}>
+                  · {provider.name}:{' '}
+                  <a href={provider.url} target="_blank" rel="noreferrer noopener" className="text-indigo-600 underline underline-offset-2">{provider.host}</a>
+                </li>
+              ))}
+            </ul>
+            <ul className="mt-2 list-disc space-y-1 pl-4">
+              <li>El trámite exige verificación de identidad.</li>
+              <li>El certificado debe poderse exportar como archivo <strong>.pfx</strong> o <strong>.p12</strong>; no sirve si solo viene en una llave USB.</li>
+              <li>El certificado gratuito de la DGII solo sirve en su Facturador Gratuito y <strong>no funciona con FACTOS</strong>.</li>
+            </ul>
+            <p className="mt-2 text-slate-400">Consulta costos y requisitos directamente con cada entidad.</p>
+          </details>
 
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-1.5">

@@ -1,3 +1,4 @@
+import { LEGAL_PAGES } from '@factos/shared/legal.js';
 import React, { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { APP_URL, SIGNUP_URL } from '../config';
@@ -93,6 +94,14 @@ export function Footer() {
           <Logo dark />
           <p className="text-sm leading-relaxed">Punto de venta, inventario y cajas en la nube para negocios de República Dominicana.</p>
         </div>
+        <nav aria-label="Legal" className="space-y-2 text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wider text-white/45">Legal</p>
+          {LEGAL_PAGES.map(page => (
+            <a key={page.id} href={page.path} className="block hover:text-white">
+              {page.title}
+            </a>
+          ))}
+        </nav>
         <nav aria-label="Pie de página" className="grid grid-cols-2 gap-x-12 gap-y-2 text-sm">
           {LINKS.map(([href, label]) => (
             <a key={href} href={href} className="hover:text-white">

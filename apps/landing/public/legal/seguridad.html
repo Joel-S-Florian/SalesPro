@@ -1,0 +1,71 @@
+<!-- BORRADOR (versión 2026-10-borrador-1): este documento requiere revisión de un abogado antes de publicarse. No es asesoría legal. Los campos marcados con [CORCHETES] están por completar. -->
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>Política de seguridad: FACTOS</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="stylesheet" href="/legal/legal.css" />
+</head>
+<body>
+<header class="top"><div class="wrap"><a class="logo" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="14" fill="#4f46e5"/><path d="M20 18h26v7H29v6h14v7H29v10h-9z" fill="#fff"/></svg> FACTOS</a><a href="/">Volver al inicio</a></div></header>
+<main class="wrap">
+<div class="draft" role="note"><strong>Borrador pendiente de revisión legal</strong>Este texto describe lo que el sistema hace hoy, pero aún no lo ha revisado un abogado y tiene datos por completar (los verás resaltados entre corchetes). No lo tomes como asesoría legal.</div>
+<nav class="legal" aria-label="Documentos legales"><a href="/legal/terminos.html">Términos de servicio</a><a href="/legal/privacidad.html">Política de privacidad</a><a href="/legal/seguridad.html" aria-current=page>Política de seguridad</a><a href="/legal/datos-personales.html">Tratamiento de datos personales</a></nav>
+<h1>Política de seguridad</h1>
+<p class="meta">Versión 2026-10-borrador-1 · Última actualización: 16 de octubre de 2026</p>
+<p>Cómo protegemos hoy tu información, y con la misma claridad, lo que todavía no tenemos.</p>
+
+<p>Esta política describe medidas que <strong>existen hoy</strong> en FACTOS y sus límites. No prometemos certificaciones ni garantías que no tenemos.</p>
+
+<h2>Lo que hacemos hoy</h2>
+<h3>Separación entre empresas</h3>
+<ul>
+  <li>Todas las empresas comparten el mismo sistema, pero <strong>cada dato lleva el identificador de su empresa</strong> y cada consulta se limita a ella automáticamente. Si por error faltara ese contexto, el sistema falla en lugar de mostrar datos de otra empresa.</li>
+  <li>Tenemos pruebas automáticas con dos empresas que verifican que una no puede ver ni modificar los datos de la otra (informes, inventario, exportaciones, comprobantes recibidos y más), y una revisión automática que alerta si se agrega código que salta ese aislamiento.</li>
+</ul>
+<h3>Cuentas y contraseñas</h3>
+<ul>
+  <li>Las contraseñas se guardan con <em>hash</em> (bcrypt); nunca en texto legible.</li>
+  <li>Largo mínimo de 10 caracteres (12 para administradores), con una lista de contraseñas comunes rechazadas y reglas que impiden usar tu usuario, tu correo o el nombre de tu empresa.</li>
+  <li>Las claves temporales las genera el sistema, se muestran una sola vez, caducan a las 48 horas y obligan a cambiarlas.</li>
+  <li>Tras varios intentos fallidos se aplica una <strong>espera creciente</strong> (no un bloqueo permanente), sin revelar si el usuario existe.</li>
+  <li>Cierre automático de la sesión por inactividad (configurable por empresa).</li>
+  <li>Roles de acceso: administrador y vendedor.</li>
+</ul>
+<h3>Certificado digital de la facturación electrónica</h3>
+<ul>
+  <li>El certificado (.p12/.pfx) y su contraseña se guardan <strong>cifrados</strong> (AES-256-GCM) con una llave que vive en el servidor, y no se muestran de vuelta.</li>
+  <li>Cada vez que el sistema usa el certificado queda un registro (quién, para qué y de qué documento) que el administrador puede consultar.</li>
+</ul>
+<h3>Auditoría y exportación</h3>
+<ul>
+  <li>Se registran las acciones importantes, los bloqueos de inicio de sesión y las descargas de exportaciones. <strong>Las claves y los secretos nunca se guardan en la auditoría.</strong></li>
+  <li>Los respaldos y exportaciones por empresa excluyen contraseñas, certificados y claves de pasarelas de pago, y los archivos se borran a las 48 horas.</li>
+</ul>
+
+<h2>Lo que todavía no tenemos</h2>
+<ul>
+  <li>Certificaciones de seguridad (por ejemplo ISO 27001 o SOC 2).</li>
+  <li>Autenticación de dos factores.</li>
+  <li>Respaldo automático de los datos a disposición de los clientes ni un acuerdo de nivel de servicio (disponibilidad garantizada).</li>
+  <li>Una segunda barrera de aislamiento en la base de datos (hoy el aislamiento lo aplica el sistema).</li>
+</ul>
+
+<h2>Tu parte</h2>
+<ul>
+  <li>No compartas tu clave y cierra sesión en equipos compartidos.</li>
+  <li>Da de baja los usuarios que ya no trabajan contigo.</li>
+  <li>Si usas facturación electrónica, protege el archivo del certificado y su contraseña.</li>
+  <li>Exporta tus datos periódicamente.</li>
+</ul>
+
+<h2>Cómo reportar un problema de seguridad</h2>
+<p>Escríbenos a <span class="todo">[CORREO DE SEGURIDAD]</span> con los detalles. Revisaremos cada reporte. <span class="todo">[Plazo de respuesta y política de divulgación responsable: definir.]</span></p>
+
+</main>
+<footer><div class="wrap">© FACTOS. Documento en borrador, versión 2026-10-borrador-1.</div></footer>
+</body>
+</html>

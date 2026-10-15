@@ -4,6 +4,7 @@
 // Uso: node --env-file=apps/api/.env scripts/test-security.mjs
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { TERMS_VERSION } from '../packages/shared/legal.js';
 
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
@@ -117,6 +118,8 @@ try {
     account: { fullName: 'Persona Prueba', email: `zz.sec.${suffix}@example.com`, password },
     company: { name: 'Ferretería La Esperanza', businessType: 'Otro' },
     settings: { taxRate: 0.18, paymentMethods: ['EFECTIVO'], receiptFormat: 'A4', terminalName: 'Caja 1' },
+    termsAccepted: true,
+    termsVersion: TERMS_VERSION,
   });
   for (const [label, password, expect] of [
     ['11 caracteres (el administrador necesita 12)', 'once cafes!', /12 caracteres/],
@@ -127,6 +130,18 @@ try {
     const res = await call('POST', '/public/signup', { body: signup(password) });
     check(`registro: se rechaza ${label}`, res.status === 422 && expect.test(res.text), `${res.status} ${JSON.stringify(res.json?.details?.[0]?.message || res.json?.error)}`);
   }
+
+  // --- Registro: aceptación de los términos ---
+  const noTerms = await call('POST', '/public/signup', { body: { ...signup('camino por la montaña 77'), termsAccepted: false } });
+  check('registro: sin aceptar los términos se rechaza', noTerms.status === 422 && /términos/.test(noTerms.text), String(noTerms.status));
+  const oldTerms = await call('POST', '/public/signup', { body: { ...signup('camino por la montaña 77'), termsVersion: 'version-vieja' } });
+  check('registro: una versión de términos que ya no es la vigente se rechaza', oldTerms.status === 400 && /cambiaron/.test(oldTerms.text), String(oldTerms.status));
+  const good = await call('POST', '/public/signup', { body: signup('camino por la montaña 77') });
+  check('registro: con términos aceptados y una buena contraseña se crea la cuenta', good.status === 201, String(good.status));
+  const signedUser = await basePrisma.user.findUnique({ where: { username: `zz.sec.${suffix}@example.com` } });
+  if (signedUser) created.companies.push(signedUser.companyId);
+  const signedCompany = signedUser && (await basePrisma.company.findUnique({ where: { id: signedUser.companyId } }));
+  check('registro: se guarda la aceptación con su fecha y versión', signedCompany?.termsVersion === TERMS_VERSION && Math.abs(Date.now() - signedCompany.termsAcceptedAt) < 60000, `${signedCompany?.termsVersion}`);
 
   // --- Plataforma: clave temporal del primer administrador y restablecimiento ---
   const made = await platform.createCompany({ name: 'ZZ Sec Plataforma', admin: { fullName: 'Primer Admin', username: `zz_sec_pa_${suffix}` } });

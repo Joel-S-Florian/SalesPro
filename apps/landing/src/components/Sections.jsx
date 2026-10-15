@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { SIGNUP_URL } from '../config';
 import { PLANS as SHARED_PLANS, PLAN_IDS, planFeatureLines } from '@factos/shared/plans.js';
+import { CERTIFICATE_PROVIDERS } from '@factos/shared/legal.js';
 import { BarChart3, Building2, Calculator, Check, ChevronDown, FileUp, Printer, ScanLine, Truck } from 'lucide-react';
 
 const reveal = {
@@ -134,6 +135,44 @@ export function Fiscal() {
               serán las primeras en probarla cuando esté lista.
             </p>
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Dónde comprar tu certificado digital ---------- */
+export function CertificateGuide() {
+  return (
+    <section id="certificado" className="bg-paper py-16 sm:py-20">
+      <div className="container-x grid gap-10 lg:grid-cols-[1fr_1fr] lg:items-start">
+        <Heading eyebrow="Facturación electrónica" title="Dónde comprar tu certificado digital para e-CF">
+          Para emitir comprobantes electrónicos tu empresa necesita un certificado digital propio. FACTOS lo guarda cifrado y firma con él; lo obtienes tú con una entidad certificadora.
+        </Heading>
+        <div className="space-y-4">
+          <ul className="space-y-3">
+            {CERTIFICATE_PROVIDERS.map(provider => (
+              <li key={provider.host} className="rounded-2xl border border-ink/10 bg-white p-4">
+                <p className="font-semibold">{provider.name}</p>
+                <a href={provider.url} target="_blank" rel="noreferrer noopener" className="text-sm text-brand underline underline-offset-2">
+                  {provider.host}
+                </a>
+              </li>
+            ))}
+          </ul>
+          <ul className="space-y-2 text-[15px] text-ink/75">
+            {[
+              'El trámite exige verificación de identidad.',
+              'El certificado debe poderse exportar como archivo .pfx o .p12; no sirve si solo viene en una llave USB.',
+              'El certificado gratuito de la DGII solo sirve en su Facturador Gratuito y no funciona con FACTOS.',
+            ].map(line => (
+              <li key={line} className="flex items-start gap-2.5">
+                <Check className="mt-1 h-4 w-4 shrink-0 text-brand" strokeWidth={3} />
+                {line}
+              </li>
+            ))}
+          </ul>
+          <p className="text-sm text-ink/55">Consulta los costos y requisitos directamente con cada entidad. La facturación electrónica con la DGII en producción todavía está en desarrollo en FACTOS.</p>
         </div>
       </div>
     </section>

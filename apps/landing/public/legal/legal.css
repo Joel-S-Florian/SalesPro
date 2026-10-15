@@ -1,0 +1,24 @@
+:root { --ink: #0b1220; --brand: #4f46e5; --muted: #526070; --line: #e3e8ef; --paper: #f7f8fb; --warn: #92400e; --warn-bg: #fffbeb; --warn-line: #fcd34d; }
+@media (prefers-color-scheme: dark) { :root { --ink: #e8edf5; --brand: #8b93ff; --muted: #a3aebf; --line: #243044; --paper: #0b1220; --warn: #fcd34d; --warn-bg: #2a2110; --warn-line: #7c5a10; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.65 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; }
+a { color: var(--brand); }
+header.top { border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper) 92%, transparent); }
+header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 14px; }
+.wrap { max-width: 760px; margin: 0 auto; padding-inline: 20px; }
+.logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .12em; color: var(--ink); text-decoration: none; }
+.logo svg { width: 28px; height: 28px; }
+main { padding-block: 32px 64px; }
+h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 4px; }
+h2 { font-size: 1.2rem; margin: 2rem 0 .4rem; }
+p, li { color: var(--ink); }
+.meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.2rem; }
+.draft { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn); border-radius: 12px; padding: 14px 16px; margin: 0 0 1.5rem; font-size: .95rem; }
+.draft strong { display: block; margin-bottom: 2px; }
+.todo { background: color-mix(in srgb, var(--warn-line) 35%, transparent); border-radius: 4px; padding: 0 4px; font-weight: 600; }
+nav.legal { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: .92rem; margin: 0 0 1.6rem; }
+footer { border-top: 1px solid var(--line); color: var(--muted); font-size: .85rem; padding-block: 22px; }
+ul { padding-left: 1.2rem; }
+li { margin: .25rem 0; }
+table { width: 100%; border-collapse: collapse; font-size: .95rem; margin: .6rem 0; }
+th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px 10px 8px 0; vertical-align: top; }
