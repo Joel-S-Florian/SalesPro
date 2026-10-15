@@ -24,3 +24,6 @@ Doc/
 # Archivos generados por el sistema (exportaciones y respaldos de cada empresa)
 storage/
 **/storage/
+
+# Siembra de las pruebas de carga (la genera scripts/load-test.mjs --serve)
+scripts/load/.seed.json

@@ -6,6 +6,11 @@
 //
 //   node --env-file=apps/api/.env scripts/load-test.mjs [--companies 5] [--terminals 3] [--duration 30] [--products 200]
 //                                                       [--think-ms 200] [--hot 30] [--keep] [--port 4091]
+//                                                       [--ecf] [--serve [--serve-seconds N]] [--sim-port 4093]
+//
+//   --ecf    cada venta emite un e-CF firmado (RSA + XSD dentro de la transacción) contra el simulador local de la DGII
+//   --serve  prepara todo (base, empresas, API, simulador), escribe scripts/load/.seed.json y se queda esperando (Ctrl+C para borrar):
+//            es la base de los escenarios de k6 de scripts/load/ (ver Doc/Pruebas_de_Carga.md)
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -25,6 +30,9 @@ const THINK_MS = Number(arg('think-ms', 200));
 const HOT = Math.min(PRODUCTS, Number(arg('hot', 30))); // pocos productos «calientes»: fuerza competencia por el mismo stock
 const PORT = Number(arg('port', 4091));
 const KEEP = process.argv.includes('--keep');
+const ECF = process.argv.includes('--ecf');
+const SERVE = process.argv.includes('--serve');
+const SIM_PORT = Number(arg('sim-port', 4093));
 const DB_NAME = 'factos_load';
 const PASSWORD = 'Load-test-pass-1';
 const INITIAL_STOCK = 1_000_000;
@@ -57,6 +65,26 @@ const db = new PrismaClient({ datasources: { db: { url: loadUrl } }, log: [] });
 const bcrypt = require('bcryptjs');
 const passwordHash = await bcrypt.hash(PASSWORD, 10);
 
+// e-CF: se usan las mismas piezas que el sistema (certificado de prueba, cifrado en reposo y simulador de la DGII)
+const ecfTools = ECF
+  ? {
+      ...(await import(new URL('../apps/api/src/modules/ecf/ecf.certificate.js', import.meta.url).href)),
+      ...(await import(new URL('../apps/api/src/shared/utils/secretBox.js', import.meta.url).href)),
+    }
+  : null;
+let simServer = null;
+if (ECF) {
+  const { createDgiiSimulator } = await import(new URL('../apps/api/src/modules/ecf/sim/dgii-simulator.js', import.meta.url).href);
+  const express = require('express');
+  const sim = createDgiiSimulator({ publicUrl: `http://127.0.0.1:${SIM_PORT}` });
+  const simApp = express();
+  simApp.use(sim.app);
+  simServer = await new Promise(resolve => {
+    const s = simApp.listen(SIM_PORT, '127.0.0.1', () => resolve(s));
+  });
+  console.log(`Simulador de la DGII en el puerto ${SIM_PORT}`);
+}
+
 // --- Datos: empresas, cajas, cajeros y productos ---
 console.log(`Creando ${COMPANIES} empresas con ${TERMINALS} cajas y ${PRODUCTS} productos cada una...`);
 const world = [];
@@ -76,12 +104,22 @@ for (let c = 0; c < COMPANIES; c++) {
     const terminal = await db.terminal.create({ data: { name: `Caja ${t + 1}`, companyId: company.id, users: { connect: { id: user.id } } } });
     cashiers.push({ username: user.username, userId: user.id, terminalId: terminal.id });
   }
+  if (ECF) {
+    // Facturación electrónica en pre-certificación con un certificado de PRUEBA (el simulador de la DGII lo acepta)
+    const rnc = `13${String(1000000 + c).padStart(7, '0')}`;
+    await db.company.update({ where: { id: company.id }, data: { rnc, address: 'Calle Principal #1, Santiago' } });
+    const cert = ecfTools.generateTestPkcs12({ rnc, password: 'prueba123' });
+    await db.ecfConfig.create({
+      data: { companyId: company.id, mode: 'PRECERT', legalName: `CARGA ${c + 1} SRL`, address: 'Calle Principal #1, Santiago', certificateEnc: ecfTools.encryptSecret(cert.p12), certificatePassEnc: ecfTools.encryptSecret(cert.password), certNotAfter: new Date(Date.now() + 300 * 86400000), certRncMatch: true },
+    });
+    await db.ecfSequence.create({ data: { companyId: company.id, ecfType: 'E32', rangeFrom: 1, rangeTo: 99_000_000, current: 0, validUntil: new Date('2028-12-31T12:00:00Z') } });
+  }
   world.push({ companyId: company.id, name: company.name, adminUsername: adminUser.username, customerId: consumer.id, products, cashiers, stats: { ok: 0, qty: 0, total: 0, ids: new Set() } });
 }
 
 // --- API propio en otro puerto, contra la base de carga ---
 console.log(`Levantando el API en el puerto ${PORT}...`);
-const apiEnv = { ...process.env, PORT: String(PORT), DATABASE_URL: loadUrl, NODE_ENV: 'production', RATE_LIMIT_MAX_REQUESTS: '10000000', SALES_RATE_LIMIT_PER_MIN: '10000000', BCRYPT_ROUNDS: '10' };
+const apiEnv = { ...process.env, PORT: String(PORT), DATABASE_URL: loadUrl, NODE_ENV: 'production', RATE_LIMIT_MAX_REQUESTS: '10000000', SALES_RATE_LIMIT_PER_MIN: '10000000', BCRYPT_ROUNDS: '10', ...(ECF ? { ECF_BASE_URL_OVERRIDE: `http://127.0.0.1:${SIM_PORT}` } : {}) };
 fs.mkdirSync(path.join(REPO, 'storage', 'load-reports'), { recursive: true });
 const apiLogPath = path.join(REPO, 'storage', 'load-reports', 'api.log');
 const apiLog = fs.openSync(apiLogPath, 'w');
@@ -117,6 +155,15 @@ async function http(label, method, route, { token, body } = {}) {
   return { status, json };
 }
 
+// Segundos de CPU acumulados de un proceso (o de todos los procesos con ese nombre): sirve para saber si el cuello es el API o la base
+const cpuSeconds = target => {
+  if (process.platform !== 'win32') return null;
+  const filter = typeof target === 'number' ? `Get-Process -Id ${target}` : `Get-Process -Name ${target}`;
+  const out = spawnSync(path.join(process.env.SystemRoot || 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), ['-NoProfile', '-Command', `($(${filter} -ErrorAction SilentlyContinue | ForEach-Object { $_.TotalProcessorTime.TotalSeconds }) | Measure-Object -Sum).Sum`], { encoding: 'utf8' }).stdout;
+  const value = Number(String(out).trim().replace(',', '.'));
+  return Number.isFinite(value) ? value : null;
+};
+
 const sampler = { rss: [], conns: [] };
 const sampleApiMemory = () => {
   try {
@@ -144,7 +191,36 @@ const pct = (values, p) => {
   return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
 };
 
+class ServeStopped extends Error {}
+
 try {
+  if (SERVE) {
+    // Entorno para los escenarios de k6 (scripts/load/*.k6.js): se escribe el archivo de siembra y se espera
+    const seedFile = path.join(REPO, 'scripts', 'load', '.seed.json');
+    fs.mkdirSync(path.dirname(seedFile), { recursive: true });
+    fs.writeFileSync(
+      seedFile,
+      JSON.stringify(
+        {
+          baseUrl: BASE,
+          password: PASSWORD,
+          ecf: ECF,
+          companies: world.map(w => ({ name: w.name, adminUsername: w.adminUsername, customerId: w.customerId, products: w.products.slice(0, HOT).map(p => p.id), cashiers: w.cashiers.map(c => ({ username: c.username, terminalId: c.terminalId })) })),
+        },
+        null,
+        2
+      )
+    );
+    console.log(`\nListo para k6: ${COMPANIES} empresas × ${TERMINALS} cajas (${COMPANIES * TERMINALS} cajeros). API en ${BASE}${ECF ? ' con e-CF contra el simulador' : ''}.`);
+    console.log(`Archivo de siembra: ${seedFile}\nEjemplo:  k6 run -e SCENARIO=50 scripts/load/sales.k6.js\nCtrl+C para apagar y borrar la base.`);
+    const serveSeconds = Number(arg('serve-seconds', 0)); // 0 = hasta Ctrl+C
+    await new Promise(resolve => {
+      process.once('SIGINT', resolve);
+      if (serveSeconds > 0) setTimeout(resolve, serveSeconds * 1000);
+    });
+    throw new ServeStopped();
+  }
+
   // --- Inicios de sesión y apertura de turnos ---
   console.log(`Iniciando sesión de ${COMPANIES * (TERMINALS + 1)} usuarios y abriendo ${COMPANIES * TERMINALS} turnos...`);
   // Ola de inicios de sesión: 25 a la vez (como una mañana de apertura, no 100+ simultáneos desde una sola conexión)
@@ -171,6 +247,7 @@ try {
       // sin medición
     }
   }, 2000);
+  const cpuBefore = { api: cpuSeconds(api.pid), db: cpuSeconds('postgres') };
   const startedAt = performance.now();
 
   const rnd = n => Math.floor(Math.random() * n);
@@ -207,6 +284,10 @@ try {
   clearInterval(memTimer);
   clearInterval(connTimer);
   const elapsed = (performance.now() - startedAt) / 1000;
+  const cpuAfter = { api: cpuSeconds(api.pid), db: cpuSeconds('postgres') };
+  const cores = os.cpus().length;
+  // Si Windows no deja leer la CPU de PostgreSQL (servicio de otro usuario), da 0: se reporta como no disponible
+  const cpuPct = key => (cpuBefore[key] === null || cpuAfter[key] === null || cpuAfter[key] === 0 ? null : Math.round(((cpuAfter[key] - cpuBefore[key]) / elapsed) * 100));
 
   // --- Resultados de rendimiento ---
   const sales = lat.get('venta') || [];
@@ -221,8 +302,10 @@ try {
   const okSales = world.reduce((a, w) => a + w.stats.ok, 0);
   const rps = [...lat.values()].reduce((a, v) => a + v.length, 0) / elapsed;
   report.throughput = { salesPerSecond: +(okSales / elapsed).toFixed(2), requestsPerSecond: +rps.toFixed(1), sales: okSales, seconds: +elapsed.toFixed(1) };
+  report.cpu = { apiPercentOfOneCore: cpuPct('api'), postgresPercentOfOneCore: cpuPct('db'), cores };
   report.resources = { apiRssMbMax: Math.round(Math.max(0, ...sampler.rss)), apiRssMbFirst: Math.round(sampler.rss[0] || 0), dbConnectionsMax: Math.max(0, ...sampler.conns) };
   console.log(`\nVentas correctas: ${okSales} en ${elapsed.toFixed(1)} s → ${(okSales / elapsed).toFixed(1)} ventas/s (${rps.toFixed(0)} solicitudes/s en total)`);
+  if (report.cpu.apiPercentOfOneCore !== null) console.log(`CPU: API (Node) ${report.cpu.apiPercentOfOneCore} % de un núcleo · PostgreSQL ${report.cpu.postgresPercentOfOneCore ?? 'n/d (sin permiso para leerlo)'}${report.cpu.postgresPercentOfOneCore === null ? '' : ' %'} de un núcleo (equipo de ${cores} núcleos).`);
   console.log(`Memoria del API: ${report.resources.apiRssMbFirst} → ${report.resources.apiRssMbMax} MB · conexiones a la base (máx.): ${report.resources.dbConnectionsMax}`);
   console.log('Errores:', errors.size ? Object.fromEntries(errors) : 'ninguno');
 
@@ -256,6 +339,25 @@ try {
     if (foreign.length) leak++;
     check(`${w.name}: el listado de ventas del administrador solo trae las de su empresa`, mine.status === 200 && foreign.length === 0 && (mine.json?.pagination?.total ?? 0) === w.stats.ok, `${mine.json?.pagination?.total} vs ${w.stats.ok}`);
   }
+  if (ECF) {
+    // Los e-CF se envían a la DGII (simulador) en segundo plano: se espera a que se vacíe la cola
+    let docs = [];
+    for (let i = 0; i < 120; i++) {
+      docs = await db.ecfDocument.groupBy({ by: ['status'], _count: true });
+      if (!docs.some(d => ['PENDING', 'SENDING', 'ERROR'].includes(d.status))) break;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    const byStatus = Object.fromEntries(docs.map(d => [d.status, d._count]));
+    console.log('e-CF por estado:', byStatus);
+    report.ecf = byStatus;
+    for (const w of world) {
+      const ncfs = (await db.sale.findMany({ where: { companyId: w.companyId }, select: { eNcf: true } })).map(s => s.eNcf);
+      check(`${w.name}: todas las ventas tienen e-NCF y no se repite ninguno`, ncfs.every(Boolean) && new Set(ncfs).size === ncfs.length, `${ncfs.length} ventas`);
+      const numbers = ncfs.map(n => Number(n.slice(3))).sort((x, y) => x - y);
+      check(`${w.name}: la numeración e-NCF es continua (sin saltos ni repetidos)`, numbers.every((n, i) => n === i + 1));
+    }
+    check('ningún comprobante terminó en error ni rechazado', !byStatus.ERROR && !byStatus.REJECTED, JSON.stringify(byStatus));
+  }
   if (world.length > 1) {
     const [a, b] = world;
     const stolen = await http('lectura cruzada', 'GET', `/sales/${[...b.stats.ids][0]}`, { token: a.adminToken });
@@ -277,8 +379,12 @@ try {
   report.checksFailed = failed;
   fs.writeFileSync(file, JSON.stringify(report, null, 2));
   console.log(`\nInforme guardado en ${file}`);
+} catch (error) {
+  if (!(error instanceof ServeStopped)) throw error;
+  console.log('Servicio detenido: se apaga el API y se borra la base.');
 } finally {
   api.kill();
+  simServer?.close();
   await db.$disconnect();
   if (!KEEP) {
     await new Promise(r => setTimeout(r, 800));
