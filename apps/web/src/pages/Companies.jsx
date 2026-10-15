@@ -337,7 +337,7 @@ export default function Companies() {
         </form>
       </Modal>
 
-      <Modal isOpen={!!detail} onClose={() => { setDetail(null); setResetTarget(null); setResetMessage(''); setEditForm(null); }} title={detail?.name || ''} maxWidth="lg">
+      <Modal isOpen={!!detail} onClose={() => { setDetail(null); setResetTarget(null); setResetMessage(''); setEditForm(null); }} title={detail?.name || ''} maxWidth="2xl">
         {detail && (
           <div className="space-y-4">
             {editForm ? (

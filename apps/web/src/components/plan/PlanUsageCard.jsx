@@ -51,7 +51,7 @@ export default function PlanUsageCard() {
           {usage.downgraded && <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">Se aplican los límites del plan {usage.effectivePlanName}</span>}
         </div>
         <p className="text-xs text-slate-500">
-          Los planes de pago todavía no se cobran. Nunca se borran tus datos y puedes exportarlos en cualquier momento. Las ventas jamás se bloquean: el límite mensual es solo informativo.
+          Los precios son provisionales y el pago se registra por transferencia. Nunca se borran tus datos y puedes exportarlos en cualquier momento. Las ventas jamás se bloquean: el límite mensual es solo informativo.
         </p>
       </div>
 
