@@ -4,6 +4,8 @@ import Modal from '../Modal';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../stores/authStore';
 import { notify } from '../../utils/notify';
+import PasswordField from '../ui/PasswordField';
+import { passwordProblem } from '../../utils/passwordPolicy';
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono';
@@ -22,6 +24,8 @@ export default function ChangePasswordModal({ isOpen, forced = false, onClose, o
 
   const submit = async event => {
     event.preventDefault();
+    const problem = passwordProblem(newPassword, user);
+    if (problem) return notify.warning(`La contraseña nueva no sirve: ${problem.toLowerCase()}`);
     if (newPassword !== confirm) return notify.warning('Las contraseñas nuevas no coinciden');
     if (newPassword === oldPassword) return notify.warning('La contraseña nueva debe ser distinta de la actual');
     setBusy(true);
@@ -54,12 +58,12 @@ export default function ChangePasswordModal({ isOpen, forced = false, onClose, o
           <input id="cp-old" type="password" autoComplete="current-password" required value={oldPassword} onChange={e => setOldPassword(e.target.value)} className={inputClass} />
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="cp-new" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Contraseña nueva (mínimo 8 caracteres)</label>
-          <input id="cp-new" type="password" autoComplete="new-password" required minLength={8} value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} />
+          <label htmlFor="cp-new" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Contraseña nueva</label>
+          <PasswordField id="cp-new" value={newPassword} onChange={setNewPassword} context={user} className={inputClass} />
         </div>
         <div className="space-y-1.5">
           <label htmlFor="cp-confirm" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Repite la contraseña nueva</label>
-          <input id="cp-confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={e => setConfirm(e.target.value)} className={inputClass} />
+          <input id="cp-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={e => setConfirm(e.target.value)} className={inputClass} />
         </div>
         <div className="flex gap-3 pt-1">
           {forced ? (

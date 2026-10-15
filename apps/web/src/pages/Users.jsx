@@ -7,6 +7,8 @@ import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
+import PasswordField from '../components/ui/PasswordField';
+import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
 
 export default function Users() {
   // Search filter
@@ -23,6 +25,8 @@ export default function Users() {
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
+  const [documentId, setDocumentId] = useState('');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState('VENDEDOR');
   const [password, setPassword] = useState('');
   const [active, setActive] = useState(true);
@@ -33,6 +37,8 @@ export default function Users() {
     setFullName('');
     setUsername('');
     setEmail('');
+    setDocumentId('');
+    setPhone('');
     setRole('VENDEDOR');
     setPassword('');
     setActive(true);
@@ -44,6 +50,8 @@ export default function Users() {
     setFullName(u.fullName || '');
     setUsername(u.username || '');
     setEmail(u.email || '');
+    setDocumentId(u.documentId ? formatDocument(DocumentType.CEDULA, u.documentId) : '');
+    setPhone(u.phone || '');
     setRole(u.role || 'VENDEDOR');
     setPassword('');
     setActive(u.active !== false);
@@ -53,13 +61,26 @@ export default function Users() {
   const handleSaveUser = async (e) => {
     e.preventDefault();
     if (!fullName.trim() || !username.trim()) return;
+    if (documentId.trim() && !validateDocument(DocumentType.CEDULA, formatDocument(DocumentType.CEDULA, documentId))) {
+      notify.warning('La cédula no es válida: escribe los 11 dígitos');
+      return;
+    }
 
     try {
       setSaving(true);
-      const payload = { fullName, username, role, password, active, ...(email.trim() ? { email: email.trim() } : {}) };
+      const payload = {
+        fullName,
+        username,
+        role,
+        password,
+        active,
+        ...(email.trim() ? { email: email.trim() } : {}),
+        ...(documentId.trim() ? { documentId: documentId.trim() } : {}),
+        ...(phone.trim() ? { phone: phone.trim() } : {}),
+      };
       if (editingId) {
         // Edit
-        await api.auth.updateUser(editingId, { fullName, role, active, email: email.trim() || null, ...(password ? { password } : {}) });
+        await api.auth.updateUser(editingId, { fullName, role, active, email: email.trim() || null, documentId: documentId.trim() || null, phone: phone.trim() || null, ...(password ? { password } : {}) });
         notify.success('Usuario actualizado');
       } else {
         // Create
@@ -136,7 +157,14 @@ export default function Users() {
                   <td className="px-6 py-4 font-mono font-bold text-slate-900 dark:text-slate-100">
                     @{u.username}
                   </td>
-                  <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-200">{u.fullName}</td>
+                  <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-200">
+                    {u.fullName}
+                    {(u.documentId || u.phone) && (
+                      <span className="block text-[11px] font-normal text-slate-400 font-mono">
+                        {[u.documentId && formatDocument(DocumentType.CEDULA, u.documentId), u.phone].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-flex items-center gap-1 ${
                       u.role === 'ADMINISTRADOR' ? 'bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
@@ -239,6 +267,34 @@ export default function Users() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
+              <label htmlFor="usr-doc" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Cédula</label>
+              <input
+                id="usr-doc"
+                type="text"
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="000-0000000-0"
+                value={documentId}
+                onChange={(e) => setDocumentId(formatDocument(DocumentType.CEDULA, e.target.value))}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="usr-phone" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Teléfono</label>
+              <input
+                id="usr-phone"
+                type="tel"
+                autoComplete="off"
+                placeholder="809-000-0000"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
               <label htmlFor="usr-role" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">
                 Rol Funcional *
               </label>
@@ -275,14 +331,13 @@ export default function Users() {
               {editingId ? 'Nueva Contraseña (Dejar vacío para no cambiar)' : 'Contraseña de Acceso *'}
             </label>
             <p className="text-[11px] text-slate-400">Es una clave temporal: la persona deberá cambiarla al iniciar sesión.</p>
-            <input
+            <PasswordField
               id="usr-pass"
-              type="password"
               required={!editingId}
-              placeholder="Mínimo 8 caracteres"
-              minLength={8}
+              generate
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={setPassword}
+              context={{ username, email }}
               className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
             />
           </div>

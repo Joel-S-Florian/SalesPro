@@ -29,12 +29,15 @@ export default defineConfig(() => {
         '@': path.resolve(process.cwd(), '.'),
       },
     },
+    // El Worker de etiquetas (jsPDF) usa importaciones dinámicas: necesita formato ES
+    worker: { format: 'es' },
     server: {
       port: 5180,
       strictPort: true, // puerto propio de FACTOS: no se mueve a otro si está ocupado
       proxy: {
         '/api': {
-          target: process.env.API_PROXY_TARGET || 'http://localhost:4010',
+          // 127.0.0.1 y no «localhost»: en Windows «localhost» prueba primero IPv6 y cada petición pierde ~200 ms
+          target: process.env.API_PROXY_TARGET || 'http://127.0.0.1:4010',
           changeOrigin: true,
           secure: false,
         },

@@ -15,10 +15,11 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32),
   JWT_ACCESS_EXPIRY: z.string().default('15m'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
-  BCRYPT_ROUNDS: z.coerce.number().default(12),
+  BCRYPT_ROUNDS: z.coerce.number().int().min(10).max(14).default(11), // 11 ≈ 200 ms; los hashes con más rondas se rebajan solos al iniciar sesión
   CORS_ORIGIN: z.string().default('http://localhost:5180,http://localhost:5190'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
-  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(100),
+  SALES_RATE_LIMIT_PER_MIN: z.coerce.number().default(60), // ventas por minuto y por usuario (el POS no necesita más)
+  RATE_LIMIT_MAX_REQUESTS: z.coerce.number().default(600), // por IP y por minuto: varias cajas de un local comparten conexión
   // Facturación electrónica (DGII)
   ECF_MASTER_KEY: z.string().optional(), // 32 bytes en base64: cifra certificados digitales
   ECF_BASE_URL_OVERRIDE: optionalUrl, // simulador de la DGII (nunca en producción)

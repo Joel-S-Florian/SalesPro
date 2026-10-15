@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
-import { rateLimiter, authRateLimiter } from './shared/middleware/rateLimiter.js';
+import { rateLimiter } from './shared/middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './shared/middleware/errorHandler.js';
 import { sanitizeInput } from './shared/middleware/validate.js';
 
@@ -25,6 +25,7 @@ import publicRoutes from './modules/public/public.routes.js';
 import platformRoutes from './modules/platform/platform.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import ecfRoutes from './modules/ecf/ecf.routes.js';
+import exportsRoutes from './modules/exports/exports.routes.js';
 import ecfReceiverRoutes from './modules/ecf/ecf.receiver.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
 
@@ -72,7 +73,7 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/auth', authRateLimiter, authRoutes);
+app.use('/auth', authRoutes);
 app.use('/categories', categoriesRoutes);
 app.use('/products', productsRoutes);
 app.use('/customers', customersRoutes);
@@ -88,6 +89,7 @@ app.use('/inventory-import', inventoryImportRoutes);
 app.use('/platform', platformRoutes);
 app.use('/payments', paymentsRoutes);
 app.use('/ecf', ecfRoutes);
+app.use('/exports', exportsRoutes);
 app.use('/ecf-receptor', ecfReceiverRoutes); // servicios públicos de recepción (sin sesión)
 app.use('/public', publicRoutes);
 

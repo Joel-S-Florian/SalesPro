@@ -20,3 +20,7 @@ Thumbs.db
 
 # Documentación interna: no se publica (queda solo en el equipo)
 Doc/
+
+# Archivos generados por el sistema (exportaciones y respaldos de cada empresa)
+storage/
+**/storage/

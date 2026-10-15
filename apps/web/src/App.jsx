@@ -20,6 +20,7 @@ const SignupWizard = lazy(() => import('./components/signup/SignupWizard'));
 const ImportInventory = lazy(() => import('./pages/ImportInventory'));
 const BarcodeLabels = lazy(() => import('./pages/BarcodeLabels'));
 const CashierCloses = lazy(() => import('./pages/CashierCloses'));
+const Backup = lazy(() => import('./pages/Backup'));
 const UsersPage = lazy(() => import('./pages/Users'));
 const Reports = lazy(() => import('./pages/Reports'));
 const SalesHistory = lazy(() => import('./pages/SalesHistory'));
@@ -28,6 +29,7 @@ const Finance = lazy(() => import('./pages/Finance'));
 const Unauthorized = lazy(() => import('./pages/Unauthorized'));
 import ErrorBoundary from './components/ErrorBoundary';
 import PasswordRecovery from './components/auth/PasswordRecovery';
+import Logo, { LogoMark } from './components/ui/Logo';
 import SessionGuard from './components/auth/SessionGuard';
 import ChangePasswordModal from './components/auth/ChangePasswordModal';
 
@@ -58,7 +60,8 @@ import {
   Building2,
   Inbox,
   FileCheck2,
-  KeyRound
+  KeyRound,
+  DatabaseBackup
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -112,6 +115,15 @@ export default function App() {
   const { user, isAuthenticated, accessToken, refreshToken, login, logout, setUser } = useAuthStore();
   const { data: authData, isLoading: authLoading, error: authError } = useAuthMe();
   const loadConfig = useConfigStore(state => state.load);
+  // Con la pantalla de acceso a la vista, el navegador descarga en segundo plano el código de las pantallas de inicio
+  useEffect(() => {
+    if (isAuthenticated) return undefined;
+    const warm = () => {
+      for (const load of [() => import('./pages/Dashboard'), () => import('./pages/VendorDashboard'), () => import('./pages/SalesPOS')]) load().catch(() => {});
+    };
+    const id = typeof requestIdleCallback === 'function' ? requestIdleCallback(warm, { timeout: 3000 }) : setTimeout(warm, 1500);
+    return () => (typeof cancelIdleCallback === 'function' ? cancelIdleCallback(id) : clearTimeout(id));
+  }, [isAuthenticated]);
   useEffect(() => {
     if (isAuthenticated && user?.role !== 'SUPERADMIN') loadConfig();
   }, [isAuthenticated, user?.role, loadConfig]);
@@ -344,6 +356,7 @@ export default function App() {
         >
           {/* Logo Heading */}
           <div className="text-center space-y-1.5">
+            <LogoMark className="mx-auto mb-3 h-14 w-14" />
             <span className="text-xs bg-indigo-50/80 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-900/50 text-indigo-600 dark:text-indigo-400 font-extrabold px-3 py-1 rounded-full font-mono uppercase tracking-wider">
               Factos
             </span>
@@ -475,6 +488,7 @@ export default function App() {
     { id: 'REPORTS', label: 'Reportes', icon: BarChart, roles: ['ADMINISTRADOR'] },
     { id: 'FINANCE', label: 'Finanzas', icon: Wallet, roles: ['ADMINISTRADOR'] },
     { id: 'CASHIER_CLOSES', label: 'Cierres de Caja', icon: Calculator, roles: ['ADMINISTRADOR'] },
+    { id: 'BACKUP', label: 'Respaldo / Exportar', icon: DatabaseBackup, roles: ['ADMINISTRADOR'] },
     { id: 'ECF', label: 'Facturación electrónica', icon: FileCheck2, roles: ['ADMINISTRADOR'] },
     { id: 'SETTINGS', label: 'Configuración', icon: SettingsIcon, roles: ['ADMINISTRADOR'] }
   ];
@@ -530,6 +544,8 @@ export default function App() {
         return <Finance />;
       case 'CASHIER_CLOSES':
         return <CashierCloses />;
+      case 'BACKUP':
+        return <Backup />;
       case 'ECF':
         return (
           <EcfDashboard
@@ -586,7 +602,7 @@ export default function App() {
         {/* Sidebar Header */}
         <div className="p-6 border-b border-white/20 dark:border-slate-800/40 flex items-center justify-between">
           <div className="space-y-1">
-            <h1 className="text-lg font-extrabold text-slate-900 dark:text-white tracking-wider font-display">FACTOS</h1>
+            <h1><Logo /></h1>
             <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 px-2.5 py-0.5 rounded-full font-bold font-mono">
               SISTEMA COMERCIAL
             </span>
@@ -685,7 +701,7 @@ export default function App() {
             >
               <div className="p-6 border-b border-white/20 dark:border-slate-800/40 flex items-center justify-between">
                 <div className="space-y-1">
-                  <h1 className="text-md font-extrabold text-slate-900 dark:text-white tracking-wider font-display">FACTOS</h1>
+                  <h1><Logo textClass="text-base" /></h1>
                   <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-800/50 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full font-bold font-mono">
                     SISTEMA COMERCIAL
                   </span>
@@ -765,9 +781,7 @@ export default function App() {
             >
               <Menu className="w-5.5 h-5.5" />
             </button>
-            <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider font-sans">
-              Factos
-            </span>
+            <Logo size="h-6 w-6" textClass="text-xs" />
           </div>
 
           <div className="hidden lg:flex items-center gap-2">

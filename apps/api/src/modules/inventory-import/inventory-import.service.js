@@ -1,6 +1,7 @@
 import { addBatchStock, addUnbatchedStock } from '../inventory/batches.service.js';
 import { parseExpiration } from '../inventory/batches.logic.js';
 import { getConfig } from '../config/config.service.js';
+import { getDefaultSupplier } from '../suppliers/suppliers.service.js';
 import { Readable } from 'node:stream';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../config/db.js';
@@ -285,9 +286,10 @@ export async function applyImport(importId, requester) {
   });
   if (rows.length === 0) throw AppError.badRequest('No hay filas válidas para importar');
 
+  // Sin proveedor elegido, las entradas se registran con el «Proveedor general»
   const supplier = batch.supplierId
     ? await prisma.supplier.findUnique({ where: { id: batch.supplierId } })
-    : null;
+    : await getDefaultSupplier();
   const { defaultCategoryId, updatePrices } = batch.options;
 
   const result = await prisma.$transaction(

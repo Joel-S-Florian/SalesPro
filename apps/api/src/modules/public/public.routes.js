@@ -5,6 +5,7 @@ import { validate } from '../../shared/middleware/validate.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { createLead } from '../leads/leads.service.js';
 import { signup } from './signup.service.js';
+import { passwordSchema } from '../../shared/utils/passwordPolicy.js';
 import { isDev } from '../../config/env.js';
 
 /**
@@ -19,7 +20,7 @@ const leadRateLimiter = rateLimit({
   message: { error: 'Ya recibimos varias solicitudes desde su conexión. Intente más tarde.', code: 'LEAD_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: req => ipKeyGenerator(req.ip),
 });
 
 // Alta de empresas nuevas: más estricto aún, es una operación que crea datos
@@ -29,7 +30,7 @@ const signupRateLimiter = rateLimit({
   message: { error: 'Se crearon varias cuentas desde su conexión. Intente más tarde.', code: 'SIGNUP_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: req => ipKeyGenerator(req.ip),
 });
 
 const text = (min, max) => z.string().trim().min(min).max(max);
@@ -62,12 +63,7 @@ const signupSchema = {
     account: z.object({
       fullName: text(2, 120),
       email: z.string().trim().toLowerCase().email('Correo inválido').max(120),
-      password: z
-        .string()
-        .min(8, 'La contraseña debe tener al menos 8 caracteres')
-        .max(100)
-        .regex(/[A-Za-z]/, 'La contraseña debe incluir al menos una letra')
-        .regex(/\d/, 'La contraseña debe incluir al menos un número'),
+      password: passwordSchema,
     }),
     company: z.object({
       name: text(2, 120),

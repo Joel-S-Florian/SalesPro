@@ -3,6 +3,7 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { quantityError, roundQty } from '../../shared/utils/units.js';
 import { getConfig } from '../config/config.service.js';
+import { getDefaultSupplier } from '../suppliers/suppliers.service.js';
 import { addBatchStock, consumeBatch, consumeFefo, requireBatchFields } from './batches.service.js';
 import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilterString } from '../../shared/utils/helpers.js';
 
@@ -165,8 +166,10 @@ export async function adjustStock(data, userId, userName) {
  * Register purchase from supplier (entry with cost)
  */
 export async function registerPurchase(data, userId, userName) {
-  const { productId, quantity, unitCost, supplierId, invoiceNumber } = data;
+  const { productId, quantity, unitCost, invoiceNumber } = data;
   let supplier = data.supplier;
+  // Sin proveedor, la compra se registra con el «Proveedor general»
+  const supplierId = data.supplierId || (await getDefaultSupplier())?.id;
 
   if (supplierId) {
     const supplierRecord = await prisma.supplier.findUnique({ where: { id: supplierId } });

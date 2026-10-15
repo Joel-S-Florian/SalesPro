@@ -5,6 +5,7 @@ import { validate } from '../../shared/middleware/validate.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { forgotPasswordSchema, resetPasswordSchema, loginSchema, changePasswordSchema, createUserSchema, updateUserSchema, userIdParamSchema } from './validators.js';
 import { auditLog } from '../../shared/middleware/audit.js';
+import { loginAccountLimiter, loginIpLimiter } from '../../shared/middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const recoveryLimiter = rateLimit({
   message: { error: 'Demasiados intentos. Espera unos minutos.', code: 'RECOVERY_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: req => ipKeyGenerator(req.ip),
 });
 
 router.post('/forgot-password', recoveryLimiter, validate(forgotPasswordSchema), authController.forgotPassword);
@@ -26,7 +27,7 @@ router.post('/reset-password', recoveryLimiter, validate(resetPasswordSchema), a
  * @description Login with username and password
  * @access Public
  */
-router.post('/login', validate(loginSchema), auditLog('LOGIN', 'auth'), authController.login);
+router.post('/login', loginIpLimiter, loginAccountLimiter, validate(loginSchema), auditLog('LOGIN', 'auth'), authController.login);
 
 /**
  * @route POST /api/auth/refresh

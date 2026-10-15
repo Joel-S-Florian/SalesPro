@@ -315,7 +315,7 @@ export default function Companies() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {field('adminFullName', 'Nombre completo *', { required: true, span: true })}
               {field('adminUsername', 'Usuario *', { required: true, minLength: 3 })}
-              {field('adminPassword', 'Contraseña inicial * (mín. 8)', { type: 'password', required: true, minLength: 8, autoComplete: 'new-password' })}
+              {field('adminPassword', 'Contraseña inicial * (mín. 10)', { type: 'password', required: true, minLength: 10, autoComplete: 'new-password' })}
             </div>
           </div>
           {formError && <p className="text-xs text-rose-500">{formError}</p>}
@@ -412,7 +412,7 @@ export default function Companies() {
               <form onSubmit={handleReset} className="flex items-end gap-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
                 <div className="flex-1 space-y-1.5">
                   <label htmlFor="reset-pass" className={labelClass}>Nueva contraseña para {resetTarget.username}</label>
-                  <input id="reset-pass" type="password" required minLength={8} autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} />
+                  <input id="reset-pass" type="password" required minLength={10} autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} />
                 </div>
                 <button type="submit" className="px-3 py-2 text-xs rounded-lg bg-indigo-600 text-white cursor-pointer">Cambiar</button>
                 <button type="button" onClick={() => setResetTarget(null)} className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">Cancelar</button>

@@ -7,28 +7,32 @@ import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
 import { telUrl, whatsappUrl } from '../utils/phone';
+import { useConfigStore } from '../stores/configStore';
 
-/** Llamar y escribir por WhatsApp al proveedor: los botones ya están, pero se habilitan cuando esto pase a true. */
-const SUPPLIER_CONTACT_ENABLED = false;
-
+/** Llamar y escribir por WhatsApp al proveedor. Cada botón se activa en Configuración → Llamadas y WhatsApp a proveedores. */
 function ContactButtons({ supplier }) {
+  const actions = useConfigStore(state => state.config.contactActions);
+  const businessName = useConfigStore(state => state.config.business?.name);
   const call = telUrl(supplier.phone);
-  const chat = whatsappUrl(supplier.phone, `Hola ${supplier.contactName || supplier.name}, le escribimos para coordinar un pedido.`);
+  const message = (actions?.supplierMessage || '')
+    .replace('{contacto}', supplier.contactName || supplier.name)
+    .replace('{empresa}', businessName || '');
+  const chat = whatsappUrl(supplier.phone, message);
   const base = 'p-1.5 rounded';
-  const render = (label, Icon, href, tone) =>
-    SUPPLIER_CONTACT_ENABLED && href ? (
+  const render = (label, Icon, href, tone, enabled) =>
+    enabled && href ? (
       <a aria-label={label} title={label} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${base} text-slate-400 ${tone} hover:bg-slate-100 dark:hover:bg-slate-800`}>
         <Icon className="w-4 h-4" />
       </a>
     ) : (
-      <button type="button" disabled aria-label={`${label} (próximamente)`} title={supplier.phone ? 'Próximamente' : 'Este proveedor no tiene teléfono'} className={`${base} text-slate-300 dark:text-slate-600 cursor-not-allowed`}>
+      <button type="button" disabled aria-label={enabled ? `${label} (sin teléfono)` : `${label} (desactivado en Configuración)`} title={enabled ? 'Este proveedor no tiene teléfono' : 'Actívalo en Configuración'} className={`${base} text-slate-300 dark:text-slate-600 cursor-not-allowed`}>
         <Icon className="w-4 h-4" />
       </button>
     );
   return (
     <>
-      {render('Llamar', Phone, call, 'hover:text-emerald-600')}
-      {render('Escribir por WhatsApp', MessageCircle, chat, 'hover:text-green-600')}
+      {render('Llamar', Phone, call, 'hover:text-emerald-600', Boolean(actions?.supplierCall))}
+      {render('Escribir por WhatsApp', MessageCircle, chat, 'hover:text-green-600', Boolean(actions?.supplierWhatsapp))}
     </>
   );
 }
@@ -204,6 +208,7 @@ export default function Suppliers() {
                 <tr key={s.id} className={s.active ? '' : 'opacity-50'}>
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">
                     {s.name}
+                    {s.isDefault && <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/30" title="Se usa en las compras que no indican proveedor">General</span>}
                     {!s.active && <span className="ml-2 text-[10px] text-slate-400">(inactivo)</span>}
                   </td>
                   <td className="px-4 py-3 font-mono">{s.rnc || '—'}</td>
@@ -230,6 +235,7 @@ export default function Suppliers() {
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
+                      {!s.isDefault && (
                       <button aria-label={s.active ? 'Desactivar' : 'Reactivar'}
                         onClick={() => toggleActive(s)}
                         title={s.active ? 'Desactivar' : 'Reactivar'}
@@ -237,6 +243,7 @@ export default function Suppliers() {
                       >
                         <Power className="w-4 h-4" />
                       </button>
+                      )}
                     </div>
                   </td>
                 </tr>

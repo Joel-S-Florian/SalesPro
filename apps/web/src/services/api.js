@@ -289,6 +289,14 @@ export const api = {
       request('/terminals/my/default', { method: 'PUT', body: JSON.stringify({ terminalId }) }),
   },
 
+  exports: {
+    options: () => request('/exports/options'),
+    list: () => request('/exports'),
+    create: payload => request('/exports', { method: 'POST', body: JSON.stringify(payload) }),
+    link: id => request(`/exports/${id}/link`, { method: 'POST' }),
+    remove: id => request(`/exports/${id}`, { method: 'DELETE' }),
+  },
+
   cashier: {
     current: (terminalId) => request(`/cashier/current?terminalId=${terminalId}`),
     open: (payload) => request('/cashier/open', { method: 'POST', body: JSON.stringify(payload) }),

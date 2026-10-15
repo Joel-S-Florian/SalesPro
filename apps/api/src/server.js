@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import { initializeNCFSequences } from './shared/utils/ncf.js';
 import { basePrisma as prisma } from './config/db.js';
 import { startEcfWorker, stopEcfWorker } from './modules/ecf/ecf.outbox.js';
+import { startExportWorker, stopExportWorker } from './modules/exports/exports.service.js';
 
 const PORT = env.PORT;
 
@@ -33,12 +34,15 @@ async function startServer() {
     console.log(`[Factos] Environment: ${env.NODE_ENV}`);
     // Cola de envío de comprobantes electrónicos a la DGII (reintentos y consulta de resultados)
     startEcfWorker();
+    // Cola de exportaciones y respaldos por empresa (se generan en segundo plano)
+    startExportWorker().catch(err => console.warn('[Factos] Cola de exportaciones:', err.message));
   });
 }
 
 process.on('SIGTERM', async () => {
   console.log('[Factos] SIGTERM received, shutting down gracefully...');
   stopEcfWorker();
+  stopExportWorker();
   await prisma.$disconnect();
   process.exit(0);
 });

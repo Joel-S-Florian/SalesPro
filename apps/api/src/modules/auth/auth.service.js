@@ -1,5 +1,5 @@
 import { prisma, basePrisma } from '../../config/db.js';
-import { hashPassword, comparePassword } from '../../shared/utils/crypto.js';
+import { hashPassword, comparePassword, comparePasswordDummy, hashRounds } from '../../shared/utils/crypto.js';
 import { generateTokenPair, generateRefreshToken, verifyRefreshToken } from '../../shared/utils/jwt.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
@@ -8,6 +8,7 @@ import { prewarmToken } from '../ecf/ecf.token.service.js';
 import { sendMail, mailConfigured } from '../../shared/utils/mailer.js';
 import { logger } from '../../shared/utils/logger.js';
 import { createHash, randomBytes } from 'node:crypto';
+import { assertPasswordAllowed } from '../../shared/utils/passwordPolicy.js';
 
 /** Minutos de inactividad por defecto antes de cerrar la sesión (configurable por empresa en `security`). */
 export const DEFAULT_IDLE_MINUTES = 30;
@@ -19,6 +20,14 @@ const MAX_RESETS_PER_HOUR = 3;
 const hashToken = token => createHash('sha256').update(token).digest('hex');
 const normalizeEmail = value => (value ? String(value).trim().toLowerCase() : null);
 const EMAIL_PATTERN = /^\S+@\S+\.\S+$/;
+const digitsOrNull = value => (value ? String(value).replace(/\D/g, '') || null : null);
+const phoneOrNull = value => (value ? String(value).trim() || null : null);
+
+async function assertDocumentAvailable(documentId, exceptUserId) {
+  if (!documentId) return;
+  const taken = await prisma.user.findFirst({ where: { documentId } });
+  if (taken && taken.id !== exceptUserId) throw AppError.conflict('Esa cédula ya está registrada en otro usuario', ERROR_CODES.DUPLICATE_ENTRY);
+}
 
 async function idleMinutesOf(companyId) {
   if (!companyId) return 0;
@@ -40,6 +49,7 @@ export async function login(username, password) {
   });
 
   if (!user) {
+    await comparePasswordDummy(password);
     throw AppError.unauthorized('Credenciales incorrectas', ERROR_CODES.INVALID_CREDENTIALS);
   }
 
@@ -71,10 +81,11 @@ export async function login(username, password) {
     },
   });
 
-  // Update last login
+  // Update last login. Si el hash tiene más rondas que las actuales, se rehace aquí (ya tenemos la clave en claro)
+  const rehash = hashRounds(user.passwordHash) > env.BCRYPT_ROUNDS ? { passwordHash: await hashPassword(password) } : {};
   await basePrisma.user.update({
     where: { id: user.id },
-    data: { updatedAt: new Date() },
+    data: { updatedAt: new Date(), ...rehash },
   });
 
   // Si la empresa factura electrónicamente, deja listo el token de la DGII para que la primera venta no espere
@@ -199,6 +210,7 @@ export async function changePassword(userId, oldPassword, newPassword) {
     throw AppError.badRequest('Contraseña actual incorrecta', ERROR_CODES.INVALID_CREDENTIALS);
   }
 
+  assertPasswordAllowed(newPassword, user);
   const newHash = await hashPassword(newPassword);
 
   await basePrisma.user.update({
@@ -255,6 +267,7 @@ export async function resetPassword(token, newPassword) {
   if (!reset || reset.usedAt || reset.expiresAt < new Date() || !reset.user.active) {
     throw AppError.badRequest('El enlace no es válido o ya venció. Solicita uno nuevo.', ERROR_CODES.REFRESH_TOKEN_INVALID);
   }
+  assertPasswordAllowed(newPassword, reset.user);
   const passwordHash = await hashPassword(newPassword);
   await basePrisma.$transaction([
     basePrisma.user.update({ where: { id: reset.userId }, data: { passwordHash, mustChangePassword: false } }),
@@ -277,6 +290,8 @@ export async function getProfile(userId) {
       id: true,
       username: true,
       email: true,
+      documentId: true,
+      phone: true,
       mustChangePassword: true,
       fullName: true,
       role: true,
@@ -309,7 +324,10 @@ async function assertEmailAvailable(email, exceptUserId) {
 export async function createUser(data) {
   const { username, fullName, role, password, active } = data;
   const email = normalizeEmail(data.email);
+  const documentId = digitsOrNull(data.documentId);
   await assertEmailAvailable(email);
+  await assertDocumentAvailable(documentId);
+  assertPasswordAllowed(password, { username, email });
 
   const existing = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
@@ -325,6 +343,8 @@ export async function createUser(data) {
     data: {
       username: username.toLowerCase(),
       email,
+      documentId,
+      phone: phoneOrNull(data.phone),
       fullName,
       role,
       passwordHash,
@@ -334,6 +354,8 @@ export async function createUser(data) {
       id: true,
       username: true,
       email: true,
+      documentId: true,
+      phone: true,
       fullName: true,
       role: true,
       active: true,
@@ -359,6 +381,7 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
         OR: [
           { fullName: { contains: q, mode: 'insensitive' } },
           { username: { contains: q, mode: 'insensitive' } },
+          ...(/\d{3,}/.test(q) ? [{ documentId: { contains: q.replace(/\D/g, '') } }] : []),
         ],
       }
     : {};
@@ -373,6 +396,8 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
         id: true,
         username: true,
         email: true,
+        documentId: true,
+        phone: true,
         mustChangePassword: true,
         fullName: true,
         role: true,
@@ -419,6 +444,7 @@ export async function updateUser(id, data, actorId) {
   if (role) updateData.role = role;
   if (active !== undefined) updateData.active = active;
   if (password) {
+    assertPasswordAllowed(password, { username: user.username, email: data.email !== undefined ? data.email : user.email });
     updateData.passwordHash = await hashPassword(password);
     // Clave asignada por un administrador a otra persona: es temporal y debe cambiarla al entrar
     if (id !== actorId) updateData.mustChangePassword = true;
@@ -428,6 +454,12 @@ export async function updateUser(id, data, actorId) {
     await assertEmailAvailable(email, id);
     updateData.email = email;
   }
+  if (data.documentId !== undefined) {
+    const documentId = digitsOrNull(data.documentId);
+    await assertDocumentAvailable(documentId, id);
+    updateData.documentId = documentId;
+  }
+  if (data.phone !== undefined) updateData.phone = phoneOrNull(data.phone);
 
   const updated = await prisma.user.update({
     where: { id },
@@ -436,6 +468,8 @@ export async function updateUser(id, data, actorId) {
       id: true,
       username: true,
       email: true,
+      documentId: true,
+      phone: true,
       mustChangePassword: true,
       fullName: true,
       role: true,

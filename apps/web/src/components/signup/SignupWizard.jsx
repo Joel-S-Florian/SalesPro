@@ -3,8 +3,10 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { DocumentType, formatDocument, validateDocument } from '../../utils/documents';
+import { MIN_PASSWORD_LENGTH, passwordProblem } from '../../utils/passwordPolicy';
 import { Field, inputClass } from '../ui/form';
 import SmartSelect from '../ui/SmartSelect';
+import Logo from '../ui/Logo';
 
 const STEPS = ['Plan', 'Tu cuenta', 'Tu negocio', 'Configuración', 'Confirmar'];
 
@@ -22,10 +24,11 @@ const RECEIPT_OPTIONS = [
   ['BOTH', 'Ambos', 'Genera los dos formatos'],
 ];
 
-const passwordRules = password => [
-  ['Al menos 8 caracteres', password.length >= 8],
+const passwordRules = (password, email) => [
+  [`Al menos ${MIN_PASSWORD_LENGTH} caracteres`, password.length >= MIN_PASSWORD_LENGTH],
   ['Una letra', /[A-Za-z]/.test(password)],
   ['Un número', /\d/.test(password)],
+  ['Que no sea común ni contenga tu correo', password.length > 0 && passwordProblem(password, { email }) === null],
 ];
 
 /**
@@ -44,7 +47,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
   const [company, setCompany] = useState({ name: '', businessType: BUSINESS_TYPES[0], rnc: '', phone: '', address: '' });
   const [settings, setSettings] = useState({ taxPercent: '18', cash: true, card: true, receiptFormat: 'A4', terminalName: 'Caja 1' });
 
-  const rules = useMemo(() => passwordRules(account.password), [account.password]);
+  const rules = useMemo(() => passwordRules(account.password, account.email), [account.password, account.email]);
   const methods = [settings.cash && 'EFECTIVO', settings.card && 'TARJETA'].filter(Boolean);
 
   const go = next => {
@@ -124,7 +127,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
 
       <div className="relative z-10 w-full max-w-xl space-y-5">
         <div className="flex items-center justify-between">
-          <span className="text-lg font-semibold tracking-[0.14em] text-slate-900 dark:text-white">FACTOS</span>
+          <Logo />
           <button type="button" onClick={onBackToLogin} className="text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 cursor-pointer">
             Ya tengo cuenta
           </button>

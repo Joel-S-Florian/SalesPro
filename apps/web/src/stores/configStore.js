@@ -16,6 +16,7 @@ export const DEFAULT_CONFIG = {
   requireOpenShift: false,
   security: { idleTimeoutMinutes: 30 },
   cashChange: { enabled: false },
+  contactActions: { supplierCall: false, supplierWhatsapp: false, supplierMessage: 'Hola {contacto}, le escribimos de {empresa} para coordinar un pedido.' },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,

@@ -1,5 +1,15 @@
-import bcrypt from 'bcryptjs';
+import bcryptjs from 'bcryptjs';
 import { env } from '../../config/env.js';
+
+// bcrypt NATIVO (corre en hilos aparte: no frena al servidor mientras se calcula) y, si no se pudo instalar en esta máquina,
+// bcryptjs (JavaScript puro, bloquea el servidor ~100-400 ms por inicio de sesión). Los hashes de ambos son compatibles.
+let bcrypt = bcryptjs;
+try {
+  bcrypt = (await import('bcrypt')).default;
+} catch {
+  // sin módulo nativo: se usa bcryptjs
+}
+export const bcryptEngine = bcrypt === bcryptjs ? 'bcryptjs' : 'bcrypt (nativo)';
 
 /**
  * Hash a password using bcrypt
@@ -18,6 +28,16 @@ export async function hashPassword(password) {
  */
 export async function comparePassword(password, hash) {
   return bcrypt.compare(password, hash);
+}
+
+/** Costo (rondas) con el que se generó un hash bcrypt. */
+export const hashRounds = hash => bcryptjs.getRounds(hash);
+
+// Hash con el costo actual para gastar el mismo tiempo cuando el usuario no existe (evita adivinar usuarios por la demora)
+let dummyHash;
+export async function comparePasswordDummy(password) {
+  dummyHash ??= await bcrypt.hash('factos-dummy-password', env.BCRYPT_ROUNDS);
+  await bcrypt.compare(password, dummyHash);
 }
 
 /**

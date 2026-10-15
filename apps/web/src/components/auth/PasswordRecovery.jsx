@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, CheckCircle2, Loader2, MailCheck } from 'lucide-react';
 import { api } from '../../services/api';
+import PasswordField from '../ui/PasswordField';
 
 const inputClass = 'w-full px-4 py-2.5 rounded-xl text-slate-800 dark:text-slate-100 glass-input outline-none text-xs font-mono';
 const labelClass = 'block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider';
@@ -97,11 +98,11 @@ export default function PasswordRecovery({ mode, token, onBack }) {
               <form onSubmit={submitReset} className="space-y-4">
                 <div className="space-y-1.5">
                   <label htmlFor="reset-password" className={labelClass}>Contraseña nueva</label>
-                  <input id="reset-password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={e => setPassword(e.target.value)} className={inputClass} />
+                  <PasswordField id="reset-password" value={password} onChange={setPassword} className={inputClass} />
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="reset-confirm" className={labelClass}>Repite la contraseña</label>
-                  <input id="reset-confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm} onChange={e => setConfirm(e.target.value)} className={inputClass} />
+                  <input id="reset-confirm" type="password" autoComplete="new-password" required value={confirm} onChange={e => setConfirm(e.target.value)} className={inputClass} />
                 </div>
                 <button type="submit" disabled={busy} className={primaryButton}>
                   {busy ? <><Loader2 className="w-4 h-4 animate-spin" /> Guardando...</> : 'Guardar contraseña'}

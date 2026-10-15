@@ -15,11 +15,11 @@ router.use(authenticate);
 // Un cobro por tarjeta mueve dinero: límite por conexión para frenar repeticiones accidentales
 const chargeLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: isDev ? 200 : 20,
+  max: isDev ? 200 : 30, // por usuario (las cajas de un mismo local comparten IP)
   message: { error: 'Demasiados cobros en poco tiempo. Espere un momento.', code: 'CARD_RATE_LIMIT' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: req => (req.user?.userId ? `u:${req.user.userId}` : ipKeyGenerator(req.ip)),
 });
 
 router.get(

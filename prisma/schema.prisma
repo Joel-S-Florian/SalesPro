@@ -35,6 +35,7 @@ model Company {
   auditLogs        AuditLog[]
   ecfConfig        EcfConfig?
   ecfSequences     EcfSequence[]
+  exportJobs       ExportJob[]
   ecfDocuments     EcfDocument[]
   ecfInbox         EcfInbox[]
   productBatches   ProductBatch[]
@@ -84,6 +85,8 @@ model User {
   email              String?         @unique // para recuperar la contraseña (opcional)
   mustChangePassword Boolean         @default(false) // clave temporal asignada por un administrador
   fullName           String
+  documentId         String? // cédula (solo dígitos)
+  phone              String?
   role               UserRole        @default(VENDEDOR)
   active             Boolean         @default(true)
   createdAt          DateTime        @default(now())
@@ -100,8 +103,45 @@ model User {
   companyId          String?
   company            Company?        @relation(fields: [companyId], references: [id])
 
+  @@unique([companyId, documentId])
   @@index([companyId])
   @@map("users")
+}
+
+/// Exportación o respaldo de los datos de una empresa: se genera en segundo plano y queda un ZIP descargable por tiempo limitado.
+model ExportJob {
+  id         String       @id @default(cuid())
+  type       String // SALES | PRODUCTS | CUSTOMERS | FULL
+  format     String // CSV | JSON
+  status     ExportStatus @default(PENDING)
+  progress   Int          @default(0)
+  rowsDone   Int          @default(0)
+  rowsTotal  Int          @default(0)
+  fileName   String?
+  filePath   String?
+  fileSize   Int?
+  error      String?
+  userId     String
+  userName   String
+  createdAt  DateTime     @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+  expiresAt  DateTime?
+  companyId  String
+  company    Company      @relation(fields: [companyId], references: [id])
+
+  @@index([companyId, createdAt])
+  @@index([status])
+  @@map("export_jobs")
+}
+
+enum ExportStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+  EXPIRED
 }
 
 model Session {
@@ -299,6 +339,7 @@ model Supplier {
   phone        String?
   address      String?
   paymentTerms String?
+  isDefault    Boolean        @default(false) // «Proveedor general»: lo usan las compras sin proveedor; no se puede desactivar
   active       Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt

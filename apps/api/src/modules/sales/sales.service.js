@@ -251,6 +251,22 @@ function validateCashTender(raw, total) {
   return { received: received.breakdown, change: change.breakdown };
 }
 
+/**
+ * Reintenta una transacción que PostgreSQL canceló por deadlock (40P01) o conflicto de serialización (P2034):
+ * con muchas cajas vendiendo a la vez, es normal que de vez en cuando dos ventas se crucen y una deba repetirse.
+ */
+async function withDeadlockRetry(run, attempts = 4) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await run();
+    } catch (err) {
+      const transient = err?.code === 'P2034' || /40P01|deadlock/i.test(String(err?.message || ''));
+      if (!transient || attempt >= attempts) throw err;
+      await new Promise(resolve => setTimeout(resolve, 20 * attempt + Math.random() * 40));
+    }
+  }
+}
+
 export async function createSale(data, userId, userName, requester = { userId, role: 'VENDEDOR' }) {
   const { customerId, details, discount, paymentMethod, notes, terminalId } = data;
   const config = await getConfig();
@@ -357,7 +373,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
   let invoiceNumber = ecfContext ? null : await getNextNCF(ncfType);
 
   // Create sale in transaction
-  const sale = await prisma.$transaction(async (tx) => {
+  const sale = await withDeadlockRetry(() => prisma.$transaction(async (tx) => {
     let ecf = null;
     if (ecfContext) {
       ecf = await issueEcf(tx, ecfContext, {
@@ -423,7 +439,8 @@ export async function createSale(data, userId, userName, requester = { userId, r
 
     // Update product stock and create inventory logs
     const usedDetails = new Set();
-    for (const item of saleDetails) {
+    // Siempre en el mismo orden (por producto): dos ventas con productos en común no se bloquean entre sí en orden cruzado (deadlock)
+    for (const item of [...saleDetails].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0))) {
       // Perecederos: descuenta los lotes de forma atómica (FEFO) y deja la trazabilidad por lote vendido
       if (item.product.isPerishable) {
         const allocations = await consumeFefo(tx, item.product, item.quantity, config.perishable);
@@ -469,7 +486,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
     if (ecf) await saveEcfDocuments(tx, newSale.id, ecf);
 
     return newSale;
-  });
+  }));
 
   // Envía a la DGII en segundo plano; la venta ya quedó registrada y firmada
   if (ecfContext) kickEcfWorker();
@@ -610,7 +627,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
       include: { details: true },
     });
 
-    for (const l of lines) {
+    for (const l of [...lines].sort((a, b) => (a.productId < b.productId ? -1 : a.productId > b.productId ? 1 : 0))) {
       // Perecederos: la devolución vuelve a los lotes de donde salió y queda registrada (cantidad negativa)
       const product = await tx.product.findUnique({ where: { id: l.productId }, select: { isPerishable: true, costPrice: true } });
       if (product?.isPerishable) {

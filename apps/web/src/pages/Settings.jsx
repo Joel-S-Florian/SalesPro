@@ -75,6 +75,35 @@ function SecurityCard({ value, onChange }) {
   );
 }
 
+/** Botones de llamar y de WhatsApp: se activan por separado y el mensaje de WhatsApp es editable. */
+function ContactActionsCard({ value, onChange, businessName }) {
+  const set = patch => onChange({ ...value, ...patch });
+  const preview = (value.supplierMessage || '').replace('{contacto}', 'Juan').replace('{empresa}', businessName || 'su empresa');
+  return (
+    <div className={cardClass} id="contact-settings">
+      <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Llamadas y WhatsApp a proveedores</h4>
+      <p className="text-xs text-slate-400">Muestra en la lista de Proveedores los botones para llamar o escribir por WhatsApp con un toque. En el celular abren el marcador o la app de WhatsApp.</p>
+      <div className="space-y-2">
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={value.supplierCall} onChange={e => set({ supplierCall: e.target.checked })} />
+          Activar el botón de llamar
+        </label>
+        <label className="flex items-center gap-2 text-xs cursor-pointer">
+          <input type="checkbox" checked={value.supplierWhatsapp} onChange={e => set({ supplierWhatsapp: e.target.checked })} />
+          Activar el botón de WhatsApp
+        </label>
+      </div>
+      {value.supplierWhatsapp && (
+        <div className="space-y-1.5">
+          <label htmlFor="wa-message" className={labelClass}>Mensaje inicial de WhatsApp</label>
+          <textarea id="wa-message" rows={2} maxLength={300} value={value.supplierMessage} onChange={e => set({ supplierMessage: e.target.value })} className={inputClass} />
+          <p className="text-[11px] text-slate-400">Usa {'{contacto}'} para el nombre del contacto (o del proveedor) y {'{empresa}'} para tu negocio. Vista previa: <em>{preview}</em></p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Gestión de perecederos y lotes: umbrales de alerta y reglas de descuento por vencimiento. */
 function PerishableCard({ value, onChange }) {
   const set = patch => onChange({ ...value, ...patch });
@@ -295,6 +324,8 @@ function GeneralSettings() {
         value={form.perishable}
         onChange={perishable => setForm({ ...form, perishable })}
       />
+
+      <ContactActionsCard value={form.contactActions} onChange={contactActions => setForm({ ...form, contactActions })} businessName={form.business?.name} />
 
       <SecurityCard value={form.security} onChange={security => setForm({ ...form, security })} />
 

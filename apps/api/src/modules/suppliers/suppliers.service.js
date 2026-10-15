@@ -6,6 +6,13 @@ import { buildPaginationQuery, getPaginationMeta, cleanFilterString } from '../.
 const normalize = data =>
   Object.fromEntries(Object.entries(data).map(([key, value]) => [key, value === '' ? null : value]));
 
+// Campos que se pueden escribir desde la API (isDefault nunca)
+const WRITABLE = ['name', 'rnc', 'contactName', 'email', 'phone', 'address', 'paymentTerms', 'active'];
+const pickWritable = data => Object.fromEntries(Object.entries(data).filter(([key]) => WRITABLE.includes(key)));
+
+/** El «Proveedor general» de la empresa (null si aún no existe). */
+export const getDefaultSupplier = () => prisma.supplier.findFirst({ where: { isDefault: true } });
+
 const SORTABLE = ['name', 'createdAt', 'rnc'];
 
 export async function getSuppliers({ page = 1, limit = 20, sortBy = 'name', sortOrder = 'asc', q, active }) {
@@ -34,7 +41,7 @@ export async function getSuppliers({ page = 1, limit = 20, sortBy = 'name', sort
       where,
       skip,
       take,
-      orderBy,
+      orderBy: [{ isDefault: 'desc' }, orderBy],
       include: { _count: { select: { purchases: true } } },
     }),
     prisma.supplier.count({ where }),
@@ -61,14 +68,15 @@ async function assertRncAvailable(rnc, exceptId) {
 }
 
 export async function createSupplier(data) {
-  const clean = normalize(data);
+  const clean = normalize(pickWritable(data));
   await assertRncAvailable(clean.rnc);
   return prisma.supplier.create({ data: clean });
 }
 
 export async function updateSupplier(id, data) {
-  await getSupplierById(id);
-  const clean = normalize(data);
+  const current = await getSupplierById(id);
+  const clean = normalize(pickWritable(data));
+  if (current.isDefault && clean.active === false) throw AppError.conflict('El Proveedor general no se puede desactivar');
   await assertRncAvailable(clean.rnc, id);
   return prisma.supplier.update({ where: { id }, data: clean });
 }
@@ -77,7 +85,8 @@ export async function updateSupplier(id, data) {
  * Soft delete: el proveedor se desactiva para conservar el historial de compras.
  */
 export async function deactivateSupplier(id) {
-  await getSupplierById(id);
+  const current = await getSupplierById(id);
+  if (current.isDefault) throw AppError.conflict('El Proveedor general no se puede desactivar');
   return prisma.supplier.update({ where: { id }, data: { active: false } });
 }
 

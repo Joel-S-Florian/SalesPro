@@ -114,7 +114,12 @@ export default function Inventory() {
     setIsPurchaseOpen(true);
     api.suppliers
       .list({ active: 'true', limit: 100 })
-      .then(res => setSuppliers(res?.data || []))
+      .then(res => {
+        const list = res?.data || [];
+        setSuppliers(list);
+        // Sin elegir otro, la compra va al «Proveedor general»
+        setPurchaseSupplier(list.find(s => s.isDefault)?.id || '');
+      })
       .catch(() => setSuppliers([]));
   };
 
