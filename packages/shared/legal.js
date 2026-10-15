@@ -3,7 +3,7 @@
  * La versión viaja con la aceptación al registrarse (`Company.termsVersion`); al cambiar los textos, súbala.
  * Los archivos viven en `apps/landing/public/legal/` y se sirven desde la página de promoción.
  */
-export const TERMS_VERSION = '2026-10-borrador-1';
+export const TERMS_VERSION = '2026-10-borrador-2';
 
 export const LEGAL_PAGES = [
   { id: 'terminos', title: 'Términos de servicio', path: '/legal/terminos.html' },
