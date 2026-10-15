@@ -4,6 +4,7 @@
 // Uso: node --env-file=apps/api/.env scripts/test-security.mjs
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { TERMS_VERSION } from '../packages/shared/legal.js';
 
 const root = new URL('../apps/api/src/', import.meta.url);
@@ -43,6 +44,17 @@ try {
   const adminLogin = await login(adminName, ADMIN_PASSWORD);
   check('el administrador de prueba inicia sesión', adminLogin.status === 200 && adminLogin.json.accessToken, String(adminLogin.status));
   const token = adminLogin.json?.accessToken;
+
+  // --- Compatibilidad: un hash antiguo (bcryptjs, 12 rondas) sigue sirviendo con bcrypt nativo, y se rebaja a las rondas actuales ---
+  const bcryptjs = createRequire(new URL('../apps/api/package.json', import.meta.url))('bcryptjs');
+  const oldName = `zz_sec_old_${suffix}`;
+  const oldHash = bcryptjs.hashSync('Clave-Antigua-Segura-1', 12);
+  const oldUser = await basePrisma.user.create({ data: { companyId: company.id, username: oldName, fullName: 'Hash Antiguo', role: 'VENDEDOR', passwordHash: oldHash } });
+  const oldLogin = await login(oldName, 'Clave-Antigua-Segura-1');
+  check('un hash antiguo de bcryptjs (12 rondas) sigue funcionando con bcrypt nativo', oldHash.startsWith('$2') && oldLogin.status === 200, String(oldLogin.status));
+  const rehashed = await basePrisma.user.findUnique({ where: { id: oldUser.id } });
+  check('al entrar se rehace con las rondas actuales (11) y la clave sigue sirviendo', rehashed.passwordHash !== oldHash && bcryptjs.getRounds(rehashed.passwordHash) === 11 && (await login(oldName, 'Clave-Antigua-Segura-1')).status === 200, String(bcryptjs.getRounds(rehashed.passwordHash)));
+  check('una clave incorrecta con un hash antiguo se rechaza', (await login(oldName, 'otra-clave-cualquiera-9')).status === 401);
 
   // --- Crear usuario: la clave temporal la genera el servidor ---
   const u1Name = `zz_sec_u1_${suffix}`;

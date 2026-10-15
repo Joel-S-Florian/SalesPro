@@ -9,24 +9,19 @@ export async function authenticate(req, res, next) {
     const authHeader = req.headers.authorization;
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log('❌ [DEBUG AUTH] 2. Falta token o no empieza con "Bearer "');
       throw AppError.unauthorized('Falta token de autenticación');
     }
 
     const token = authHeader.split(' ')[1];
-    console.log('🔑 [DEBUG AUTH] 3. Token presente. Longitud:', token.length);
 
     let decoded;
     try {
       decoded = verifyAccessToken(token);
-      console.log('🔓 [DEBUG AUTH] 4. Token decodificado exitosamente. UserID:', decoded?.userId);
     } catch (jwtError) {
-      console.error('❌ [DEBUG AUTH] 4b. Error de JWT (firma inválida o expirado):', jwtError.message);
       throw AppError.unauthorized('Token inválido o expirado', ERROR_CODES.TOKEN_INVALID);
     }
 
     if (!decoded) {
-      console.log('❌ [DEBUG AUTH] 5. verifyAccessToken retornó null/falsy sin lanzar error');
       throw AppError.unauthorized('Token inválido o expirado', ERROR_CODES.TOKEN_INVALID);
     }
 
@@ -42,7 +37,6 @@ export async function authenticate(req, res, next) {
         company: { select: { active: true } },
       },
     });
-    console.log('👤 [DEBUG AUTH] 6. Usuario encontrado en DB:', user ? user.username : 'NULL');
 
     if (!user) {
       throw AppError.unauthorized('Usuario no encontrado', ERROR_CODES.TOKEN_INVALID);
@@ -65,11 +59,9 @@ export async function authenticate(req, res, next) {
       companyId: user.companyId,
     };
 
-    console.log('✅ [DEBUG AUTH] 7. Autenticación exitosa para:', req.user.username);
     // Todo lo que sigue (controladores, servicios) corre dentro del contexto de la empresa
     tenantStore.run({ companyId: user.companyId }, () => next());
   } catch (error) {
-    console.error('💥 [DEBUG AUTH] ERROR FINAL:', error.message);
     next(error);
   }
 }

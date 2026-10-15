@@ -255,7 +255,7 @@ function validateCashTender(raw, total) {
  * Reintenta una transacción que PostgreSQL canceló por deadlock (40P01) o conflicto de serialización (P2034):
  * con muchas cajas vendiendo a la vez, es normal que de vez en cuando dos ventas se crucen y una deba repetirse.
  */
-async function withDeadlockRetry(run, attempts = 4) {
+export async function withDeadlockRetry(run, attempts = 4) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await run();

@@ -1,9 +1,13 @@
-// Prueba de integración de ventas electrónicas (e-CF) contra el simulador de la DGII y la base de datos real.
-// Usa solo la empresa «Empresa Prueba» (RNC temporal propio) y deja todo como estaba.
+// Prueba de integración de ventas electrónicas (e-CF) contra el simulador de la DGII.
+// Corre con su PROPIA base de datos (factos_test_ecf, creada y borrada por la prueba) y su propio simulador en un puerto libre,
+// así no compite con la cola de e-CF del API de desarrollo ni con otras pruebas.
 //
 //   node --env-file=apps/api/.env scripts/test-ecf-sales.mjs
 import http from 'node:http';
 
+import { createIsolatedDb } from './lib/isolated-db.mjs';
+
+const isolated = await createIsolatedDb('factos_test_ecf');
 process.env.PORT ||= '4010';
 const root = new URL('../apps/api/src/', import.meta.url);
 const load = p => import(new URL(p, root).href);
@@ -39,8 +43,11 @@ const expectError = async (name, fn, contains) => {
   }
 };
 
-const company = await basePrisma.company.findFirst({ where: { name: 'Empresa Prueba' } });
-const admin = await basePrisma.user.findFirst({ where: { companyId: company.id, role: 'ADMINISTRADOR' } });
+// Empresa y administrador propios de esta base de datos (con sus secuencias NCF y el cliente «Consumidor Final»)
+const { bootstrapCompany } = await load('modules/platform/bootstrap.js');
+const company = await basePrisma.company.create({ data: { name: 'Empresa Prueba', plan: 'BUSINESS' } });
+await bootstrapCompany(company.id);
+const admin = await basePrisma.user.create({ data: { companyId: company.id, username: 'zz_ecf_admin', fullName: 'Admin e-CF', role: 'ADMINISTRADOR', passwordHash: 'x' } });
 const previous = { rnc: company.rnc, address: company.address };
 const ncfBefore = await basePrisma.nCFSequence.findMany({ where: { companyId: company.id } });
 const RNC = '333333333';
@@ -216,6 +223,23 @@ try {
     check('lista los rechazos recientes con su motivo', summary.recentRejections.length === 1 && /Rechazo simulado/.test(summary.recentRejections[0].lastError));
     await basePrisma.ecfSequence.update({ where: { id: seq.E34.id }, data: { rangeTo: 1000 } });
 
+    /* 10b. Reintento por deadlock: repite TODA la transacción, incluida la asignación del e-NCF, sin huecos ni números dobles */
+    const { allocateENcf } = await load('modules/ecf/ecf.sequence.service.js');
+    const e32Before = await seqNow('E32');
+    let attempts = 0;
+    const allocated = [];
+    await sales.withDeadlockRetry(() =>
+      prisma.$transaction(async tx => {
+        const { eNcf } = await allocateENcf(tx, 'E32');
+        allocated.push(eNcf);
+        attempts += 1;
+        if (attempts === 1) throw new Error('deadlock detected (40P01)'); // PostgreSQL cancela esta transacción: se revierte el número tomado
+      })
+    );
+    check('deadlock: se reintentó la transacción completa (2 intentos)', attempts === 2);
+    check('deadlock: el reintento recibe el MISMO e-NCF (el primero se revirtió, no se pierde ni se duplica)', allocated.length === 2 && allocated[0] === allocated[1], allocated.join(' / '));
+    check('deadlock: la secuencia avanzó exactamente 1 número (sin hueco)', (await seqNow('E32')) === e32Before + 1, `${e32Before} → ${await seqNow('E32')}`);
+
     /* 11. Con la facturación electrónica apagada vuelve la serie B */
     await basePrisma.ecfConfig.update({ where: { companyId: company.id }, data: { mode: 'OFF' } });
     const s11 = await sell(consumer, [[product, 1]]);
@@ -244,4 +268,5 @@ try {
 
 console.log(failed ? `\n${failed} FALLO(S)` : '\nTODO OK');
 await basePrisma.$disconnect();
+await isolated.drop();
 process.exit(failed ? 1 : 0);

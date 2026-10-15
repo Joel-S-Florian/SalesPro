@@ -270,7 +270,6 @@ export default function App() {
   // Si el 401 llega hasta aqui es porque api.js ya intento renovar y fallo
   useEffect(() => {
     if (authError && authError.status === 401) {
-      console.log('[AUTH] Sesion invalida, cerrando sesion local.');
       setSessionMessage('Tu sesion expiro. Inicia sesion de nuevo.');
       logout();
     }

@@ -27,3 +27,7 @@ storage/
 
 # Siembra de las pruebas de carga (la genera scripts/load-test.mjs --serve)
 scripts/load/.seed.json
+
+# Certificados de prueba y archivos sensibles generados
+*.p12
+*.pfx

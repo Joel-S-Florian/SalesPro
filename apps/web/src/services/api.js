@@ -87,7 +87,6 @@ function doRefresh() {
     return Promise.reject(new Error('NO_REFRESH_TOKEN'));
   }
 
-  console.log('[AUTH] Access token expirado, intentando renovar sesion...');
 
   refreshPromise = fetch(`${API_BASE}/auth/refresh`, {
     method: 'POST',
@@ -97,11 +96,9 @@ function doRefresh() {
     .then(async (res) => {
       const data = await parseJsonSafe(res);
       if (!res.ok) {
-        console.error('[AUTH] Fallo la renovacion:', data?.error || res.status);
         useAuthStore.getState().logout();
         throw new Error(data?.error || 'REFRESH_FAILED');
       }
-      console.log('[AUTH] Sesion renovada correctamente.');
       useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
       return data.accessToken;
     })
@@ -160,7 +157,6 @@ export const api = {
         body: JSON.stringify({ username, password }),
       });
       const data = await handleResponse(res);
-      console.log('[AUTH] Login correcto para:', data.user?.username);
       return data;
     },
 
