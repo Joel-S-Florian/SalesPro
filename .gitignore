@@ -17,3 +17,6 @@ Thumbs.db
 # Skills de agentes: se instalan localmente (el bloqueo de versiones sí se versiona en skills-lock.json)
 .agents/
 .claude/
+
+# Documentación interna: no se publica (queda solo en el equipo)
+Doc/
