@@ -52,6 +52,12 @@ export const useAuthMe = () => {
   });
 };
 
+/** Historial de pagos de la suscripción de la empresa (solo ADMINISTRADOR). */
+export const useSubscription = () => {
+  const enabled = useAuthStore(state => !!state.accessToken && state.user?.role === 'ADMINISTRADOR');
+  return useQuery({ queryKey: ['company', 'subscription'], queryFn: api.company.subscription, staleTime: 60 * 1000, enabled, retry: false });
+};
+
 /** Canal de contacto (WhatsApp Business) configurado en el servidor: `link` es null si no hay número. */
 export const useContact = () =>
   useQuery({

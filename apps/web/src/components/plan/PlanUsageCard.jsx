@@ -1,7 +1,11 @@
 import React from 'react';
 import { Check, Lock, MessageCircle } from 'lucide-react';
 import { FEATURES, PLANS, PLAN_IDS, RESOURCES, planFeatureLines, planName } from '@factos/shared/plans.js';
-import { useContact, usePlanUsage } from '../../hooks/queries';
+import { useContact, usePlanUsage, useSubscription } from '../../hooks/queries';
+import PaymentHistory from '../billing/PaymentHistory';
+import { printSubscriptionReceipt } from '../../utils/subscriptionReceiptPdf';
+import { api } from '../../services/api';
+import { notify } from '../../utils/notify';
 
 const STATUS_TEXT = {
   TRIAL: usage => `Prueba: ${usage.daysLeft === 1 ? 'queda 1 día' : `quedan ${usage.daysLeft} días`}`,
@@ -18,6 +22,14 @@ const cardClass = 'rounded-xl border border-slate-100 bg-white p-5 shadow-sm dar
 export default function PlanUsageCard() {
   const { data: usage, isLoading, error, refetch } = usePlanUsage();
   const { data: contact } = useContact();
+  const { data: subscription } = useSubscription();
+  const showReceipt = async payment => {
+    try {
+      printSubscriptionReceipt(await api.company.receipt(payment.id));
+    } catch (err) {
+      notify.error(err.message || 'No se pudo abrir el recibo');
+    }
+  };
   if (isLoading) return <div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />;
   if (error || !usage) {
     return (
@@ -89,7 +101,7 @@ export default function PlanUsageCard() {
 
       <div className={cardClass}>
         <h4 className="mb-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Planes</h4>
-        <p className="mb-3 text-[11px] text-slate-400">Precios provisionales (no se están cobrando). ¿Necesitas más? Escríbenos y armamos un plan a tu medida.
+        <p className="mb-3 text-[11px] text-slate-400">Precios provisionales. Hoy el pago es por transferencia: escríbenos y registramos tu pago. ¿Necesitas más? Escríbenos y armamos un plan a tu medida.
           {contact?.link && (
             <a href={contact.link} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline">
               <MessageCircle className="h-3 w-3" /> Escribir por WhatsApp
@@ -112,6 +124,17 @@ export default function PlanUsageCard() {
           ))}
         </div>
       </div>
+
+      {subscription && (
+        <div className={cardClass}>
+          <h4 className="mb-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Pagos de la suscripción</h4>
+          <p className="mb-3 text-[11px] text-slate-400">
+            {usage.paidUntil ? `Pagado hasta el ${new Date(usage.paidUntil).toLocaleDateString('es-DO', { day: '2-digit', month: 'long', year: 'numeric' })}. ` : ''}
+            Cada pago tiene un recibo imprimible (no es un comprobante fiscal).
+          </p>
+          <PaymentHistory payments={subscription.payments} onReceipt={showReceipt} />
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ const companySelect = {
   active: true,
   plan: true,
   trialEndsAt: true,
+  paidUntil: true,
   createdAt: true,
   _count: { select: { users: true, products: true, sales: true } },
 };

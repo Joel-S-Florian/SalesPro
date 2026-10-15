@@ -2,6 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import * as platformService from './platform.service.js';
 import * as leadsService from '../leads/leads.service.js';
+import * as billing from '../billing/billing.service.js';
+import { listProviders } from '../billing/billing.providers.js';
 import { getPlatformAnalytics } from './analytics.js';
 import { authenticate } from '../../shared/middleware/auth.js';
 import { authorize } from '../../shared/middlewares/authorize.js';
@@ -147,6 +149,51 @@ router.post(
   asyncHandler(async (req, res) => {
     res.json(await platformService.resetCompanyUserPassword(req.params.id, req.params.userId));
   })
+);
+
+// --- Cobros de la suscripción (cobro manual hoy; Azul detrás de la misma interfaz, deshabilitado) ---
+const paymentSchema = {
+  params: idParams,
+  body: z.object({
+    plan: z.enum(['STARTER', 'BUSINESS']),
+    amount: z.number().positive().max(10_000_000),
+    method: z.enum(['TRANSFER', 'DEPOSIT', 'CASH', 'OTHER']).default('TRANSFER'),
+    reference: z.string().trim().max(80).optional().or(z.literal('')),
+    months: z.number().int().min(1).max(24).optional(),
+    periodStart: z.string().datetime().optional(),
+    periodEnd: z.string().datetime().optional(),
+    note: z.string().trim().max(300).optional().or(z.literal('')),
+  }).refine(d => d.method === 'CASH' || d.method === 'OTHER' || (d.reference && d.reference.length >= 3), { message: 'La referencia de la transferencia o depósito es obligatoria', path: ['reference'] }),
+};
+const voidSchema = {
+  params: z.object({ id: z.string().min(1).max(64), paymentId: z.string().min(1).max(64) }),
+  body: z.object({ reason: z.string().trim().min(3, 'Indica el motivo').max(200) }),
+};
+
+router.get('/billing/providers', asyncHandler(async (req, res) => res.json({ data: listProviders() })));
+
+router.get(
+  '/companies/:id/payments',
+  validate({ params: idParams }),
+  asyncHandler(async (req, res) => res.json({ data: await billing.listPaymentsForCompany(req.params.id) }))
+);
+
+router.post(
+  '/companies/:id/payments',
+  validate(paymentSchema),
+  asyncHandler(async (req, res) => res.status(201).json(await billing.recordManualPayment(req.user, req.params.id, req.body)))
+);
+
+router.post(
+  '/companies/:id/payments/:paymentId/void',
+  validate(voidSchema),
+  asyncHandler(async (req, res) => res.json(await billing.voidPayment(req.user, req.params.id, req.params.paymentId, req.body.reason)))
+);
+
+router.get(
+  '/companies/:id/payments/:paymentId/receipt',
+  validate({ params: z.object({ id: z.string().min(1).max(64), paymentId: z.string().min(1).max(64) }) }),
+  asyncHandler(async (req, res) => res.json(await billing.getReceipt(req.params.paymentId, { companyId: req.params.id, scoped: false })))
 );
 
 export default router;

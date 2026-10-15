@@ -259,6 +259,12 @@ export const api = {
       request(`/platform/companies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     resetUserPassword: (companyId, userId) =>
       request(`/platform/companies/${companyId}/users/${userId}/reset-password`, { method: 'POST' }),
+    // Cobros de la suscripción
+    payments: (companyId) => request(`/platform/companies/${companyId}/payments`),
+    recordPayment: (companyId, payload) => request(`/platform/companies/${companyId}/payments`, { method: 'POST', body: JSON.stringify(payload) }),
+    voidPayment: (companyId, paymentId, reason) =>
+      request(`/platform/companies/${companyId}/payments/${paymentId}/void`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    receipt: (companyId, paymentId) => request(`/platform/companies/${companyId}/payments/${paymentId}/receipt`),
   },
 
   inventoryImport: {
@@ -292,6 +298,8 @@ export const api = {
 
   company: {
     planUsage: () => request('/company/plan-usage'),
+    subscription: () => request('/company/subscription'),
+    receipt: (paymentId) => request(`/company/payments/${paymentId}/receipt`),
   },
 
   exports: {

@@ -30,6 +30,7 @@ const BASE_PRISMA_ALLOWED = {
   'modules/platform/bootstrap.js': { max: 5, why: 'Datos iniciales de UNA empresa nueva con su companyId explícito.' },
   'modules/leads/leads.service.js': { max: 10, why: 'Solicitudes de la landing: no son datos de ninguna empresa; aprobarlas crea la empresa.' },
   'modules/public/signup.service.js': { max: 4, why: 'Registro autónomo: crea la empresa y su administrador (aún no hay contexto).' },
+  'modules/billing/billing.service.js': { max: 8, why: 'Cobros de suscripción hechos por el SUPERADMIN: Company no tiene companyId y cada pago, anulación y recibo lleva el companyId explícito (probado con dos empresas).' },
   'modules/exports/exports.auto.js': { max: 7, why: 'Planificador del respaldo automático: recorre las empresas activas (Company no tiene companyId) y cada trabajo, auditoría y rotación lleva su companyId explícito (probado con varias empresas).' },
   'modules/exports/exports.service.js': { max: 13, why: 'Cola de exportaciones entre empresas (un trabajo a la vez) y enlaces firmados; cada trabajo lleva su companyId.' },
   'modules/exports/exports.runner.js': { max: 6, why: 'Genera el ZIP de UNA empresa: TODAS las lecturas filtran por companyId explícito (probado con dos empresas).' },

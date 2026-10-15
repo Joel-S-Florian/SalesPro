@@ -10,6 +10,7 @@ import { TableSkeleton } from '../components/Skeleton';
 import { useClientPage } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
+import PaymentsPanel from '../components/billing/PaymentsPanel';
 
 const inputClass =
   'w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 outline-none text-xs';
@@ -36,7 +37,12 @@ const money = value =>
 const PLAN_LABELS = Object.fromEntries(PLAN_IDS.map(id => [id, PLANS[id].name]));
 
 /** "Prueba: 9 días" / "Prueba vencida" / "Sin prueba". */
-function trialLabel(trialEndsAt) {
+function trialLabel(trialEndsAt, paidUntil) {
+  const end = [trialEndsAt, paidUntil].filter(Boolean).map(d => new Date(d).getTime()).sort((a, b) => b - a)[0];
+  if (paidUntil && end === new Date(paidUntil).getTime()) {
+    const left = Math.ceil((end - Date.now()) / (24 * 60 * 60 * 1000));
+    return left > 0 ? `Pagado: ${left} ${left === 1 ? 'día' : 'días'}` : 'Pago vencido';
+  }
   if (!trialEndsAt) return 'Sin prueba';
   const days = Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000));
   if (days <= 0) return 'Prueba vencida';
@@ -278,7 +284,7 @@ export default function Companies() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium">{PLAN_LABELS[c.plan] || c.plan}</span>
-                    <span className="block text-xs text-slate-500">{trialLabel(c.trialEndsAt)}</span>
+                    <span className="block text-xs text-slate-500">{trialLabel(c.trialEndsAt, c.paidUntil)}</span>
                   </td>
                   <td className="px-4 py-3 font-mono">{c.rnc || '—'}</td>
                   <td className="px-4 py-3 text-center font-mono">{c._count.users}</td>
@@ -386,7 +392,7 @@ export default function Companies() {
                   <p>RNC: <span className="font-mono">{detail.rnc || '—'}</span></p>
                   <p>Contacto: {[detail.phone, detail.email].filter(Boolean).join(' · ') || '—'}</p>
                   <p>Dirección: {detail.address || '—'}</p>
-                  <p>Plan: {PLAN_LABELS[detail.plan] || detail.plan} · {trialLabel(detail.trialEndsAt)}</p>
+                  <p>Plan: {PLAN_LABELS[detail.plan] || detail.plan} · {trialLabel(detail.trialEndsAt, detail.paidUntil)}</p>
                   <p>Estado: <strong className={detail.active ? 'text-emerald-600' : 'text-rose-500'}>{detail.active ? 'Activa' : 'Suspendida'}</strong></p>
                 </div>
                 <button onClick={startEdit} className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 hover:text-indigo-600 cursor-pointer">
@@ -421,6 +427,7 @@ export default function Companies() {
               </form>
             )}
             {resetMessage && <p className="text-xs text-emerald-600">{resetMessage}</p>}
+            <PaymentsPanel company={detail} onChanged={async () => setDetail(await api.platform.company(detail.id))} />
           </div>
         )}
       </Modal>
