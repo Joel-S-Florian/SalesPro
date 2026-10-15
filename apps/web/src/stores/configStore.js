@@ -17,6 +17,7 @@ export const DEFAULT_CONFIG = {
   security: { idleTimeoutMinutes: 30 },
   cashChange: { enabled: false },
   contactActions: { supplierCall: true, supplierWhatsapp: true, supplierMessage: 'Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.' },
+  labels: { presetId: 'ROLL_50x25', layout: null, showName: true, showPrice: true, split: 'single', maxPerFile: 500, defaultCopies: 1 },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,

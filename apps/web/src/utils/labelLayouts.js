@@ -4,17 +4,20 @@
  * - `roll`: rollo térmico, una etiqueta por página (la página mide lo mismo que la etiqueta).
  */
 export const LAYOUT_PRESETS = [
+  { id: 'ROLL_50x25', name: 'Rollo térmico 50 × 25 mm', kind: 'roll', pageW: 50, pageH: 25, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
+  { id: 'ROLL_40x30', name: 'Rollo térmico 40 × 30 mm', kind: 'roll', pageW: 40, pageH: 30, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
+  { id: 'ROLL_58x40', name: 'Rollo térmico 58 × 40 mm', kind: 'roll', pageW: 58, pageH: 40, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
+  // 3 columnas × 8 filas de 70 × 37 mm: 3 × 70 = 210 de ancho; 8 × 37 = 296 de alto, con 0.5 mm arriba y abajo
+  { id: 'A4_3x8_70x37', name: 'Hoja A4, 3 × 8 (70 × 37 mm)', kind: 'sheet', pageW: 210, pageH: 297, cols: 3, rows: 8, marginTop: 0.5, marginLeft: 0, gapX: 0, gapY: 0 },
   { id: 'A4_3x10', name: 'Hoja A4, 3 × 10 (70 × 29.7 mm)', kind: 'sheet', pageW: 210, pageH: 297, cols: 3, rows: 10, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
   { id: 'A4_3x8', name: 'Hoja A4, 3 × 8 (63.5 × 33.9 mm)', kind: 'sheet', pageW: 210, pageH: 297, cols: 3, rows: 8, marginTop: 13, marginLeft: 7.2, gapX: 2.5, gapY: 0 },
   { id: 'LETTER_3x10', name: 'Hoja Carta, 3 × 10 (tipo Avery 5160)', kind: 'sheet', pageW: 215.9, pageH: 279.4, cols: 3, rows: 10, marginTop: 12.7, marginLeft: 4.8, gapX: 3.2, gapY: 0 },
   { id: 'A4_5x13', name: 'Hoja A4, 5 × 13 (38 × 21.2 mm, pequeña)', kind: 'sheet', pageW: 210, pageH: 297, cols: 5, rows: 13, marginTop: 10.7, marginLeft: 4.7, gapX: 2.5, gapY: 0 },
-  { id: 'ROLL_50x25', name: 'Rollo térmico 50 × 25 mm', kind: 'roll', pageW: 50, pageH: 25, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
-  { id: 'ROLL_40x30', name: 'Rollo térmico 40 × 30 mm', kind: 'roll', pageW: 40, pageH: 30, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
-  { id: 'ROLL_58x40', name: 'Rollo térmico 58 × 40 mm', kind: 'roll', pageW: 58, pageH: 40, cols: 1, rows: 1, marginTop: 0, marginLeft: 0, gapX: 0, gapY: 0 },
   { id: 'CUSTOM', name: 'Personalizado', kind: 'sheet', pageW: 210, pageH: 297, cols: 3, rows: 8, marginTop: 10, marginLeft: 10, gapX: 2, gapY: 2 },
 ];
 
-export const DEFAULT_PRESET_ID = 'A4_3x10';
+// Rollo térmico por defecto (decisión: es lo que usará la mayoría); las hojas de stickers siguen disponibles
+export const DEFAULT_PRESET_ID = 'ROLL_50x25';
 export const getPreset = id => LAYOUT_PRESETS.find(p => p.id === id) || LAYOUT_PRESETS[0];
 
 const num = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);

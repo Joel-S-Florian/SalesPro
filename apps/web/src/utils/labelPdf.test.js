@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LAYOUT_PRESETS, cellOrigin, computeGrid, getPreset, planFiles, summarize } from './labelLayouts';
+import { DEFAULT_PRESET_ID, LAYOUT_PRESETS, cellOrigin, computeGrid, getPreset, planFiles, summarize } from './labelLayouts';
 import { buildLabelPdfs, encodeBarcode, isValidEan13 } from './labelPdf';
 
 const pdfPages = bytes => (new TextDecoder('latin1').decode(bytes).match(/\/Type\s*\/Page[^s]/g) || []).length;
@@ -20,6 +20,27 @@ describe('formatos de papel', () => {
     expect(a4.perPage).toBe(30);
     expect(a4.cellW).toBeCloseTo(70, 5);
     expect(a4.cellH).toBeCloseTo(29.7, 5);
+  });
+
+  it('el formato por defecto es el rollo térmico 50 × 25 y no se quitó ninguna opción anterior', () => {
+    expect(DEFAULT_PRESET_ID).toBe('ROLL_50x25');
+    const ids = LAYOUT_PRESETS.map(p => p.id);
+    for (const id of ['ROLL_50x25', 'ROLL_40x30', 'ROLL_58x40', 'A4_3x10', 'A4_3x8', 'LETTER_3x10', 'A4_5x13', 'CUSTOM']) expect(ids).toContain(id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('la hoja A4 de 3 columnas × 8 filas mide 70 × 37 mm por etiqueta y caben 24 por página', () => {
+    const sheet = computeGrid(getPreset('A4_3x8_70x37'));
+    expect(sheet.error).toBeUndefined();
+    expect(sheet.cols).toBe(3);
+    expect(sheet.rows).toBe(8);
+    expect(sheet.perPage).toBe(24);
+    expect(sheet.cellW).toBeCloseTo(70, 5);
+    expect(sheet.cellH).toBeCloseTo(37, 5);
+    // la última etiqueta termina dentro de la hoja
+    const last = cellOrigin(sheet, 23);
+    expect(last.x + sheet.cellW).toBeLessThanOrEqual(210 + 1e-6);
+    expect(last.y + sheet.cellH).toBeLessThanOrEqual(297 + 1e-6);
   });
 
   it('un rollo es una etiqueta por página y ocupa toda la página', () => {

@@ -43,6 +43,33 @@ export const contactActionsSchema = z.object({
   supplierMessage: z.string().trim().min(1, 'Escribe el mensaje de WhatsApp').max(300).default('Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.'),
 });
 
+/**
+ * Etiquetas: la última elección de papel y opciones, recordada POR EMPRESA (no por navegador).
+ * `layout` es null mientras se usa el formato tal cual; con medidas editadas guarda la hoja completa (en milímetros).
+ */
+const mm = (min, max) => z.number().min(min).max(max);
+export const labelsSchema = z.object({
+  presetId: z.string().trim().min(1).max(40).default('ROLL_50x25'),
+  layout: z
+    .object({
+      pageW: mm(10, 1000),
+      pageH: mm(10, 2000),
+      cols: z.number().int().min(1).max(30),
+      rows: z.number().int().min(1).max(100),
+      marginTop: mm(0, 100),
+      marginLeft: mm(0, 100),
+      gapX: mm(0, 100),
+      gapY: mm(0, 100),
+    })
+    .nullable()
+    .default(null),
+  showName: z.boolean().default(true),
+  showPrice: z.boolean().default(true),
+  split: z.enum(['single', 'perProduct', 'chunk']).default('single'),
+  maxPerFile: z.number().int().min(1).max(100000).default(500),
+  defaultCopies: z.number().int().min(1).max(9999).default(1),
+});
+
 /** Seguridad de la sesión: minutos sin actividad antes de cerrarla (0 = nunca). */
 export const securitySchema = z.object({
   idleTimeoutMinutes: z.number().int().min(0).max(1440).default(30),
@@ -68,6 +95,7 @@ export const configSchema = z.object({
   security: securitySchema,
   cashChange: cashChangeSchema,
   contactActions: contactActionsSchema,
+  labels: labelsSchema,
 });
 
 export const DEFAULT_CONFIG = {
@@ -86,6 +114,7 @@ export const DEFAULT_CONFIG = {
   security: { idleTimeoutMinutes: 30 },
   cashChange: { enabled: false },
   contactActions: { supplierCall: true, supplierWhatsapp: true, supplierMessage: 'Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.' },
+  labels: { presetId: 'ROLL_50x25', layout: null, showName: true, showPrice: true, split: 'single', maxPerFile: 500, defaultCopies: 1 },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,
@@ -122,6 +151,7 @@ export async function getConfig() {
     security: { ...DEFAULT_CONFIG.security, ...(stored.security || {}) },
     cashChange: { ...DEFAULT_CONFIG.cashChange, ...(stored.cashChange || {}) },
     contactActions: { ...DEFAULT_CONFIG.contactActions, ...(stored.contactActions || {}) },
+    labels: { ...DEFAULT_CONFIG.labels, ...(stored.labels || {}) },
   };
 }
 

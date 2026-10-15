@@ -8,6 +8,7 @@ import SmartSelect from '../components/ui/SmartSelect';
 import { downloadBlob, runLabelJob } from '../hooks/useLabelWorker';
 import { DEFAULT_PRESET_ID, LAYOUT_PRESETS, computeGrid, getPreset, planFiles, summarize } from '../utils/labelLayouts';
 import { isValidEan13 } from '../utils/labelPdf';
+import { useConfigStore } from '../stores/configStore';
 
 const inputClass =
   'px-3 py-2 border border-slate-200 dark:border-slate-800 rounded-lg bg-transparent text-xs outline-none focus:ring-1 focus:ring-indigo-500';
@@ -26,12 +27,23 @@ const LAYOUT_FIELDS = [
   ['gapY', 'Separación vertical (mm)'],
 ];
 
-function loadSettings() {
+// Antes la elección se guardaba en el navegador (compartida entre empresas); ahora vive en la configuración de cada empresa
+function clearOldBrowserSettings() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
-    return {};
+    // almacenamiento no disponible
   }
+}
+
+/** Solo se guarda un formato completo y con números: mientras se escribe una medida a medias no se envía nada. */
+function layoutForSave(layout) {
+  const keys = ['pageW', 'pageH', 'cols', 'rows', 'marginTop', 'marginLeft', 'gapX', 'gapY'];
+  if (!keys.every(key => layout[key] !== '' && Number.isFinite(Number(layout[key])))) return undefined;
+  const clean = Object.fromEntries(keys.map(key => [key, Number(layout[key])]));
+  clean.cols = Math.floor(clean.cols);
+  clean.rows = Math.floor(clean.rows);
+  return clean;
 }
 
 const clampCopies = value => Math.min(MAX_COPIES, Math.max(0, Math.floor(Number(value) || 0)));
@@ -42,12 +54,19 @@ const clampCopies = value => Math.min(MAX_COPIES, Math.max(0, Math.floor(Number(
  * Usa EAN-13 si el código es válido y Code 128 en los demás casos.
  */
 export default function BarcodeLabels() {
-  const saved = useMemo(loadSettings, []);
+  const loaded = useConfigStore(state => state.loaded);
+  if (!loaded) return <div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />;
+  return <LabelsPage />;
+}
+
+function LabelsPage() {
+  // Se lee una sola vez al abrir: la última elección de ESTA empresa
+  const saved = useMemo(() => useConfigStore.getState().config.labels || {}, []);
   const [search, setSearch] = useState('');
   const [items, setItems] = useState([]); // [{ id, code, name, price, copies }]
   const [defaultCopies, setDefaultCopies] = useState(saved.defaultCopies || 1);
   const [presetId, setPresetId] = useState(saved.presetId || DEFAULT_PRESET_ID);
-  const [layout, setLayout] = useState(saved.layout || getPreset(saved.presetId || DEFAULT_PRESET_ID));
+  const [layout, setLayout] = useState(saved.layout ? { ...getPreset(saved.presetId || DEFAULT_PRESET_ID), ...saved.layout } : getPreset(saved.presetId || DEFAULT_PRESET_ID));
   const [showName, setShowName] = useState(saved.showName ?? true);
   const [showPrice, setShowPrice] = useState(saved.showPrice ?? true);
   const [split, setSplit] = useState(saved.split || 'single');
@@ -62,12 +81,35 @@ export default function BarcodeLabels() {
   const totals = useMemo(() => summarize(items, grid), [items, grid]);
   const files = useMemo(() => planFiles(items, { split, maxPerFile }), [items, split, maxPerFile]);
 
+  // Recuerda la última elección por empresa (configuración del servidor), con una pausa para no guardar en cada tecla
+  const lastSaved = useRef(null);
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ presetId, layout, showName, showPrice, split, maxPerFile, defaultCopies }));
-    } catch {
-      // almacenamiento no disponible
+    clearOldBrowserSettings();
+  }, []);
+  useEffect(() => {
+    const cleanLayout = layoutForSave(layout);
+    if (!cleanLayout) return undefined;
+    const copies = Math.floor(Number(defaultCopies));
+    const perFile = Math.floor(Number(maxPerFile));
+    if (!(copies >= 1 && copies <= 9999) || !(perFile >= 1 && perFile <= 100000)) return undefined;
+    const labels = { presetId, layout: cleanLayout, showName, showPrice, split, maxPerFile: perFile, defaultCopies: copies };
+    const snapshot = JSON.stringify(labels);
+    // Lo primero que se ve al abrir es lo ya guardado: no hay nada que enviar hasta que el administrador cambie algo
+    if (lastSaved.current === null) {
+      lastSaved.current = snapshot;
+      return undefined;
     }
+    if (snapshot === lastSaved.current) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const next = await api.config.update({ labels });
+        useConfigStore.getState().setConfig(next);
+        lastSaved.current = snapshot;
+      } catch {
+        // si no se pudo guardar, la pantalla sigue funcionando; se reintenta con el próximo cambio
+      }
+    }, 800);
+    return () => clearTimeout(timer);
   }, [presetId, layout, showName, showPrice, split, maxPerFile, defaultCopies]);
 
   // --- Búsqueda en el servidor (el lector también escribe aquí) ---
