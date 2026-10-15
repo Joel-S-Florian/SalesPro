@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { SIGNUP_URL } from '../config';
+import { SIGNUP_URL, WHATSAPP, whatsappHref } from '../config';
 import { PLANS as SHARED_PLANS, PLAN_IDS, planFeatureLines } from '@factos/shared/plans.js';
 import { CERTIFICATE_PROVIDERS } from '@factos/shared/legal.js';
 import { BarChart3, Building2, Calculator, Check, ChevronDown, FileUp, Printer, ScanLine, Truck } from 'lucide-react';
@@ -235,8 +235,12 @@ export function Pricing() {
             <h3 className="text-lg font-semibold">¿Necesitas más? Escríbenos</h3>
             <p className="mt-1 text-ink/65">Más cajas, usuarios o sucursales: armamos un plan a tu medida, sin precio de lista.</p>
           </div>
-          <a href="#acceso" className="btn btn-ghost press shrink-0">
-            Hablar con nosotros
+          <a
+            href={WHATSAPP ? whatsappHref('Hola, necesito un plan a la medida de mi negocio en FACTOS.') : '#acceso'}
+            className="btn btn-ghost press shrink-0"
+            {...(WHATSAPP ? { target: '_blank', rel: 'noreferrer' } : {})}
+          >
+            {WHATSAPP ? 'Escribir por WhatsApp' : 'Hablar con nosotros'}
           </a>
         </div>
       </div>

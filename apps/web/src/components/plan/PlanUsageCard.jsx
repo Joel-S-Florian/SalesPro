@@ -1,10 +1,11 @@
 import React from 'react';
-import { Check, Lock } from 'lucide-react';
+import { Check, Lock, MessageCircle } from 'lucide-react';
 import { FEATURES, PLANS, PLAN_IDS, RESOURCES, planFeatureLines, planName } from '@factos/shared/plans.js';
-import { usePlanUsage } from '../../hooks/queries';
+import { useContact, usePlanUsage } from '../../hooks/queries';
 
 const STATUS_TEXT = {
   TRIAL: usage => `Prueba: ${usage.daysLeft === 1 ? 'queda 1 día' : `quedan ${usage.daysLeft} días`}`,
+  PAID: usage => `Suscripción pagada: ${usage.daysLeft === 1 ? 'queda 1 día' : `quedan ${usage.daysLeft} días`}`,
   GRACE: usage => `Gracia: ${usage.graceDaysLeft === 1 ? 'queda 1 día' : `quedan ${usage.graceDaysLeft} días`}`,
   EXPIRED: () => 'Prueba terminada',
   ACTIVE: () => 'Activo',
@@ -16,6 +17,7 @@ const cardClass = 'rounded-xl border border-slate-100 bg-white p-5 shadow-sm dar
 /** Configuración → Plan y uso: plan actual, estado de la prueba, uso contra los límites y funciones por plan. */
 export default function PlanUsageCard() {
   const { data: usage, isLoading, error, refetch } = usePlanUsage();
+  const { data: contact } = useContact();
   if (isLoading) return <div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />;
   if (error || !usage) {
     return (
@@ -87,7 +89,13 @@ export default function PlanUsageCard() {
 
       <div className={cardClass}>
         <h4 className="mb-1 text-sm font-semibold text-slate-800 dark:text-slate-100">Planes</h4>
-        <p className="mb-3 text-[11px] text-slate-400">Precios provisionales (no se están cobrando). ¿Necesitas más? Escríbenos y armamos un plan a tu medida.</p>
+        <p className="mb-3 text-[11px] text-slate-400">Precios provisionales (no se están cobrando). ¿Necesitas más? Escríbenos y armamos un plan a tu medida.
+          {contact?.link && (
+            <a href={contact.link} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline">
+              <MessageCircle className="h-3 w-3" /> Escribir por WhatsApp
+            </a>
+          )}
+        </p>
         <div className="grid gap-3 md:grid-cols-3">
           {PLAN_IDS.map(id => (
             <div key={id} className={`rounded-lg border p-3 text-xs ${id === usage.plan ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-slate-100 dark:border-slate-800'}`}>

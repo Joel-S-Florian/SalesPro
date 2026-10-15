@@ -31,6 +31,8 @@ const envSchema = z.object({
   SMTP_PASS: optionalText,
   SMTP_SECURE: z.preprocess(value => (value === '' || value === undefined ? undefined : value === 'true' || value === true), z.boolean().optional()),
   MAIL_FROM: optionalText, // p. ej. "FACTOS <no-responder@tudominio.com>"
+  WHATSAPP_NUMBER: optionalText, // WhatsApp Business de contacto, en formato internacional (p. ej. 18095550000)
+  WHATSAPP_WELCOME_MESSAGE: optionalText, // mensaje inicial del enlace wa.me (si se omite, se usa el de packages/shared/contact.js)
   NOTIFY_EMAIL: optionalEmail, // a dónde llegan las solicitudes de la landing y los registros nuevos
   WEB_URL: z.preprocess(value => (value === '' ? undefined : value), z.string().url().default('http://localhost:5180')), // dirección del sistema, para los enlaces de los correos
 });

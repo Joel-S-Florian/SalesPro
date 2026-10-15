@@ -52,6 +52,15 @@ export const useAuthMe = () => {
   });
 };
 
+/** Canal de contacto (WhatsApp Business) configurado en el servidor: `link` es null si no hay número. */
+export const useContact = () =>
+  useQuery({
+    queryKey: ['public', 'contact'],
+    queryFn: api.public.contact,
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+
 /** Plan, estado de la prueba y uso contra los límites de la empresa (no aplica al SUPERADMIN, que no tiene empresa). */
 export const usePlanUsage = () => {
   const enabled = useAuthStore(state => !!state.accessToken && state.user?.role !== 'SUPERADMIN');

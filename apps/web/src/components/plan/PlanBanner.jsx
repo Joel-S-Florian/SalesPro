@@ -1,12 +1,14 @@
 import React from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { RESOURCES, planName } from '@factos/shared/plans.js';
+import { useContact } from '../../hooks/queries';
 
 /**
  * Aviso del plan en todo el sistema: prueba por terminar (3 días o menos), gracia con cuenta regresiva, plan rebajado por vencimiento,
  * excesos sobre el tope y ventas del mes al 80 % / 100 %. Nunca habla de bloquear ventas: no se bloquean.
  */
 export default function PlanBanner({ usage, onViewPlans }) {
+  const { data: contact } = useContact();
   if (!usage) return null;
   const messages = [];
   let tone = 'info';
@@ -50,6 +52,11 @@ export default function PlanBanner({ usage, onViewPlans }) {
           <p key={message}>{message}</p>
         ))}
       </div>
+      {contact?.link && messages.some(m => /renovarla|gracia|venció|terminaron/.test(m)) && (
+        <a href={contact.link} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg border border-current/30 px-3 py-1 text-xs font-semibold">
+          WhatsApp
+        </a>
+      )}
       {onViewPlans && (
         <button type="button" onClick={onViewPlans} className="shrink-0 rounded-lg border border-current/30 px-3 py-1 text-xs font-semibold cursor-pointer">
           Ver planes

@@ -242,6 +242,8 @@ export const api = {
   public: {
     // Registro autónomo: devuelve la sesión iniciada de la cuenta recién creada
     signup: (payload) => request('/public/signup', { method: 'POST', body: JSON.stringify(payload) }),
+    // Canal de contacto (WhatsApp Business) configurado en el servidor
+    contact: () => request('/public/contact'),
   },
 
   platform: {

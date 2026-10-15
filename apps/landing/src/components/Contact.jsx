@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight, CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
-import { API_URL, BUSINESS_TYPES, CONTACT_EMAIL, WHATSAPP } from '../config';
+import { API_URL, BUSINESS_TYPES, CONTACT_EMAIL, WHATSAPP, whatsappHref } from '../config';
 
 const field =
   'h-12 w-full rounded-xl border border-white/15 bg-white/5 px-4 text-[15px] text-white placeholder:text-white/40 outline-none focus:border-brand focus:bg-white/10';
@@ -76,7 +76,7 @@ export default function Contact() {
           </p>
           {WHATSAPP && (
             <a
-              href={`https://wa.me/${WHATSAPP}?text=${encodeURIComponent('Hola, quiero información sobre FACTOS.')}`}
+              href={whatsappHref()}
               className="btn btn-ghost-dark press mt-8"
               target="_blank"
               rel="noreferrer"
@@ -93,6 +93,11 @@ export default function Contact() {
             <p className="mx-auto mt-3 max-w-sm leading-relaxed text-white/70">
               Gracias, {form.name.split(' ')[0]}. Recibimos tu mensaje y te escribiremos a <strong className="text-white">{form.contact}</strong> muy pronto.
             </p>
+            {WHATSAPP && (
+              <a href={whatsappHref()} className="btn btn-ghost-dark press mt-6" target="_blank" rel="noreferrer">
+                <MessageCircle className="h-4 w-4" /> ¿Prefieres hablarlo ya? Escríbenos por WhatsApp
+              </a>
+            )}
           </div>
         ) : (
         <form onSubmit={submit} className="space-y-4 rounded-2xl border border-white/12 bg-white/[0.04] p-6 sm:p-8" aria-label="Contacto">

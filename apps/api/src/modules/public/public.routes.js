@@ -6,7 +6,8 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { createLead } from '../leads/leads.service.js';
 import { signup } from './signup.service.js';
 import { MAX_PASSWORD_LENGTH, passwordProblem } from '@factos/shared/passwordPolicy.js';
-import { isDev } from '../../config/env.js';
+import { env, isDev } from '../../config/env.js';
+import { DEFAULT_WELCOME_MESSAGE, normalizeWhatsappNumber, whatsappLink } from '@factos/shared/contact.js';
 
 /**
  * Endpoints públicos (sin sesión), usados por la página de promoción.
@@ -46,6 +47,14 @@ const leadSchema = {
     website: z.string().max(200).optional(),
   }),
 };
+
+/** Canal de contacto (WhatsApp Business) para los avisos del panel; sin número configurado devuelve `whatsapp: null`. */
+router.get('/contact', (req, res) => {
+  const number = normalizeWhatsappNumber(env.WHATSAPP_NUMBER);
+  const message = env.WHATSAPP_WELCOME_MESSAGE || DEFAULT_WELCOME_MESSAGE;
+  res.set('Cache-Control', 'public, max-age=300');
+  res.json({ whatsapp: number || null, message, link: whatsappLink(number, message) || null });
+});
 
 router.post(
   '/leads',
