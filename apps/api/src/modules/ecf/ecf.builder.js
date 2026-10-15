@@ -136,6 +136,7 @@ function issuerBlock(issuer, issueDate) {
     tag('RNCEmisor', digits(issuer.rnc)) +
     tag('RazonSocialEmisor', clip(issuer.legalName, 150)) +
     tag('NombreComercial', clip(issuer.tradeName, 150)) +
+    tag('Sucursal', clip(issuer.branchCode, 20)) +
     tag('DireccionEmisor', clip(issuer.address, 100)) +
     tag('Municipio', issuer.municipalityCode) +
     tag('Provincia', issuer.provinceCode) +

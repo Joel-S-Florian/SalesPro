@@ -118,8 +118,11 @@ function buildA4Receipt(sale, qr = null) {
   doc.setTextColor(100, 116, 139); // Slate 500
   doc.text('Sistema de Facturación & Control de Inventarios', 14, 23);
   if (business.rnc) doc.text(`RNC: ${business.rnc}`, 14, 27.5);
-  if (business.address) doc.text(business.address.substring(0, 80), 14, 32);
-  const contact = [business.phone && `Tel: ${business.phone}`, business.email && `Email: ${business.email}`]
+  // Ventas de una sucursal que no es la Principal (o con datos propios): nombre, dirección y teléfono de esa sucursal
+  const branch = sale.branch && (!sale.branch.isMain || sale.branch.address || sale.branch.phone) ? sale.branch : null;
+  const address = [branch && `Sucursal ${branch.name}`, branch?.address || business.address].filter(Boolean).join(' · ');
+  if (address) doc.text(address.substring(0, 95), 14, 32);
+  const contact = [(branch?.phone || business.phone) && `Tel: ${branch?.phone || business.phone}`, business.email && `Email: ${business.email}`]
     .filter(Boolean)
     .join(' | ');
   if (contact) doc.text(contact, 14, 36.5);
@@ -421,7 +424,10 @@ function buildTicketReceipt(sale, qr = null) {
   doc.setFontSize(7.5);
   line('Sistema de Facturación', center, { align: 'center' });
   if (business.rnc) line(`RNC: ${business.rnc}`, center, { align: 'center' });
-  if (business.phone) line(`Tel: ${business.phone}`, center, { align: 'center' });
+  const branch = sale.branch && (!sale.branch.isMain || sale.branch.address || sale.branch.phone) ? sale.branch : null;
+  if (branch) line(`Sucursal ${branch.name}`.substring(0, 40), center, { align: 'center' });
+  if (branch?.address) line(branch.address.substring(0, 40), center, { align: 'center' });
+  if (branch?.phone || business.phone) line(`Tel: ${branch?.phone || business.phone}`, center, { align: 'center' });
   rule();
 
   doc.setFont('courier', 'bold');

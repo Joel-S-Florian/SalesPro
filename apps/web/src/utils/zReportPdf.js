@@ -56,6 +56,7 @@ export function printZReport(close) {
   doc.setFontSize(8);
   line('CIERRE DE CAJA (REPORTE Z)', center, { align: 'center' });
   doc.setFont('courier', 'normal');
+  if (close.branch?.name) line(`Sucursal: ${close.branch.name}`);
   line(`Caja: ${close.terminal?.name || ''}`);
   line(`Cajero: ${close.user?.fullName || ''}`);
   line(`Apertura: ${dateTime(close.openedAt)}`);

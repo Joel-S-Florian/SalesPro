@@ -76,6 +76,14 @@ describe('XML contra el esquema oficial de la DGII', () => {
     await check('E32', xml);
   });
 
+  it('E32 con el código de la sucursal emisora (opcional, antes de la dirección)', async () => {
+    const { xml } = buildEcfXml({ ...base, issuer: { ...issuer, branchCode: '002' }, ecfType: 'E32', eNcf: 'E320000000003', buyer: {} });
+    expect(xml).toContain('<NombreComercial>Mi Colmado</NombreComercial><Sucursal>002</Sucursal><DireccionEmisor>');
+    await check('E32', xml);
+    const without = buildEcfXml({ ...base, ecfType: 'E32', eNcf: 'E320000000004', buyer: {} }).xml;
+    expect(without).not.toContain('<Sucursal>');
+  });
+
   it('E32 con cédula del comprador y descuento', async () => {
     const { xml } = buildEcfXml({ ...base, ecfType: 'E32', eNcf: 'E320000000002', discount: 20, buyer: { rnc: '001-1492749-3', name: 'Juan Pérez' }, paymentMethod: 'TARJETA' });
     expect(xml).toContain('<RNCComprador>00114927493</RNCComprador>');

@@ -80,7 +80,7 @@ export async function issueEcf(tx, context, data) {
   try {
     const { eNcf, sequence } = await allocateENcf(tx, data.ecfType, issuedAt);
     const common = {
-      issuer: context.issuer,
+      issuer: { ...context.issuer, branchCode: data.branchCode },
       buyer: { rnc: buyerTaxId(data.customer), name: data.customer.name },
       lines: data.lines,
       discount: data.discount,

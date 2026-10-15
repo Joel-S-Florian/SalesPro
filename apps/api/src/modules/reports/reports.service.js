@@ -2,6 +2,8 @@ import { getExpiringSummary } from '../inventory/batches.service.js';
 import { prisma } from '../../config/db.js';
 import { round2, applyCreatedAtRange } from '../../shared/utils/helpers.js';
 import { getConfig } from '../config/config.service.js';
+import { getBranchStockMap } from '../inventory/branchStock.js';
+import { getWorkingBranchId } from '../branches/branches.service.js';
 
 const VALID_PAYMENT_METHODS = ['EFECTIVO', 'TARJETA'];
 const VALID_DOC_TYPES = ['CEDULA', 'RNC'];
@@ -298,18 +300,20 @@ export async function getCustomerSalesReport({ startDate, endDate, limit = 20 })
  * Get low stock alert
  */
 export async function getLowStockAlert() {
-  const products = await prisma.product.findMany({
+  const branchId = await getWorkingBranchId();
+  const found = await prisma.product.findMany({
     where: { active: true },
     select: {
       id: true,
       code: true,
       name: true,
-      stock: true,
       minStock: true,
       category: { select: { name: true } },
     },
-    orderBy: { stock: 'asc' },
   });
+  // Alerta de la sucursal de trabajo
+  const stocks = await getBranchStockMap(prisma, found.map(p => p.id), branchId);
+  const products = found.map(p => ({ ...p, stock: stocks.get(p.id) ?? 0 })).sort((a, b) => a.stock - b.stock);
 
   return products
     .filter(p => p.stock <= p.minStock)

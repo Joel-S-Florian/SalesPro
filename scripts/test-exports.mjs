@@ -90,7 +90,7 @@ try {
     const manifest = JSON.parse(files2['manifest.json']);
     const mismatches = [];
     for (const [table, n] of Object.entries(manifest.tables)) {
-      const model = { empresa: 'company', usuarios: 'user', categorias: 'category', proveedores: 'supplier', productos: 'product', presentaciones: 'productPresentation', lotes: 'productBatch', clientes: 'customer', ventas: 'sale', detalle_ventas: 'saleDetail', lotes_vendidos: 'saleBatchDetail', movimientos_inventario: 'inventoryLog', cajas: 'terminal', cierres_caja: 'cashierClose', pagos_tarjeta: 'cardPayment', secuencias_ncf: 'nCFSequence', secuencias_ecf: 'ecfSequence', comprobantes_ecf: 'ecfDocument', configuracion: 'systemConfig', auditoria: 'auditLog' }[table];
+      const model = { empresa: 'company', usuarios: 'user', sucursales: 'branch', stock_sucursales: 'branchStock', transferencias: 'stockTransfer', lineas_transferencia: 'stockTransferLine', categorias: 'category', proveedores: 'supplier', productos: 'product', presentaciones: 'productPresentation', lotes: 'productBatch', clientes: 'customer', ventas: 'sale', detalle_ventas: 'saleDetail', lotes_vendidos: 'saleBatchDetail', movimientos_inventario: 'inventoryLog', cajas: 'terminal', cierres_caja: 'cashierClose', pagos_tarjeta: 'cardPayment', secuencias_ncf: 'nCFSequence', secuencias_ecf: 'ecfSequence', comprobantes_ecf: 'ecfDocument', configuracion: 'systemConfig', auditoria: 'auditLog' }[table];
       const real = await basePrisma[model].count({ where: table === 'empresa' ? { id: A.id } : { companyId: A.id } });
       // auditoría y archivos pueden crecer entre el conteo y hoy (la descarga se audita): tolerancia solo ahí
       if (real !== n && table !== 'auditoria') mismatches.push(`${table}: ${n} vs ${real}`);
@@ -165,6 +165,7 @@ try {
   await basePrisma.customer.deleteMany({ where: { id: made.custB || '__none__' } });
   await basePrisma.category.deleteMany({ where: { id: { in: [made.catA, made.catB].filter(Boolean) } } });
   await basePrisma.auditLog.deleteMany({ where: { companyId: A.id, action: 'EXPORT_DOWNLOAD' } });
+  await basePrisma.branch.deleteMany({ where: { companyId: B.id } });
   await basePrisma.company.delete({ where: { id: B.id } }).catch(e => console.log('limpieza B:', e.message));
   await basePrisma.company.update({ where: { id: A.id }, data: { plan: planBefore } });
   await basePrisma.$disconnect();

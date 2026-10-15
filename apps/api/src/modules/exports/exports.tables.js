@@ -11,16 +11,20 @@ import { Prisma } from '@prisma/client';
 export const TABLES = {
   empresa: { model: 'Company', scope: 'id', exclude: [] },
   usuarios: { model: 'User', exclude: ['passwordHash'] },
+  sucursales: { model: 'Branch' },
   categorias: { model: 'Category' },
   proveedores: { model: 'Supplier' },
   productos: { model: 'Product' },
   presentaciones: { model: 'ProductPresentation' },
+  stock_sucursales: { model: 'BranchStock' },
   lotes: { model: 'ProductBatch' },
   clientes: { model: 'Customer' },
   ventas: { model: 'Sale' },
   detalle_ventas: { model: 'SaleDetail' },
   lotes_vendidos: { model: 'SaleBatchDetail' },
   movimientos_inventario: { model: 'InventoryLog' },
+  transferencias: { model: 'StockTransfer' },
+  lineas_transferencia: { model: 'StockTransferLine' },
   cajas: { model: 'Terminal' },
   cierres_caja: { model: 'CashierClose' },
   pagos_tarjeta: { model: 'CardPayment' },
@@ -32,8 +36,8 @@ export const TABLES = {
 };
 
 export const EXPORT_TYPES = {
-  SALES: { label: 'Ventas', feature: null, tables: ['ventas', 'detalle_ventas'] },
-  PRODUCTS: { label: 'Productos e inventario', feature: null, tables: ['categorias', 'proveedores', 'productos', 'presentaciones', 'lotes', 'movimientos_inventario'] },
+  SALES: { label: 'Ventas', feature: null, tables: ['sucursales', 'ventas', 'detalle_ventas'] },
+  PRODUCTS: { label: 'Productos e inventario', feature: null, tables: ['sucursales', 'categorias', 'proveedores', 'productos', 'presentaciones', 'stock_sucursales', 'lotes', 'movimientos_inventario', 'transferencias', 'lineas_transferencia'] },
   CUSTOMERS: { label: 'Clientes', feature: null, tables: ['clientes'] },
   FULL: { label: 'Respaldo completo', feature: 'fullBackup', tables: Object.keys(TABLES) },
 };
