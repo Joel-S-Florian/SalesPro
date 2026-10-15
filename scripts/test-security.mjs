@@ -202,6 +202,8 @@ try {
     await basePrisma.category.deleteMany({ where: { companyId } });
     await basePrisma.systemConfig.deleteMany({ where: { companyId } });
     await basePrisma.user.deleteMany({ where: { companyId } });
+    await basePrisma.terminal.deleteMany({ where: { companyId } }); // el registro autónomo crea la primera caja
+    await basePrisma.subscriptionPayment.deleteMany({ where: { companyId } });
     await basePrisma.company.delete({ where: { id: companyId } }).catch(e => console.log('limpieza:', e.message.split('\n').pop()));
   }
   await basePrisma.user.deleteMany({ where: { id: { in: created.users } } });
