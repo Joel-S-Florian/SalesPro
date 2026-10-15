@@ -24,7 +24,7 @@ export default function ChangePasswordModal({ isOpen, forced = false, onClose, o
 
   const submit = async event => {
     event.preventDefault();
-    const problem = passwordProblem(newPassword, user);
+    const problem = passwordProblem(newPassword, { role: user?.role, username: user?.username, email: user?.email, companyName: user?.companyName || user?.company?.name });
     if (problem) return notify.warning(`La contraseña nueva no sirve: ${problem.toLowerCase()}`);
     if (newPassword !== confirm) return notify.warning('Las contraseñas nuevas no coinciden');
     if (newPassword === oldPassword) return notify.warning('La contraseña nueva debe ser distinta de la actual');
@@ -59,7 +59,7 @@ export default function ChangePasswordModal({ isOpen, forced = false, onClose, o
         </div>
         <div className="space-y-1.5">
           <label htmlFor="cp-new" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Contraseña nueva</label>
-          <PasswordField id="cp-new" value={newPassword} onChange={setNewPassword} context={user} className={inputClass} />
+          <PasswordField id="cp-new" value={newPassword} onChange={setNewPassword} context={{ role: user?.role, username: user?.username, email: user?.email, companyName: user?.companyName || user?.company?.name }} className={inputClass} />
         </div>
         <div className="space-y-1.5">
           <label htmlFor="cp-confirm" className="block text-xs font-semibold text-slate-600 dark:text-slate-400">Repite la contraseña nueva</label>

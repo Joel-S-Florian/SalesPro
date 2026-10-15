@@ -6,6 +6,7 @@ import { initializeNCFSequences } from './shared/utils/ncf.js';
 import { basePrisma as prisma } from './config/db.js';
 import { startEcfWorker, stopEcfWorker } from './modules/ecf/ecf.outbox.js';
 import { startExportWorker, stopExportWorker } from './modules/exports/exports.service.js';
+import { assertNoDevSuperadmin } from './shared/utils/startupChecks.js';
 
 const PORT = env.PORT;
 
@@ -20,6 +21,14 @@ async function startServer() {
     console.log(`[Factos] NCF sequences initialized for ${companies.length} companies`);
   } catch (error) {
     console.warn('[Factos] Failed to initialize NCF sequences:', error.message);
+  }
+
+  // Seguridad: en producción no se arranca con la contraseña de desarrollo de un SUPERADMIN
+  try {
+    await assertNoDevSuperadmin();
+  } catch (error) {
+    console.error(`[Factos] ARRANQUE CANCELADO: ${error.message}`);
+    process.exit(1);
   }
 
   try {

@@ -552,12 +552,26 @@ export async function getPurchasesReport({ from, to }) {
   const productsMap = new Map();
   let total = 0;
   let withoutSupplier = 0;
+  // «Compra sin proveedor» (proveedor de sistema) no es un proveedor: cuenta en el total pero no entra al ranking
+  const systemSupplier = await prisma.supplier.findFirst({ where: { isSystem: true }, select: { id: true } });
 
   logs.forEach(l => {
     const cost = Number(l.totalCost) || 0;
     total += cost;
+    const noSupplier = (!l.supplier && !l.supplierId) || (systemSupplier && l.supplierId === systemSupplier.id);
+    if (noSupplier) withoutSupplier += 1;
     const name = l.supplier || 'Sin proveedor';
-    if (!l.supplier && !l.supplierId) withoutSupplier += 1;
+    if (noSupplier) {
+      const p0 = productsMap.get(l.productId) || { productId: l.productId, name: l.productName, units: 0, total: 0, first: null, last: null, purchases: 0 };
+      p0.units += l.quantity;
+      p0.total += cost;
+      p0.purchases += 1;
+      const unit0 = Number(l.unitCost) || 0;
+      if (!p0.first) p0.first = unit0;
+      p0.last = unit0;
+      productsMap.set(l.productId, p0);
+      return;
+    }
     const s = suppliers.get(name) || { supplier: name, entries: 0, units: 0, total: 0, lastPurchase: null, products: new Set() };
     s.entries += 1;
     s.units += l.quantity;

@@ -368,7 +368,7 @@ export async function createSale(data, userId, userName, requester = { userId, r
 
   // Con facturación electrónica activa el comprobante es un e-CF (se asigna dentro de la transacción);
   // si no, se usa el NCF de papel (serie B)
-  const ecfContext = await loadIssuingContext();
+  const ecfContext = await loadIssuingContext({ purpose: 'sign-ecf', userId });
   const ncfType = determineNCFType(customer);
   let invoiceNumber = ecfContext ? null : await getNextNCF(ncfType);
 
@@ -560,7 +560,7 @@ export async function createCreditNote(originalSaleId, data, userId, userName, r
   const total = round2(taxable + tax);
 
   // Devolución de una venta electrónica -> nota de crédito electrónica (E34) que referencia el e-CF original
-  const ecfContext = await loadIssuingContext();
+  const ecfContext = await loadIssuingContext({ purpose: 'sign-ecf', userId });
   if (original.eNcf && !ecfContext) {
     throw AppError.badRequest('La venta original es un comprobante electrónico: active la facturación electrónica para emitir su nota de crédito');
   }

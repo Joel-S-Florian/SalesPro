@@ -8,7 +8,6 @@ import { authorize } from '../../shared/middlewares/authorize.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { auditLog, createAuditLog } from '../../shared/middleware/audit.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
-import { passwordSchema } from '../../shared/utils/passwordPolicy.js';
 
 const router = express.Router();
 
@@ -31,7 +30,6 @@ const createSchema = {
     admin: z.object({
       fullName: z.string().trim().min(1, 'Nombre del administrador requerido').max(120),
       username: z.string().trim().min(3).max(50).regex(/^[a-zA-Z0-9._-]+$/, 'Solo letras, números, punto, guion y guion bajo'),
-      password: passwordSchema,
     }),
   }),
 };
@@ -44,7 +42,6 @@ const updateSchema = {
 };
 const resetSchema = {
   params: z.object({ id: z.string().min(1).max(64), userId: z.string().min(1).max(64) }),
-  body: z.object({ password: passwordSchema }),
 };
 
 // Solo el equipo de la plataforma
@@ -148,7 +145,7 @@ router.post(
   validate(resetSchema),
   auditLog('RESET_COMPANY_USER_PASSWORD', 'company'),
   asyncHandler(async (req, res) => {
-    res.json(await platformService.resetCompanyUserPassword(req.params.id, req.params.userId, req.body.password));
+    res.json(await platformService.resetCompanyUserPassword(req.params.id, req.params.userId));
   })
 );
 

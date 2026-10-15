@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { api } from '../services/api';
-import { Loader2, Plus, Search, Edit2, Shield, UserCheck, UserX, Key } from 'lucide-react';
+import { Loader2, Plus, Search, Edit2, Shield, UserCheck, UserX, KeyRound } from 'lucide-react';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
 import { usePagedList } from '../hooks/usePagedList';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
-import PasswordField from '../components/ui/PasswordField';
+import TempPasswordModal from '../components/auth/TempPasswordModal';
 import { DocumentType, formatDocument, validateDocument } from '../utils/documents';
 
 export default function Users() {
@@ -28,7 +28,7 @@ export default function Users() {
   const [documentId, setDocumentId] = useState('');
   const [phone, setPhone] = useState('');
   const [role, setRole] = useState('VENDEDOR');
-  const [password, setPassword] = useState('');
+  const [tempPassword, setTempPassword] = useState(null); // clave temporal recién generada (se muestra una sola vez)
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -40,7 +40,6 @@ export default function Users() {
     setDocumentId('');
     setPhone('');
     setRole('VENDEDOR');
-    setPassword('');
     setActive(true);
     setIsFormOpen(true);
   };
@@ -53,9 +52,19 @@ export default function Users() {
     setDocumentId(u.documentId ? formatDocument(DocumentType.CEDULA, u.documentId) : '');
     setPhone(u.phone || '');
     setRole(u.role || 'VENDEDOR');
-    setPassword('');
     setActive(u.active !== false);
     setIsFormOpen(true);
+  };
+
+  const resetPassword = async user => {
+    if (!window.confirm(`¿Generar una clave temporal nueva para ${user.username}? La clave actual dejará de servir y se cerrará su sesión.`)) return;
+    try {
+      const result = await api.auth.resetUserPassword(user.id);
+      setTempPassword({ username: result.username, password: result.temporaryPassword, expiresAt: result.temporaryPasswordExpiresAt });
+      reload();
+    } catch (err) {
+      notify.error(err.message || 'No se pudo restablecer la contraseña');
+    }
   };
 
   const handleSaveUser = async (e) => {
@@ -72,7 +81,6 @@ export default function Users() {
         fullName,
         username,
         role,
-        password,
         active,
         ...(email.trim() ? { email: email.trim() } : {}),
         ...(documentId.trim() ? { documentId: documentId.trim() } : {}),
@@ -80,16 +88,13 @@ export default function Users() {
       };
       if (editingId) {
         // Edit
-        await api.auth.updateUser(editingId, { fullName, role, active, email: email.trim() || null, documentId: documentId.trim() || null, phone: phone.trim() || null, ...(password ? { password } : {}) });
+        await api.auth.updateUser(editingId, { fullName, role, active, email: email.trim() || null, documentId: documentId.trim() || null, phone: phone.trim() || null });
         notify.success('Usuario actualizado');
       } else {
-        // Create
-        if (!password) {
-          notify.warning('La contraseña es obligatoria para nuevos usuarios');
-          return;
-        }
-        await api.auth.createUser(payload);
+        // Create: la clave temporal la genera el servidor y se muestra una sola vez
+        const created = await api.auth.createUser(payload);
         notify.success('Usuario creado');
+        if (created.temporaryPassword) setTempPassword({ username: created.username, password: created.temporaryPassword, expiresAt: created.temporaryPasswordExpiresAt });
       }
       setIsFormOpen(false);
       reload();
@@ -193,6 +198,14 @@ export default function Users() {
                         title="Modificar Credenciales"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button aria-label={`Restablecer contraseña de ${u.username}`}
+                        onClick={() => resetPassword(u)}
+                        disabled={u.username === 'admin'}
+                        className="text-slate-400 hover:text-indigo-600 disabled:opacity-30 p-1.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Restablecer contraseña (genera una clave temporal)"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -325,22 +338,15 @@ export default function Users() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="usr-pass" className="block text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1">
-              <Key className="w-3.5 h-3.5" />
-              {editingId ? 'Nueva Contraseña (Dejar vacío para no cambiar)' : 'Contraseña de Acceso *'}
-            </label>
-            <p className="text-[11px] text-slate-400">Es una clave temporal: la persona deberá cambiarla al iniciar sesión.</p>
-            <PasswordField
-              id="usr-pass"
-              required={!editingId}
-              generate
-              value={password}
-              onChange={setPassword}
-              context={{ username, email }}
-              className="w-full px-3.5 py-2 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-800 dark:text-slate-100 bg-transparent focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-xs font-mono"
-            />
-          </div>
+          {!editingId && (
+            <p className="flex items-start gap-2 rounded-lg bg-indigo-50 p-3 text-[11px] leading-relaxed text-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-200">
+              <KeyRound className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              La contraseña la genera el sistema: al guardar verás una clave temporal (una sola vez) para entregársela. Caduca a las 48 horas y la persona deberá cambiarla al entrar.
+            </p>
+          )}
+          {editingId && (
+            <p className="text-[11px] text-slate-400">Para dar una clave nueva usa el botón de la llave en la lista de usuarios: genera una temporal y cierra la sesión de la persona.</p>
+          )}
 
           <div className="flex gap-3 pt-3 justify-end">
             <button
@@ -366,6 +372,7 @@ export default function Users() {
           </div>
         </form>
       </Modal>
+      <TempPasswordModal data={tempPassword} onClose={() => setTempPassword(null)} title="Clave temporal" />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { basePrisma } from '../../config/db.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { hashPassword } from '../../shared/utils/crypto.js';
+import { generateTemporaryPassword, TEMP_PASSWORD_HOURS } from '../../shared/utils/tempPassword.js';
 import { bootstrapCompany } from './bootstrap.js';
 
 /**
@@ -72,7 +73,10 @@ export async function createCompany({ admin, trialDays, ...companyData }) {
     throw AppError.conflict('El nombre de usuario ya está registrado', ERROR_CODES.DUPLICATE_ENTRY);
   }
 
-  const passwordHash = await hashPassword(admin.password);
+  // La clave del primer administrador es temporal: la genera el servidor y se devuelve una sola vez
+  const temporaryPassword = admin.password || generateTemporaryPassword({ username, companyName: data.name });
+  const tempPasswordExpiresAt = admin.password ? null : new Date(Date.now() + TEMP_PASSWORD_HOURS * 3600 * 1000);
+  const passwordHash = await hashPassword(temporaryPassword);
 
   const company = await basePrisma.$transaction(async tx => {
     const created = await tx.company.create({ data });
@@ -83,13 +87,14 @@ export async function createCompany({ admin, trialDays, ...companyData }) {
         fullName: admin.fullName,
         passwordHash,
         role: 'ADMINISTRADOR',
+        ...(admin.password ? {} : { mustChangePassword: true, tempPasswordExpiresAt }),
       },
     });
     return created;
   });
 
   await bootstrapCompany(company.id);
-  return getCompany(company.id);
+  return { ...(await getCompany(company.id)), adminUsername: username, ...(admin.password ? {} : { adminTemporaryPassword: temporaryPassword, adminTemporaryPasswordExpiresAt: tempPasswordExpiresAt }) };
 }
 
 export async function updateCompany(id, data) {
@@ -106,12 +111,15 @@ export async function updateCompany(id, data) {
   return getCompany(id);
 }
 
-export async function resetCompanyUserPassword(companyId, userId, newPassword) {
-  const user = await basePrisma.user.findFirst({ where: { id: userId, companyId } });
+export async function resetCompanyUserPassword(companyId, userId) {
+  const user = await basePrisma.user.findFirst({ where: { id: userId, companyId }, include: { company: { select: { name: true } } } });
   if (!user) throw AppError.notFound('Usuario no encontrado en esa empresa');
-  await basePrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(newPassword), mustChangePassword: true } });
+  // Clave temporal generada por el servidor: se devuelve una sola vez, caduca a las 48 h y obliga a cambiarla
+  const temporaryPassword = generateTemporaryPassword({ username: user.username, email: user.email, companyName: user.company?.name });
+  const temporaryPasswordExpiresAt = new Date(Date.now() + TEMP_PASSWORD_HOURS * 3600 * 1000);
+  await basePrisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true, tempPasswordExpiresAt: temporaryPasswordExpiresAt } });
   await basePrisma.session.deleteMany({ where: { userId } });
-  return { ok: true };
+  return { ok: true, username: user.username, temporaryPassword, temporaryPasswordExpiresAt };
 }
 
 export async function getPlatformStats() {

@@ -83,7 +83,7 @@ try {
   check('se activa la pre-certificación', on.status === 200 && on.json.mode === 'PRECERT');
 
   const xml = '<ECF><Encabezado><IdDoc><eNCF>E320000000001</eNCF></IdDoc></Encabezado></ECF>';
-  const creds1 = await loadCredentialsFromDb(company.id);
+  const creds1 = await loadCredentialsFromDb(company.id, { purpose: 'sign-ecf', documentId: 'E320000000001' });
   const signed1 = signXml(xml, creds1);
   check('firma un e-CF con el certificado guardado y la firma verifica', verifySignedXml(signed1).valid === true);
   check('el código de seguridad tiene 6 caracteres', securityCodeOf(signed1).length === 6, securityCodeOf(signed1));
@@ -97,7 +97,7 @@ try {
   const tokensMid = sim.state.issuedTokens;
   const probe2 = await call('POST', '/ecf/test-connection', { token });
   check('tras el cambio se pide un token nuevo (se olvidó el anterior)', probe2.json?.ok === true && sim.state.issuedTokens === tokensMid + 1);
-  const creds2 = await loadCredentialsFromDb(company.id);
+  const creds2 = await loadCredentialsFromDb(company.id, { purpose: 'sign-arecf' });
   check('las credenciales en uso cambiaron al certificado nuevo', creds2.certPem !== creds1.certPem && verifySignedXml(signXml(xml, creds2)).valid === true);
 
   // --- Seguridad ---
@@ -106,12 +106,31 @@ try {
   const cfgText = JSON.stringify((await call('GET', '/ecf/config', { token })).json);
   check('la configuración nunca devuelve el certificado ni la contraseña', !cfgText.includes(TEST_CERT_PASSWORD) && !/certificateEnc|certificatePassEnc|PRIVATE KEY/.test(cfgText));
 
+  // --- Auditoría del uso del certificado ---
+  let rejectedPurpose = false;
+  try {
+    await loadCredentialsFromDb(company.id);
+  } catch (error) {
+    rejectedPurpose = /propósito/.test(error.message);
+  }
+  check('usar el certificado sin declarar un propósito se rechaza (no hay uso sin rastro)', rejectedPurpose);
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const uses = await basePrisma.auditLog.findMany({ where: { companyId: company.id, action: 'ECF_CERT_USED' }, orderBy: { createdAt: 'asc' } });
+  const purposes = uses.map(u => u.newData?.purpose);
+  check('cada uso quedó registrado con su propósito (test-connection, sign-ecf, sign-arecf)', ['test-connection', 'sign-ecf', 'sign-arecf'].every(p => purposes.includes(p)), purposes.join(','));
+  check('el uso de un documento guarda su identificador', uses.some(u => u.entityId === 'E320000000001'));
+  const usageText = JSON.stringify(uses);
+  check('el registro nunca guarda el certificado, la contraseña, el token ni el XML', !usageText.includes(TEST_CERT_PASSWORD) && !/PRIVATE KEY|BEGIN CERTIFICATE|<ECF|certificateEnc|token":/.test(usageText));
+  const { runInTenant } = await load('config/tenant.js');
+  const listed = await runInTenant(company.id, async () => (await load('modules/ecf/ecf.config.service.js')).listCertificateUsage(50));
+  check('el tablero lista los usos (más reciente primero) sin datos del certificado', listed.length >= 3 && new Date(listed[0].at) >= new Date(listed.at(-1).at) && !JSON.stringify(listed).includes('PRIVATE KEY'));
+
   // --- Quitar ---
   const removed = await call('DELETE', '/ecf/certificate', { token });
   check('quitar el certificado apaga la facturación y borra todo', removed.status === 200 && removed.json.mode === 'OFF' && removed.json.certificate.loaded === false);
   let blocked = false;
   try {
-    await loadCredentialsFromDb(company.id);
+    await loadCredentialsFromDb(company.id, { purpose: 'sign-ecf' });
   } catch {
     blocked = true;
   }
@@ -119,7 +138,7 @@ try {
 } finally {
   await basePrisma.ecfSequence.deleteMany({ where: { companyId: company.id } });
   await basePrisma.ecfConfig.deleteMany({ where: { companyId: company.id } });
-  await basePrisma.auditLog.deleteMany({ where: { companyId: company.id, entity: { in: ['ecf_config', 'ecf_sequence'] } } });
+  await basePrisma.auditLog.deleteMany({ where: { companyId: company.id, entity: { in: ['ecf_config', 'ecf_sequence', 'ecf_certificate'] } } });
   await basePrisma.company.update({ where: { id: company.id }, data: { rnc: previousRnc } });
   apiServer.close();
   simServer.close();

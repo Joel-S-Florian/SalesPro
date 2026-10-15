@@ -2,6 +2,14 @@ import { basePrisma } from '../../config/db.js';
 import { getTenantIdOrNull } from '../../config/tenant.js';
 import { logger } from '../../shared/utils/logger.js';
 
+/** Campos que NUNCA se guardan en la auditoría (contraseñas, claves temporales, tokens, secretos, certificados). */
+const SECRET_KEY = /password|contrasena|temporarypassword|token|secret|passphrase|certificate|fileBase64/i;
+export function redactSecrets(value, depth = 0) {
+  if (value === null || typeof value !== 'object' || depth > 6) return value;
+  if (Array.isArray(value)) return value.map(item => redactSecrets(item, depth + 1));
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, SECRET_KEY.test(key) ? '[oculto]' : redactSecrets(item, depth + 1)]));
+}
+
 /**
  * Audit log middleware - logs all mutating operations
  */
@@ -53,7 +61,7 @@ export function auditLog(action, entity) {
             action,
             entity,
             entityId: req.params.id || (newData?.id ? newData.id : null),
-            newData,
+            newData: redactSecrets(newData),
             ipAddress,
             userAgent,
           },

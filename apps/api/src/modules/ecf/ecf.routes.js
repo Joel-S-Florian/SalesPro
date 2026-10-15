@@ -100,6 +100,9 @@ const saleParams = z.object({ saleId: z.string().min(1).max(64) });
 
 router.get('/summary', asyncHandler(async (_req, res) => res.json(await documents.getSummary())));
 
+// Auditoría: cada vez que el servidor usa el certificado de la empresa (últimos 50)
+router.get('/certificate-usage', asyncHandler(async (_req, res) => res.json({ data: await service.listCertificateUsage(50) })));
+
 router.get(
   '/documents',
   validate({

@@ -14,8 +14,9 @@ const digits = value => String(value ?? '').replace(/\D/g, '');
 export async function scheduleDelivery(doc) {
   try {
     if (!doc.saleId || doc.kind !== 'ECF') return null;
-    const sale = await basePrisma.sale.findUnique({ where: { id: doc.saleId }, select: { customerId: true } });
-    const customer = sale && (await basePrisma.customer.findUnique({ where: { id: sale.customerId } }));
+    // Siempre con la empresa del documento: este trabajo corre en segundo plano, sin contexto de empresa automático
+    const sale = await basePrisma.sale.findFirst({ where: { id: doc.saleId, companyId: doc.companyId }, select: { customerId: true } });
+    const customer = sale && (await basePrisma.customer.findFirst({ where: { id: sale.customerId, companyId: doc.companyId } }));
     if (!customer) return null;
 
     const rnc = digits(customer.rnc || customer.documentId);
@@ -30,7 +31,7 @@ export async function scheduleDelivery(doc) {
       isIssuer = result.isIssuer;
       target = result.receptionUrl || null;
       await basePrisma.customer.update({
-        where: { id: customer.id },
+        where: { id: customer.id, companyId: doc.companyId },
         data: { ecfIssuer: result.isIssuer, ecfReceptionUrl: target, ecfApprovalUrl: result.approvalUrl || null, ecfDirectoryCheckedAt: new Date() },
       });
     }

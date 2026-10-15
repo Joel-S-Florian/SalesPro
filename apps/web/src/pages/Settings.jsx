@@ -81,7 +81,7 @@ function SecurityCard({ value, onChange }) {
 /** Botones de llamar y de WhatsApp: se activan por separado y el mensaje de WhatsApp es editable. */
 function ContactActionsCard({ value, onChange, businessName }) {
   const set = patch => onChange({ ...value, ...patch });
-  const preview = (value.supplierMessage || '').replace('{contacto}', 'Juan').replace('{empresa}', businessName || 'su empresa');
+  const preview = (value.supplierMessage || '').replaceAll('{contacto}', 'Juan').replaceAll('{empresa}', businessName || 'su empresa').replaceAll('{productos}', 'Arroz 5 lb, Aceite 1 gal');
   return (
     <div className={cardClass} id="contact-settings">
       <h4 className="font-semibold text-sm text-slate-800 dark:text-slate-100">Llamadas y WhatsApp a proveedores</h4>
@@ -100,7 +100,7 @@ function ContactActionsCard({ value, onChange, businessName }) {
         <div className="space-y-1.5">
           <label htmlFor="wa-message" className={labelClass}>Mensaje inicial de WhatsApp</label>
           <textarea id="wa-message" rows={2} maxLength={300} value={value.supplierMessage} onChange={e => set({ supplierMessage: e.target.value })} className={inputClass} />
-          <p className="text-[11px] text-slate-400">Usa {'{contacto}'} para el nombre del contacto (o del proveedor) y {'{empresa}'} para tu negocio. Vista previa: <em>{preview}</em></p>
+          <p className="text-[11px] text-slate-400">Usa {'{contacto}'} para el nombre del contacto (o del proveedor), {'{empresa}'} para tu negocio y {'{productos}'} para los productos que se le han comprado a ese proveedor y están bajos de existencia. Vista previa: <em>{preview}</em></p>
         </div>
       )}
     </div>

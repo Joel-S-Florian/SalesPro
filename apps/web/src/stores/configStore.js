@@ -16,7 +16,7 @@ export const DEFAULT_CONFIG = {
   requireOpenShift: false,
   security: { idleTimeoutMinutes: 30 },
   cashChange: { enabled: false },
-  contactActions: { supplierCall: false, supplierWhatsapp: false, supplierMessage: 'Hola {contacto}, le escribimos de {empresa} para coordinar un pedido.' },
+  contactActions: { supplierCall: true, supplierWhatsapp: true, supplierMessage: 'Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.' },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,
@@ -56,4 +56,7 @@ export const useConfigStore = create(set => ({
   },
 
   setConfig: config => set({ config: { ...DEFAULT_CONFIG, ...config }, loaded: true }),
+
+  /** Vuelve a los valores por defecto (al cerrar sesión o cambiar de empresa: nada de la empresa anterior debe quedar). */
+  reset: () => set({ config: DEFAULT_CONFIG, loaded: false }),
 }));

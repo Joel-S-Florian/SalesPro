@@ -36,11 +36,11 @@ export const cashChangeSchema = z.object({
   enabled: z.boolean().default(false),
 });
 
-/** Botones de llamar y de WhatsApp (proveedores). El mensaje admite {contacto} y {empresa}. */
+/** Botones de llamar y de WhatsApp (proveedores). El mensaje admite {contacto}, {empresa} y {productos}. */
 export const contactActionsSchema = z.object({
-  supplierCall: z.boolean().default(false),
-  supplierWhatsapp: z.boolean().default(false),
-  supplierMessage: z.string().trim().min(1, 'Escribe el mensaje de WhatsApp').max(300).default('Hola {contacto}, le escribimos de {empresa} para coordinar un pedido.'),
+  supplierCall: z.boolean().default(true),
+  supplierWhatsapp: z.boolean().default(true),
+  supplierMessage: z.string().trim().min(1, 'Escribe el mensaje de WhatsApp').max(300).default('Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.'),
 });
 
 /** Seguridad de la sesión: minutos sin actividad antes de cerrarla (0 = nunca). */
@@ -85,7 +85,7 @@ export const DEFAULT_CONFIG = {
   requireOpenShift: false,
   security: { idleTimeoutMinutes: 30 },
   cashChange: { enabled: false },
-  contactActions: { supplierCall: false, supplierWhatsapp: false, supplierMessage: 'Hola {contacto}, le escribimos de {empresa} para coordinar un pedido.' },
+  contactActions: { supplierCall: true, supplierWhatsapp: true, supplierMessage: 'Hola {contacto}, le escribimos de {empresa}. Queremos hacer un pedido: {productos}. ¿Nos confirma disponibilidad y precio? Gracias.' },
   perishable: {
     enabled: false,
     yellowThresholdDays: 30,

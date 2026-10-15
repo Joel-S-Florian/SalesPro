@@ -19,6 +19,7 @@ router.use(authenticate, authorize('ADMINISTRADOR'));
 
 router.get('/', validate(supplierQuerySchema), suppliersController.getSuppliers);
 router.get('/:id', validate(supplierIdParamSchema), suppliersController.getSupplier);
+router.get('/:id/reorder-products', validate(supplierIdParamSchema), suppliersController.getReorderProducts);
 router.get('/:id/purchases', validate(supplierPurchasesQuerySchema), suppliersController.getSupplierPurchases);
 router.post('/', validate(createSupplierSchema), auditLog('CREATE_SUPPLIER', 'supplier'), suppliersController.createSupplier);
 router.put('/:id', validate(updateSupplierSchema), auditLog('UPDATE_SUPPLIER', 'supplier'), suppliersController.updateSupplier);

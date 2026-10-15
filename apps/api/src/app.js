@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import { env } from './config/env.js';
+import { env, isDev } from './config/env.js';
 import { rateLimiter } from './shared/middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './shared/middleware/errorHandler.js';
 import { sanitizeInput } from './shared/middleware/validate.js';
@@ -38,7 +38,7 @@ app.set('trust proxy', 1);
 // Security middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: env.isDev ? false : undefined,
+  contentSecurityPolicy: isDev ? false : undefined,
 }));
 
 // CORS
@@ -59,7 +59,7 @@ app.use(cookieParser());
 app.use(sanitizeInput);
 
 // Logging
-if (env.isDev) {
+if (isDev) {
   app.use(morgan('dev'));
 } else {
   app.use(morgan('combined'));

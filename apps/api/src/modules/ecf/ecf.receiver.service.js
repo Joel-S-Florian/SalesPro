@@ -50,7 +50,7 @@ async function receiverContext(rncParam) {
 }
 
 async function signedArecf(company, header, received, reasonCode) {
-  const creds = await loadCredentialsFromDb(company.id);
+  const creds = await loadCredentialsFromDb(company.id, { purpose: 'sign-arecf', documentId: header.eNcf });
   return signXml(buildArecfXml({ rncEmisor: header.rncEmisor, rncComprador: company.rnc, eNcf: header.eNcf, received, reasonCode }), creds);
 }
 

@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import { env } from '../../config/env.js';
+import { env, isDev } from '../../config/env.js';
 import { ipKeyGenerator } from 'express-rate-limit';
 
 /**
@@ -15,36 +15,7 @@ export const rateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: req => ipKeyGenerator(req.ip),
-  skip: (req) => env.isDev, // Disable in development
-});
-
-const loginMessage = {
-  error: 'Demasiados intentos fallidos de inicio de sesión. Intente de nuevo en 15 minutos o use «¿Olvidaste tu contraseña?»',
-  code: 'AUTH_RATE_LIMIT_EXCEEDED',
-};
-
-/**
- * Límites del inicio de sesión: cuentan solo los intentos fallidos (los correctos no gastan cupo).
- * Por usuario + conexión (frena adivinar una clave) y por conexión (frena probar muchos usuarios).
- */
-export const loginAccountLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 8,
-  skipSuccessfulRequests: true,
-  message: loginMessage,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: req => `${ipKeyGenerator(req.ip)}|${String(req.body?.username || '').toLowerCase().slice(0, 50)}`,
-});
-
-export const loginIpLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100, // las peticiones en curso también cuentan: un local que abre todas sus cajas a la vez no debe toparse con el límite
-  skipSuccessfulRequests: true,
-  message: loginMessage,
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: req => ipKeyGenerator(req.ip),
+  skip: (req) => isDev, // Disable in development
 });
 
 /**

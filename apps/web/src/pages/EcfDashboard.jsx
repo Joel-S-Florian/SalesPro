@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { BadgeCheck, CircleAlert, Clock3, Download, FileInput, Loader2, Receipt, RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react';
+import { BadgeCheck, CircleAlert, Clock3, Download, FileInput, KeyRound, Loader2, Receipt, RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react';
 import { api } from '../services/api';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
@@ -16,7 +16,64 @@ const TABS = [
   { id: 'SENT', label: 'Emitidos', icon: Receipt },
   { id: 'INBOX', label: 'Recibidos', icon: FileInput },
   { id: 'NUMBERING', label: 'Numeración', icon: Clock3 },
+  { id: 'CERT_USE', label: 'Uso del certificado', icon: KeyRound },
 ];
+
+const PURPOSE_LABELS = {
+  token: 'Token de la DGII',
+  'sign-ecf': 'Firma de e-CF',
+  'sign-arecf': 'Acuse de recibo (ARECF)',
+  'sign-acecf': 'Aprobación comercial (ACECF)',
+  'sign-anecf': 'Anulación de rangos (ANECF)',
+  'test-connection': 'Prueba de conexión',
+};
+
+/* ------------------------------ Uso del certificado -------------------------- */
+
+/** Auditoría: las últimas 50 veces que el servidor usó el certificado digital de la empresa. */
+function CertificateUsageTab() {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api.ecf
+      .certificateUsage()
+      .then(result => setRows(result?.data || []))
+      .catch(err => setError(err.message || 'No se pudo cargar el registro'));
+  }, []);
+  if (error) return <p className="text-xs text-rose-500">{error}</p>;
+  if (!rows) return <Skeleton className="h-40 rounded-xl" />;
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-slate-500">Cada vez que FACTOS usa el certificado digital de tu empresa queda un registro: quién, para qué y de qué documento. Nunca se guarda el certificado, su contraseña ni el contenido de los documentos.</p>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-xs text-slate-400">Todavía no se ha usado el certificado.</p>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 uppercase text-slate-500 dark:bg-slate-800">
+              <tr>
+                <th className="px-3 py-2">Fecha</th>
+                <th className="px-3 py-2">Para qué</th>
+                <th className="px-3 py-2">Quién</th>
+                <th className="px-3 py-2">Documento</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {rows.map(row => (
+                <tr key={row.id}>
+                  <td className="px-3 py-2 whitespace-nowrap">{dateTime(row.at)}</td>
+                  <td className="px-3 py-2">{PURPOSE_LABELS[row.purpose] || row.purpose || '—'}</td>
+                  <td className="px-3 py-2">{row.actor}</td>
+                  <td className="px-3 py-2 font-mono">{row.documentId || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const MODE_LABELS = { OFF: 'Apagado', PRECERT: 'Pruebas (pre-certificación)', CERT: 'Certificación', PROD: 'Producción' };
 const selectClass = 'h-9 rounded-lg border border-slate-200 bg-transparent px-3 text-xs text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-700 dark:text-slate-300';
@@ -363,6 +420,7 @@ export default function EcfDashboard({ onOpenSettings }) {
         {tab === 'SENT' && <IssuedTab />}
         {tab === 'INBOX' && <InboxTab />}
         {tab === 'NUMBERING' && <NumberingTab />}
+        {tab === 'CERT_USE' && <CertificateUsageTab />}
       </div>
     </div>
   );

@@ -17,6 +17,8 @@ model Company {
   active           Boolean               @default(true)
   plan             PlanType              @default(STARTER)
   trialEndsAt      DateTime?
+  termsAcceptedAt  DateTime? // aceptación de los términos al registrarse
+  termsVersion     String?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
   users            User[]
@@ -81,7 +83,8 @@ model User {
   username           String          @unique
   passwordHash       String
   email              String?         @unique // para recuperar la contraseña (opcional)
-  mustChangePassword Boolean         @default(false) // clave temporal asignada por un administrador
+  mustChangePassword Boolean         @default(false) // clave temporal generada por el servidor
+  tempPasswordExpiresAt DateTime? // la clave temporal caduca (48 h); null = sin caducidad (claves temporales antiguas)
   fullName           String
   documentId         String? // cédula (solo dígitos)
   phone              String?
@@ -337,7 +340,7 @@ model Supplier {
   phone        String?
   address      String?
   paymentTerms String?
-  isDefault    Boolean        @default(false) // «Proveedor general»: lo usan las compras sin proveedor; no se puede desactivar
+  isSystem     Boolean        @default(false) // «Compra sin proveedor»: de sistema, lo usan las compras sin proveedor; no se edita ni se borra
   active       Boolean        @default(true)
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt

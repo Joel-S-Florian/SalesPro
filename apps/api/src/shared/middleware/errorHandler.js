@@ -1,6 +1,6 @@
 import { AppError } from '../exceptions/AppError.js';
 import { ERROR_CODES } from '../exceptions/AppError.js';
-import { env } from '../../config/env.js';
+import { isProd } from '../../config/env.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -81,11 +81,11 @@ export function errorHandler(err, req, res, next) {
   }
 
   // Unknown errors
-  const message = env.isProd ? 'Error interno del servidor' : err.message;
+  const message = isProd ? 'Error interno del servidor' : err.message;
   return res.status(500).json({
     error: message,
     code: ERROR_CODES.INTERNAL_ERROR,
-    ...(!env.isProd && { stack: err.stack }),
+    ...(!isProd && { stack: err.stack }),
   });
 }
 

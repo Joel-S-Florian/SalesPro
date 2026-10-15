@@ -20,7 +20,7 @@ import { validateAgainstXsd } from './ecf.xsd.js';
  */
 
 /** Contexto de emisión de la empresa actual, o null si la facturación electrónica está apagada. */
-export async function loadIssuingContext() {
+export async function loadIssuingContext({ purpose = 'sign-ecf', documentId = null, userId = null } = {}) {
   const companyId = getTenantId();
   const config = await prisma.ecfConfig.findFirst();
   if (!config || config.mode === 'OFF') return null;
@@ -28,7 +28,7 @@ export async function loadIssuingContext() {
   const company = await basePrisma.company.findUnique({ where: { id: companyId }, select: { id: true, name: true, rnc: true, address: true } });
   let creds;
   try {
-    creds = await loadCredentialsFromDb(companyId);
+    creds = await loadCredentialsFromDb(companyId, { purpose, documentId, userId });
   } catch (error) {
     throw AppError.badRequest(`No se puede emitir el comprobante electrónico: ${error.message}`);
   }

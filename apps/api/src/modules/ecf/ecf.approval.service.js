@@ -56,7 +56,7 @@ export async function respondToInbox(id, { approved, reason }) {
   if (!inbox) throw AppError.notFound('Comprobante recibido no encontrado');
   if (inbox.status !== 'RECIBIDO') throw AppError.conflict('Este comprobante ya fue respondido');
 
-  const context = await loadIssuingContext();
+  const context = await loadIssuingContext({ purpose: 'sign-acecf', documentId: inbox.eNcf });
   if (!context) throw AppError.badRequest('La facturación electrónica no está activada');
 
   const header = readEcfHeader(inbox.xml);

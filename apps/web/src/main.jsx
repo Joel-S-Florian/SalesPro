@@ -8,6 +8,8 @@ import App from './App.jsx';
 import './index.css';
 import CustomerDisplay from './pages/CustomerDisplay.jsx';
 import { isCustomerDisplayMode } from './utils/customerDisplay';
+import { useAuthStore } from './stores/authStore';
+import { useConfigStore } from './stores/configStore';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +19,17 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+});
+
+// Aislamiento entre empresas en el navegador: al cerrar sesión o entrar con otra empresa se borra todo lo que quedó en memoria
+// (datos en caché y configuración), para que nunca se vea un instante lo de la empresa anterior.
+let currentCompany = useAuthStore.getState().user?.companyId ?? null;
+useAuthStore.subscribe(state => {
+  const company = state.user?.companyId ?? null;
+  if (company === currentCompany) return;
+  currentCompany = company;
+  queryClient.clear();
+  useConfigStore.getState().reset();
 });
 
 // La pantalla del cliente corre en su propia ventana, sin sesión ni llamadas al API

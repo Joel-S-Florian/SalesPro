@@ -9,6 +9,10 @@ export const getSupplier = asyncHandler(async (req, res) => {
   res.json(await suppliersService.getSupplierById(req.params.id));
 });
 
+export const getReorderProducts = asyncHandler(async (req, res) => {
+  res.json(await suppliersService.getReorderProducts(req.params.id));
+});
+
 export const createSupplier = asyncHandler(async (req, res) => {
   res.status(201).json(await suppliersService.createSupplier(req.body));
 });

@@ -16,7 +16,7 @@ import { validateAgainstXsd } from './ecf.xsd.js';
  */
 export async function voidRanges(ranges) {
   const companyId = getTenantId();
-  const context = await loadIssuingContext();
+  const context = await loadIssuingContext({ purpose: 'sign-anecf' });
   if (!context) throw AppError.badRequest('La facturación electrónica no está activada');
 
   // Cada rango debe estar dentro de un rango autorizado y empezar justo después del último número usado

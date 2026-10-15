@@ -1,7 +1,7 @@
 import { addBatchStock, addUnbatchedStock } from '../inventory/batches.service.js';
 import { parseExpiration } from '../inventory/batches.logic.js';
 import { getConfig } from '../config/config.service.js';
-import { getDefaultSupplier } from '../suppliers/suppliers.service.js';
+import { getSystemSupplier } from '../suppliers/suppliers.service.js';
 import { countResource, getCompanyPlanState } from '../../shared/plans.js';
 import { limitOf, planHasFeature, planName } from '@factos/shared/plans.js';
 import { Readable } from 'node:stream';
@@ -288,10 +288,10 @@ export async function applyImport(importId, requester) {
   });
   if (rows.length === 0) throw AppError.badRequest('No hay filas válidas para importar');
 
-  // Sin proveedor elegido, las entradas se registran con el «Proveedor general»
+  // Sin proveedor elegido, las entradas se registran con el «Compra sin proveedor»
   const supplier = batch.supplierId
     ? await prisma.supplier.findUnique({ where: { id: batch.supplierId } })
-    : await getDefaultSupplier();
+    : await getSystemSupplier();
   const { defaultCategoryId, updatePrices } = batch.options;
 
   // Tope del plan: se importa hasta donde alcance y el resto se devuelve como rechazado con su motivo (nunca falla todo el archivo)

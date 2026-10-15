@@ -14,14 +14,33 @@ function ContactButtons({ supplier }) {
   const actions = useConfigStore(state => state.config.contactActions);
   const businessName = useConfigStore(state => state.config.business?.name);
   const call = telUrl(supplier.phone);
-  const message = (actions?.supplierMessage || '')
-    .replace('{contacto}', supplier.contactName || supplier.name)
-    .replace('{empresa}', businessName || '');
-  const chat = whatsappUrl(supplier.phone, message);
+  const buildMessage = products =>
+    (actions?.supplierMessage || '')
+      .replaceAll('{contacto}', supplier.contactName || supplier.name)
+      .replaceAll('{empresa}', businessName || '')
+      .replaceAll('{productos}', products || '(le indicaremos los productos)');
+  const chat = whatsappUrl(supplier.phone, buildMessage(''));
+
+  // {productos}: los que se le han comprado a este proveedor y están bajos de existencia. Se consulta al hacer clic.
+  const openWhatsapp = async event => {
+    if (!(actions?.supplierMessage || '').includes('{productos}')) return;
+    event.preventDefault();
+    const popup = window.open('', '_blank');
+    let names = '';
+    try {
+      const result = await api.suppliers.reorderProducts(supplier.id);
+      names = (result?.data || []).map(p => p.name).join(', ');
+    } catch {
+      // sin sugerencias: el mensaje sale igual
+    }
+    const url = whatsappUrl(supplier.phone, buildMessage(names));
+    if (popup) popup.location.href = url;
+    else window.location.href = url;
+  };
   const base = 'p-1.5 rounded';
-  const render = (label, Icon, href, tone, enabled) =>
+  const render = (label, Icon, href, tone, enabled, onClick) =>
     enabled && href ? (
-      <a aria-label={label} title={label} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${base} text-slate-400 ${tone} hover:bg-slate-100 dark:hover:bg-slate-800`}>
+      <a aria-label={label} title={label} href={href} onClick={onClick} target={href.startsWith('http') ? '_blank' : undefined} rel="noreferrer" className={`${base} text-slate-400 ${tone} hover:bg-slate-100 dark:hover:bg-slate-800`}>
         <Icon className="w-4 h-4" />
       </a>
     ) : (
@@ -32,7 +51,7 @@ function ContactButtons({ supplier }) {
   return (
     <>
       {render('Llamar', Phone, call, 'hover:text-emerald-600', Boolean(actions?.supplierCall))}
-      {render('Escribir por WhatsApp', MessageCircle, chat, 'hover:text-green-600', Boolean(actions?.supplierWhatsapp))}
+      {render('Escribir por WhatsApp', MessageCircle, chat, 'hover:text-green-600', Boolean(actions?.supplierWhatsapp), openWhatsapp)}
     </>
   );
 }
@@ -208,7 +227,7 @@ export default function Suppliers() {
                 <tr key={s.id} className={s.active ? '' : 'opacity-50'}>
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-100">
                     {s.name}
-                    {s.isDefault && <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/30" title="Se usa en las compras que no indican proveedor">General</span>}
+                    {s.isSystem && <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600 dark:bg-indigo-950/30" title="Proveedor de sistema: se usa en las compras que no indican proveedor">Sistema</span>}
                     {!s.active && <span className="ml-2 text-[10px] text-slate-400">(inactivo)</span>}
                   </td>
                   <td className="px-4 py-3 font-mono">{s.rnc || '—'}</td>
@@ -220,7 +239,7 @@ export default function Suppliers() {
                   <td className="px-4 py-3 text-center font-mono">{s._count?.purchases ?? 0}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
-                      <ContactButtons supplier={s} />
+                      {!s.isSystem && <ContactButtons supplier={s} />}
                       <button aria-label="Historial de compras"
                         onClick={() => openHistory(s)}
                         title="Historial de compras"
@@ -228,21 +247,23 @@ export default function Suppliers() {
                       >
                         <History className="w-4 h-4" />
                       </button>
-                      <button aria-label="Editar"
-                        onClick={() => openEdit(s)}
-                        title="Editar"
-                        className="p-1.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      {!s.isDefault && (
-                      <button aria-label={s.active ? 'Desactivar' : 'Reactivar'}
-                        onClick={() => toggleActive(s)}
-                        title={s.active ? 'Desactivar' : 'Reactivar'}
-                        className="p-1.5 rounded text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                      >
-                        <Power className="w-4 h-4" />
-                      </button>
+                      {!s.isSystem && (
+                        <>
+                          <button aria-label="Editar"
+                            onClick={() => openEdit(s)}
+                            title="Editar"
+                            className="p-1.5 rounded text-slate-400 hover:text-indigo-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button aria-label={s.active ? 'Desactivar' : 'Reactivar'}
+                            onClick={() => toggleActive(s)}
+                            title={s.active ? 'Desactivar' : 'Reactivar'}
+                            className="p-1.5 rounded text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          >
+                            <Power className="w-4 h-4" />
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>

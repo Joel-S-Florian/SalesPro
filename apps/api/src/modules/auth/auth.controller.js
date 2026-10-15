@@ -7,7 +7,7 @@ import { asyncHandler } from '../../shared/utils/asyncHandler.js';
  */
 export const login = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
-  const result = await authService.login(username, password);
+  const result = await authService.login(username, password, req.ip);
 
   // Set refresh token as httpOnly cookie (optional, also return in body)
   res.cookie('refreshToken', result.refreshToken, {
@@ -139,6 +139,14 @@ export const createUser = asyncHandler(async (req, res) => {
  * PUT /api/auth/users/:id
  * Update user (admin only)
  */
+/**
+ * POST /api/auth/users/:id/reset-password
+ * Genera una clave temporal nueva (se muestra una sola vez)
+ */
+export const resetUserPassword = asyncHandler(async (req, res) => {
+  res.json(await authService.resetUserPassword(req.params.id, req.user.userId));
+});
+
 export const updateUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const user = await authService.updateUser(id, req.body, req.user.userId);

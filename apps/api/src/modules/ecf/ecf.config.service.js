@@ -191,6 +191,23 @@ export async function removeCertificate() {
   return toPublic(saved, company);
 }
 
+/** Últimos usos del certificado de la empresa (quién, para qué y de qué documento). Nunca incluye el certificado ni sus datos. */
+export async function listCertificateUsage(limit = 50) {
+  const rows = await prisma.auditLog.findMany({
+    where: { action: 'ECF_CERT_USED' },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(limit, 200),
+    include: { user: { select: { fullName: true, username: true } } },
+  });
+  return rows.map(row => ({
+    id: row.id,
+    at: row.createdAt,
+    purpose: row.newData?.purpose || null,
+    actor: row.user ? row.user.fullName || row.user.username : 'Sistema',
+    documentId: row.entityId || null,
+  }));
+}
+
 /** Pide un token a la DGII (o al simulador) para comprobar que certificado y conexión funcionan. */
 export async function testConnection() {
   const companyId = getTenantId();
@@ -206,7 +223,7 @@ export async function testConnection() {
       await prisma.ecfConfig.update({ where: { companyId }, data: { mode: 'PRECERT' } });
     }
     forgetCredentials(companyId);
-    await tokenManager.getToken(companyId, { force: true });
+    await tokenManager.getToken(companyId, { force: true, purpose: 'test-connection' });
     const status = tokenManager.status(companyId);
     ok = true;
     expiresAt = status.expiresAt;

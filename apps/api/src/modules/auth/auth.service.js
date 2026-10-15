@@ -1,5 +1,7 @@
 import { prisma, basePrisma } from '../../config/db.js';
 import { hashPassword, comparePassword, comparePasswordDummy, hashRounds } from '../../shared/utils/crypto.js';
+import { generateTemporaryPassword, TEMP_PASSWORD_HOURS } from '../../shared/utils/tempPassword.js';
+import { loginThrottle, humanizeWait } from '../../shared/utils/loginThrottle.js';
 import { generateTokenPair, generateRefreshToken, verifyRefreshToken } from '../../shared/utils/jwt.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
@@ -10,6 +12,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertPasswordAllowed } from '../../shared/utils/passwordPolicy.js';
 import { assertWithinPlan } from '../../shared/plans.js';
+import { getTenantId } from '../../config/tenant.js';
 
 /** Minutos de inactividad por defecto antes de cerrar la sesión (configurable por empresa en `security`). */
 export const DEFAULT_IDLE_MINUTES = 30;
@@ -37,13 +40,51 @@ async function idleMinutesOf(companyId) {
   return Number.isFinite(minutes) ? minutes : DEFAULT_IDLE_MINUTES;
 }
 
+/** Error 429 genérico del bloqueo temporal (no dice si el usuario existe). */
+function lockedError(lock) {
+  const error = AppError.tooManyRequests(`Demasiados intentos fallidos. Espera ${humanizeWait(lock.retryAfterMs)} e inténtalo de nuevo, o usa «¿Olvidaste tu contraseña?».`);
+  error.code = 'LOGIN_LOCKED';
+  error.extra = { retryAfterSeconds: Math.ceil(lock.retryAfterMs / 1000) };
+  return error;
+}
+
+/** Anota un inicio fallido y, si provoca un bloqueo, lo deja en la auditoría. Devuelve el error 401 genérico. */
+async function failedLogin(username, ip, user) {
+  const events = loginThrottle.recordFailure(username, ip);
+  for (const event of events) {
+    await basePrisma.auditLog
+      .create({
+        data: {
+          companyId: user?.companyId ?? null,
+          userId: user?.id ?? null,
+          action: 'LOGIN_LOCKED',
+          entity: 'auth',
+          newData: { scope: event.scope, username: String(username).slice(0, 60), level: event.level, lockedMinutes: Math.round(event.lockMs / 60000) },
+          ipAddress: ip || null,
+        },
+      })
+      .catch(err => logger.warn(`Auditoría de bloqueo falló: ${err.message}`));
+  }
+  return AppError.unauthorized('Credenciales incorrectas', ERROR_CODES.INVALID_CREDENTIALS);
+}
+
+/** Datos del contexto que la política de contraseñas necesita (rol, usuario, correo y nombre de la empresa). */
+async function passwordContext(user) {
+  const company = user.companyId ? await basePrisma.company.findUnique({ where: { id: user.companyId }, select: { name: true } }) : null;
+  return { role: user.role, username: user.username, email: user.email, companyName: company?.name };
+}
+
 /**
  * Authenticate user with username and password
  * @param {string} username - Username
  * @param {string} password - Plain text password
  * @returns {Promise<Object>} User data and tokens
  */
-export async function login(username, password) {
+export async function login(username, password, ip) {
+  // Retraso progresivo por cuenta e IP: la respuesta es la misma exista o no el usuario
+  const lock = loginThrottle.check(username, ip);
+  if (lock.locked) throw lockedError(lock);
+
   const user = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
     include: { company: { select: { id: true, name: true, active: true } } },
@@ -51,12 +92,18 @@ export async function login(username, password) {
 
   if (!user) {
     await comparePasswordDummy(password);
-    throw AppError.unauthorized('Credenciales incorrectas', ERROR_CODES.INVALID_CREDENTIALS);
+    throw await failedLogin(username, ip, null);
   }
 
   const validPassword = await comparePassword(password, user.passwordHash);
-  if (!validPassword) {
-    throw AppError.unauthorized('Credenciales incorrectas', ERROR_CODES.INVALID_CREDENTIALS);
+  if (!validPassword) throw await failedLogin(username, ip, user);
+  loginThrottle.recordSuccess(username, ip);
+
+  // La clave temporal caduca (48 h): pasado ese tiempo hay que pedir otra
+  if (user.mustChangePassword && user.tempPasswordExpiresAt && user.tempPasswordExpiresAt < new Date()) {
+    const expired = AppError.unauthorized('La clave temporal venció. Pide a un administrador que genere una nueva.');
+    expired.code = 'TEMP_PASSWORD_EXPIRED';
+    throw expired;
   }
 
   if (!user.active) {
@@ -211,12 +258,12 @@ export async function changePassword(userId, oldPassword, newPassword) {
     throw AppError.badRequest('Contraseña actual incorrecta', ERROR_CODES.INVALID_CREDENTIALS);
   }
 
-  assertPasswordAllowed(newPassword, user);
+  assertPasswordAllowed(newPassword, await passwordContext(user));
   const newHash = await hashPassword(newPassword);
 
   await basePrisma.user.update({
     where: { id: userId },
-    data: { passwordHash: newHash, mustChangePassword: false },
+    data: { passwordHash: newHash, mustChangePassword: false, tempPasswordExpiresAt: null },
   });
 }
 
@@ -268,10 +315,10 @@ export async function resetPassword(token, newPassword) {
   if (!reset || reset.usedAt || reset.expiresAt < new Date() || !reset.user.active) {
     throw AppError.badRequest('El enlace no es válido o ya venció. Solicita uno nuevo.', ERROR_CODES.REFRESH_TOKEN_INVALID);
   }
-  assertPasswordAllowed(newPassword, reset.user);
+  assertPasswordAllowed(newPassword, await passwordContext(reset.user));
   const passwordHash = await hashPassword(newPassword);
   await basePrisma.$transaction([
-    basePrisma.user.update({ where: { id: reset.userId }, data: { passwordHash, mustChangePassword: false } }),
+    basePrisma.user.update({ where: { id: reset.userId }, data: { passwordHash, mustChangePassword: false, tempPasswordExpiresAt: null } }),
     basePrisma.passwordReset.updateMany({ where: { userId: reset.userId, usedAt: null }, data: { usedAt: new Date() } }),
     basePrisma.session.deleteMany({ where: { userId: reset.userId } }),
   ]);
@@ -323,14 +370,19 @@ async function assertEmailAvailable(email, exceptUserId) {
  * @returns {Promise<Object>} Created user
  */
 export async function createUser(data) {
-  const { username, fullName, role, password, active } = data;
+  const { username, fullName, role, active } = data;
   const email = normalizeEmail(data.email);
   const documentId = digitsOrNull(data.documentId);
   // Un usuario nuevo nace activo salvo que se indique lo contrario: solo los activos cuentan contra el tope
   if (active ?? true) await assertWithinPlan('users');
   await assertEmailAvailable(email);
   await assertDocumentAvailable(documentId);
-  assertPasswordAllowed(password, { username, email });
+  // La clave es TEMPORAL y la genera el servidor (se muestra una sola vez). Solo uso interno: una clave propia (pruebas, alta de empresa).
+  const issuedTemp = !data.password;
+  const companyName = (await basePrisma.company.findUnique({ where: { id: getTenantId() }, select: { name: true } }))?.name;
+  const password = data.password || generateTemporaryPassword({ username, email, companyName });
+  if (!issuedTemp) assertPasswordAllowed(password, { role, username, email, companyName });
+  const tempPasswordExpiresAt = issuedTemp ? new Date(Date.now() + TEMP_PASSWORD_HOURS * 3600 * 1000) : null;
 
   const existing = await basePrisma.user.findUnique({
     where: { username: username.toLowerCase() },
@@ -351,6 +403,7 @@ export async function createUser(data) {
       fullName,
       role,
       passwordHash,
+      ...(issuedTemp ? { mustChangePassword: true, tempPasswordExpiresAt } : {}),
       active: active ?? true,
     },
     select: {
@@ -366,7 +419,26 @@ export async function createUser(data) {
     },
   });
 
-  return user;
+  return issuedTemp ? { ...user, temporaryPassword: password, temporaryPasswordExpiresAt: tempPasswordExpiresAt } : user;
+}
+
+/**
+ * Genera una clave temporal nueva para otro usuario de la empresa (la anterior deja de servir y se cierran sus sesiones).
+ * Devuelve la clave UNA sola vez; caduca a las 48 horas y obliga a cambiarla al entrar.
+ */
+export async function resetUserPassword(id, actorId) {
+  if (id === actorId) throw AppError.badRequest('Para cambiar tu propia contraseña usa «Cambiar mi contraseña»');
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) throw AppError.notFound('Usuario no encontrado');
+  const companyName = user.companyId ? (await basePrisma.company.findUnique({ where: { id: user.companyId }, select: { name: true } }))?.name : undefined;
+  const temporaryPassword = generateTemporaryPassword({ username: user.username, email: user.email, companyName });
+  const temporaryPasswordExpiresAt = new Date(Date.now() + TEMP_PASSWORD_HOURS * 3600 * 1000);
+  await basePrisma.$transaction([
+    basePrisma.user.update({ where: { id }, data: { passwordHash: await hashPassword(temporaryPassword), mustChangePassword: true, tempPasswordExpiresAt: temporaryPasswordExpiresAt } }),
+    basePrisma.session.deleteMany({ where: { userId: id } }),
+  ]);
+  loginThrottle.recordSuccess(user.username, null);
+  return { username: user.username, fullName: user.fullName, temporaryPassword, temporaryPasswordExpiresAt };
 }
 
 /**
@@ -402,6 +474,7 @@ export async function getUsers({ page = 1, limit = 20, sortBy = 'createdAt', sor
         documentId: true,
         phone: true,
         mustChangePassword: true,
+        tempPasswordExpiresAt: true,
         fullName: true,
         role: true,
         active: true,
@@ -450,10 +523,16 @@ export async function updateUser(id, data, actorId) {
   if (role) updateData.role = role;
   if (active !== undefined) updateData.active = active;
   if (password) {
-    assertPasswordAllowed(password, { username: user.username, email: data.email !== undefined ? data.email : user.email });
+    assertPasswordAllowed(password, { ...(await passwordContext(user)), role: role || user.role, email: data.email !== undefined ? data.email : user.email });
     updateData.passwordHash = await hashPassword(password);
-    // Clave asignada por un administrador a otra persona: es temporal y debe cambiarla al entrar
-    if (id !== actorId) updateData.mustChangePassword = true;
+    // Clave puesta por otra persona (uso interno): es temporal y debe cambiarla al entrar
+    if (id !== actorId) {
+      updateData.mustChangePassword = true;
+      updateData.tempPasswordExpiresAt = new Date(Date.now() + TEMP_PASSWORD_HOURS * 3600 * 1000);
+    } else {
+      updateData.mustChangePassword = false;
+      updateData.tempPasswordExpiresAt = null;
+    }
   }
   if (data.email !== undefined) {
     const email = normalizeEmail(data.email);

@@ -203,6 +203,7 @@ export const api = {
       normalizeList(await request(`/auth/users?${toQuery(params)}`)),
     createUser: (payload) => request('/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
     updateUser: (id, payload) => request(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+    resetUserPassword: id => request(`/auth/users/${id}/reset-password`, { method: 'POST' }),
     deleteUser: (id) => request(`/auth/users/${id}`, { method: 'DELETE' }),
     changePassword: (oldPassword, newPassword) =>
       request('/auth/password', { method: 'PUT', body: JSON.stringify({ oldPassword, newPassword }) }),
@@ -258,11 +259,8 @@ export const api = {
     createCompany: (payload) => request('/platform/companies', { method: 'POST', body: JSON.stringify(payload) }),
     updateCompany: (id, payload) =>
       request(`/platform/companies/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
-    resetUserPassword: (companyId, userId, password) =>
-      request(`/platform/companies/${companyId}/users/${userId}/reset-password`, {
-        method: 'POST',
-        body: JSON.stringify({ password }),
-      }),
+    resetUserPassword: (companyId, userId) =>
+      request(`/platform/companies/${companyId}/users/${userId}/reset-password`, { method: 'POST' }),
   },
 
   inventoryImport: {
@@ -321,6 +319,7 @@ export const api = {
     create: (payload) => request('/suppliers', { method: 'POST', body: JSON.stringify(payload) }),
     update: (id, payload) => request(`/suppliers/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     purchases: (id, params = {}) => request(`/suppliers/${id}/purchases?${toQuery(params)}`),
+    reorderProducts: id => request(`/suppliers/${id}/reorder-products`),
   },
 
   sales: {
@@ -391,6 +390,7 @@ export const api = {
 
   ecf: {
     config: () => request('/ecf/config'),
+    certificateUsage: () => request('/ecf/certificate-usage'),
     saveConfig: payload => request('/ecf/config', { method: 'PUT', body: JSON.stringify(payload) }),
     uploadCertificate: payload => request('/ecf/certificate', { method: 'POST', body: JSON.stringify(payload) }),
     removeCertificate: () => request('/ecf/certificate', { method: 'DELETE' }),

@@ -17,12 +17,13 @@ import { signXml } from './ecf.signer.js';
 
 /**
  * @param {Object} deps
- * @param {(companyId: string) => Promise<{ mode: string, privateKeyPem: string, certPem: string }>} deps.loadCredentials
+ * @param {(companyId: string, use: { purpose: string }) => Promise<{ mode: string, privateKeyPem: string, certPem: string }>} deps.loadCredentials
+ * @param {(companyId: string) => Promise<string>} [deps.getMode] ambiente de la empresa SIN abrir el certificado (si falta, se usa loadCredentials)
  * @param {typeof dgiiClient} [deps.client]
  * @param {() => number} [deps.now]
  * @param {number} [deps.refreshMarginMs]
  */
-export function createTokenManager({ loadCredentials, client = dgiiClient, now = Date.now, refreshMarginMs = TOKEN_REFRESH_MARGIN_MS }) {
+export function createTokenManager({ loadCredentials, getMode, client = dgiiClient, now = Date.now, refreshMarginMs = TOKEN_REFRESH_MARGIN_MS }) {
   const cache = new Map(); // companyId -> { token, mode, expiresAt, issuedAt }
   const inflight = new Map(); // companyId -> Promise<string>
 
@@ -43,16 +44,18 @@ export function createTokenManager({ loadCredentials, client = dgiiClient, now =
   }
 
   /** Token vigente de la empresa (usa el guardado mientras falte más que el margen para vencer). */
-  async function getToken(companyId, { force = false } = {}) {
-    const creds = await loadCredentials(companyId);
+  async function getToken(companyId, { force = false, purpose = 'token' } = {}) {
+    // Con un token vigente en memoria no se abre el certificado (y por eso no se registra un «uso»)
+    const mode = getMode ? await getMode(companyId) : (await loadCredentials(companyId, { purpose })).mode;
     const cached = cache.get(companyId);
-    if (!force && cached && cached.mode === creds.mode && cached.expiresAt - now() > refreshMarginMs) return cached.token;
+    if (!force && cached && cached.mode === mode && cached.expiresAt - now() > refreshMarginMs) return cached.token;
 
     // Una sola petición a la vez por empresa: las demás esperan el mismo resultado
     if (!inflight.has(companyId)) {
       inflight.set(
         companyId,
-        requestNewToken(companyId, creds)
+        loadCredentials(companyId, { purpose })
+          .then(creds => requestNewToken(companyId, creds))
           .then(entry => entry.token)
           .finally(() => inflight.delete(companyId))
       );
@@ -90,6 +93,29 @@ export function createTokenManager({ loadCredentials, client = dgiiClient, now =
 /* Credenciales desde la base de datos                                                              */
 /* ---------------------------------------------------------------------------------------------- */
 
+/** Para qué se usa el certificado (queda en la auditoría). Todo uso del certificado debe declarar uno. */
+export const CERT_PURPOSES = ['token', 'sign-ecf', 'sign-arecf', 'sign-acecf', 'sign-anecf', 'test-connection'];
+
+/**
+ * Registra en la auditoría que se usó el certificado de una empresa. Nunca guarda el certificado, su contraseña,
+ * el token ni el XML: solo quién (usuario o sistema), para qué y de qué documento. No frena la operación si falla el registro.
+ */
+function recordCertificateUse(companyId, { purpose, documentId, userId }) {
+  void basePrisma.auditLog
+    .create({
+      data: { companyId, userId: userId || null, action: 'ECF_CERT_USED', entity: 'ecf_certificate', entityId: documentId || null, newData: { purpose, actor: userId ? 'user' : 'system', documentId: documentId || null } },
+    })
+    .catch(error => logger.warn(`No se pudo registrar el uso del certificado: ${error.message}`));
+}
+
+/** Ambiente de la empresa sin abrir el certificado (para saber si hay que renovar el token). */
+export async function getModeFromDb(companyId) {
+  const config = await basePrisma.ecfConfig.findUnique({ where: { companyId }, select: { mode: true, certificateEnc: true } });
+  if (!config || config.mode === 'OFF') throw new Error('La facturación electrónica no está activada para esta empresa');
+  if (!config.certificateEnc) throw new Error('Falta cargar el certificado digital de la empresa');
+  return config.mode;
+}
+
 const CREDENTIALS_TTL_MS = 10 * 60 * 1000;
 const credentialsCache = new Map(); // companyId -> { updatedAt, loadedAt, creds }
 
@@ -99,24 +125,27 @@ export function forgetCredentials(companyId) {
 }
 
 /** Abre el certificado de la empresa (descifrado + .p12) y devuelve lo necesario para firmar. */
-export async function loadCredentialsFromDb(companyId) {
+export async function loadCredentialsFromDb(companyId, { purpose, documentId = null, userId = null } = {}) {
+  if (!CERT_PURPOSES.includes(purpose)) throw new Error(`Uso del certificado sin propósito válido: ${purpose}`);
   const config = await basePrisma.ecfConfig.findUnique({ where: { companyId } });
   if (!config || config.mode === 'OFF') throw new Error('La facturación electrónica no está activada para esta empresa');
   if (!config.certificateEnc || !config.certificatePassEnc) throw new Error('Falta cargar el certificado digital de la empresa');
 
   const cached = credentialsCache.get(companyId);
   if (cached && cached.updatedAt === config.updatedAt.getTime() && Date.now() - cached.loadedAt < CREDENTIALS_TTL_MS) {
+    recordCertificateUse(companyId, { purpose, documentId, userId });
     return { ...cached.creds, mode: config.mode };
   }
 
   const { privateKeyPem, certPem } = parsePkcs12(decryptSecret(config.certificateEnc), decryptSecretToString(config.certificatePassEnc));
   const creds = { privateKeyPem, certPem };
   credentialsCache.set(companyId, { updatedAt: config.updatedAt.getTime(), loadedAt: Date.now(), creds });
+  recordCertificateUse(companyId, { purpose, documentId, userId });
   return { ...creds, mode: config.mode };
 }
 
 /** Gestor de token de la aplicación (credenciales desde la base de datos). */
-export const tokenManager = createTokenManager({ loadCredentials: loadCredentialsFromDb });
+export const tokenManager = createTokenManager({ loadCredentials: loadCredentialsFromDb, getMode: getModeFromDb });
 
 /**
  * Pide el token en segundo plano para que la primera venta no espere (p. ej. al iniciar sesión).

@@ -1,11 +1,11 @@
 import { basePrisma } from '../../config/db.js';
 import { initializeNCFSequences } from '../../shared/utils/ncf.js';
 
-export const DEFAULT_SUPPLIER_NAME = 'Proveedor general';
+export const SYSTEM_SUPPLIER_NAME = 'Compra sin proveedor';
 
 /**
  * Datos mínimos que toda empresa nueva necesita para poder vender desde el primer minuto:
- * secuencias de comprobantes, el cliente "Consumidor Final" (el POS lo usa por defecto), el «Proveedor general» y una categoría general.
+ * secuencias de comprobantes, el cliente "Consumidor Final" (el POS lo usa por defecto), el proveedor de sistema «Compra sin proveedor» y una categoría general.
  * Es idempotente: se puede ejecutar más de una vez sobre la misma empresa.
  */
 export async function bootstrapCompany(companyId) {
@@ -17,8 +17,8 @@ export async function bootstrapCompany(companyId) {
     create: { companyId, documentId: '000000000', name: 'Consumidor Final' },
   });
 
-  if (!(await basePrisma.supplier.findFirst({ where: { companyId, isDefault: true } }))) {
-    await basePrisma.supplier.create({ data: { companyId, name: DEFAULT_SUPPLIER_NAME, isDefault: true, paymentTerms: 'Contado' } });
+  if (!(await basePrisma.supplier.findFirst({ where: { companyId, isSystem: true } }))) {
+    await basePrisma.supplier.create({ data: { companyId, name: SYSTEM_SUPPLIER_NAME, isSystem: true, paymentTerms: 'Contado' } });
   }
 
   await basePrisma.category.upsert({

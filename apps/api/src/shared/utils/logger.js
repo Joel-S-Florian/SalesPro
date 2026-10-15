@@ -1,5 +1,5 @@
 import winston from 'winston';
-import { env } from '../../config/env.js';
+import { isDev } from '../../config/env.js';
 
 const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -14,7 +14,7 @@ const logFormat = winston.format.combine(
 );
 
 export const logger = winston.createLogger({
-  level: env.isDev ? 'debug' : 'info',
+  level: isDev ? 'debug' : 'info',
   format: logFormat,
   transports: [
     new winston.transports.Console({

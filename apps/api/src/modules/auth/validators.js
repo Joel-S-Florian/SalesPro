@@ -46,7 +46,7 @@ export const createUserSchema = {
     username: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres').regex(/^[a-zA-Z0-9_]+$/, 'Solo letras, números y guión bajo'),
     fullName: z.string().trim().min(2, 'Mínimo 2 caracteres').max(100),
     role: z.enum(['ADMINISTRADOR', 'VENDEDOR']),
-    password: passwordSchema,
+    // Sin `password`: la clave temporal la genera el servidor y se devuelve una sola vez
     email: emailField.nullish(),
     documentId: cedulaField.nullish(),
     phone: phoneField.nullish(),
@@ -61,7 +61,6 @@ export const updateUserSchema = {
       fullName: z.string().trim().min(2).max(100).optional(),
       role: z.enum(['ADMINISTRADOR', 'VENDEDOR']).optional(),
       active: z.boolean().optional(),
-      password: passwordSchema.optional(),
       email: emailField.nullish(),
       documentId: cedulaField.nullish(),
       phone: phoneField.nullish(),

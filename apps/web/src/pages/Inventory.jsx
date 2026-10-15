@@ -117,8 +117,8 @@ export default function Inventory() {
       .then(res => {
         const list = res?.data || [];
         setSuppliers(list);
-        // Sin elegir otro, la compra va al «Proveedor general»
-        setPurchaseSupplier(list.find(s => s.isDefault)?.id || '');
+        // Sin elegir otro, la compra va a «Compra sin proveedor» (proveedor de sistema)
+        setPurchaseSupplier(list.find(s => s.isSystem)?.id || '');
       })
       .catch(() => setSuppliers([]));
   };

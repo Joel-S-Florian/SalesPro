@@ -41,7 +41,7 @@ const CED_2 = cedula('0017654321');
 
 const company = await basePrisma.company.findFirst({ where: { name: 'Empresa Prueba' } });
 const created = { users: [], product: null, category: null, logs: [] };
-const defaultsBefore = await basePrisma.supplier.count({ where: { companyId: company.id, isDefault: true } });
+const defaultsBefore = await basePrisma.supplier.count({ where: { companyId: company.id, isSystem: true } });
 
 await runInTenant(company.id, async () => {
   try {
@@ -64,30 +64,32 @@ await runInTenant(company.id, async () => {
     await expectError('contraseña con el usuario rechazada', () => auth.createUser({ ...base, username: 'zz_user_e', password: 'zz_user_e-2024-ok' }), 'usuario');
     await expectError('contraseña común rechazada al cambiarla', () => auth.updateUser(u1.id, { password: 'Administrador99' }, u1.id), 'común');
 
-    // --- Proveedor general ---
+    // --- Compra sin proveedor (proveedor de sistema) ---
     await bootstrapCompany(company.id);
     await bootstrapCompany(company.id);
-    const defaults = await prisma.supplier.findMany({ where: { isDefault: true } });
-    check('la empresa tiene exactamente un Proveedor general (y bootstrap es idempotente)', defaults.length === 1 && defaults[0].name === 'Proveedor general', String(defaults.length));
-    const general = defaults[0];
-    await expectError('el Proveedor general no se puede desactivar (updateSupplier)', () => suppliers.updateSupplier(general.id, { active: false }), 'no se puede desactivar');
-    await expectError('el Proveedor general no se puede desactivar (deactivateSupplier)', () => suppliers.deactivateSupplier(general.id), 'no se puede desactivar');
-    const hijack = await suppliers.createSupplier({ name: 'ZZ Proveedor Prueba', isDefault: true });
-    check('isDefault no se puede fijar desde la API', hijack.isDefault === false);
-    await suppliers.updateSupplier(hijack.id, { isDefault: true });
-    check('ni al editar', (await prisma.supplier.findMany({ where: { isDefault: true } })).length === 1);
+    const systemSuppliers = await prisma.supplier.findMany({ where: { isSystem: true } });
+    check('la empresa tiene exactamente un proveedor de sistema «Compra sin proveedor» (y bootstrap es idempotente)', systemSuppliers.length === 1 && systemSuppliers[0].name === 'Compra sin proveedor', String(systemSuppliers.length));
+    const general = systemSuppliers[0];
+    await expectError('el proveedor de sistema no se puede desactivar', () => suppliers.deactivateSupplier(general.id), 'proveedor de sistema');
+    await expectError('el proveedor de sistema no se puede editar', () => suppliers.updateSupplier(general.id, { phone: '809-555-0000' }), 'proveedor de sistema');
+    const hijack = await suppliers.createSupplier({ name: 'ZZ Proveedor Prueba', isSystem: true });
+    check('isSystem no se puede fijar desde la API', hijack.isSystem === false);
+    await suppliers.updateSupplier(hijack.id, { isSystem: true });
+    check('ni al editar', (await prisma.supplier.findMany({ where: { isSystem: true } })).length === 1);
     await basePrisma.supplier.deleteMany({ where: { id: hijack.id } });
     const list = await suppliers.getSuppliers({ page: 1, limit: 20 });
-    check('el Proveedor general sale primero en la lista', list.data[0]?.isDefault === true);
+    check('el proveedor de sistema sale primero en la lista', list.data[0]?.isSystem === true);
+    const reorder = await suppliers.getReorderProducts(general.id);
+    check('el proveedor de sistema no sugiere productos para pedir', reorder.data.length === 0);
 
-    // --- Compra sin proveedor → Proveedor general ---
+    // --- Compra sin proveedor → proveedor de sistema ---
     const category = await prisma.category.create({ data: { name: 'ZZ-TEST-SUP' } });
     created.category = category.id;
     const product = await prisma.product.create({ data: { code: 'ZZ-SUP-1', name: 'Producto prueba proveedor', categoryId: category.id, costPrice: 10, salePrice: 20, stock: 0, minStock: 1 } });
     created.product = product.id;
     const purchase = await inventory.registerPurchase({ productId: product.id, quantity: 5, unitCost: 10 }, u1.id, 'ZZ');
     const log = await basePrisma.inventoryLog.findFirst({ where: { productId: product.id }, orderBy: { createdAt: 'desc' } });
-    check('una compra sin proveedor se registra con el Proveedor general', purchase.success !== false && log?.supplierId === general.id, String(log?.supplierId));
+    check('una compra sin proveedor se registra con el proveedor de sistema', purchase.success !== false && log?.supplierId === general.id, String(log?.supplierId));
   } catch (err) {
     console.error('ERROR inesperado:', err);
     failed++;
@@ -100,9 +102,9 @@ try {
     fetch(`${API}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password: 'incorrecta-123' }) }).then(r => r.status);
   const name = `zz_lim_${Date.now()}`;
   const statuses = [];
-  for (let i = 0; i < 10; i++) statuses.push(await attempt(name));
-  check('los primeros intentos fallidos responden 401', statuses.slice(0, 8).every(s => s === 401), statuses.join(','));
-  check('el intento 9 del mismo usuario se bloquea (429)', statuses[8] === 429 && statuses[9] === 429, statuses.slice(8).join(','));
+  for (let i = 0; i < 7; i++) statuses.push(await attempt(name));
+  check('los primeros 5 intentos fallidos responden 401', statuses.slice(0, 5).every(s => s === 401), statuses.join(','));
+  check('el 6.º intento del mismo usuario se bloquea (429) y sigue bloqueado', statuses[5] === 429 && statuses[6] === 429, statuses.slice(5).join(','));
   check('otro usuario desde la misma conexión no queda bloqueado', (await attempt(`zz_otro_${Date.now()}`)) === 401);
 } catch (err) {
   console.log('SKIP  límite de login (¿API apagado?):', err.message);
@@ -115,7 +117,7 @@ await basePrisma.auditLog.deleteMany({ where: { userId: { in: created.users } } 
 await basePrisma.user.deleteMany({ where: { id: { in: created.users } } });
 if (created.product) await basePrisma.product.deleteMany({ where: { id: created.product } });
 if (created.category) await basePrisma.category.deleteMany({ where: { id: created.category } });
-if (defaultsBefore === 0) await basePrisma.supplier.deleteMany({ where: { companyId: company.id, isDefault: true } });
+if (defaultsBefore === 0) await basePrisma.supplier.deleteMany({ where: { companyId: company.id, isSystem: true } });
 await basePrisma.$disconnect();
 
 console.log(failed ? `\n${failed} FALLO(S)` : '\nTodo en orden');

@@ -41,11 +41,11 @@ const messagesOf = body => {
 
 /** Actualiza el documento y refleja el estado en la venta (el resumen RFCE manda sobre el e-CF completo). */
 async function save(doc, patch) {
-  const updated = await basePrisma.ecfDocument.update({ where: { id: doc.id }, data: patch });
+  const updated = await basePrisma.ecfDocument.update({ where: { id: doc.id, companyId: doc.companyId }, data: patch });
   // El estado fiscal de la venta lo da el e-CF o su resumen; la entrega al comprador no lo cambia
   if (doc.saleId && (doc.kind === 'ECF' || doc.kind === 'RFCE')) {
     await basePrisma.sale.updateMany({
-      where: { id: doc.saleId },
+      where: { id: doc.saleId, companyId: doc.companyId },
       data: { ecfStatus: updated.status === 'STORED' ? undefined : updated.status, ecfTrackId: updated.trackId ?? undefined },
     });
   }

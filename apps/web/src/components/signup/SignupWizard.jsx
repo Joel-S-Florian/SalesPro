@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { DocumentType, formatDocument, validateDocument } from '../../utils/documents';
-import { MIN_PASSWORD_LENGTH, passwordProblem } from '../../utils/passwordPolicy';
+import { MIN_PASSWORD_LENGTH_PRIVILEGED, passwordProblem } from '../../utils/passwordPolicy';
 import { Field, inputClass } from '../ui/form';
 import SmartSelect from '../ui/SmartSelect';
 import Logo from '../ui/Logo';
@@ -28,11 +28,10 @@ const RECEIPT_OPTIONS = [
   ['BOTH', 'Ambos', 'Genera los dos formatos'],
 ];
 
-const passwordRules = (password, email) => [
-  [`Al menos ${MIN_PASSWORD_LENGTH} caracteres`, password.length >= MIN_PASSWORD_LENGTH],
-  ['Una letra', /[A-Za-z]/.test(password)],
-  ['Un número', /\d/.test(password)],
-  ['Que no sea común ni contenga tu correo', password.length > 0 && passwordProblem(password, { email }) === null],
+// Quien se registra queda como ADMINISTRADOR: la política le pide 12 caracteres. Mejor una frase larga que algo corto y complicado.
+const passwordRules = (password, email, companyName) => [
+  [`Al menos ${MIN_PASSWORD_LENGTH_PRIVILEGED} caracteres`, password.length >= MIN_PASSWORD_LENGTH_PRIVILEGED],
+  ['Que no sea común ni contenga tu correo, tu empresa ni «factos»', password.length > 0 && passwordProblem(password, { role: 'ADMINISTRADOR', email, companyName }) === null],
 ];
 
 /**
@@ -51,7 +50,7 @@ export default function SignupWizard({ onDone, onBackToLogin }) {
   const [company, setCompany] = useState({ name: '', businessType: BUSINESS_TYPES[0], rnc: '', phone: '', address: '' });
   const [settings, setSettings] = useState({ taxPercent: '18', cash: true, card: true, receiptFormat: 'A4', terminalName: 'Caja 1' });
 
-  const rules = useMemo(() => passwordRules(account.password, account.email), [account.password, account.email]);
+  const rules = useMemo(() => passwordRules(account.password, account.email, company.name), [account.password, account.email, company.name]);
   const methods = [settings.cash && 'EFECTIVO', settings.card && 'TARJETA'].filter(Boolean);
 
   const go = next => {

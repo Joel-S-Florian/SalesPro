@@ -5,7 +5,7 @@ import { validate } from '../../shared/middleware/validate.js';
 import { asyncHandler } from '../../shared/utils/asyncHandler.js';
 import { createLead } from '../leads/leads.service.js';
 import { signup } from './signup.service.js';
-import { passwordSchema } from '../../shared/utils/passwordPolicy.js';
+import { MAX_PASSWORD_LENGTH, passwordProblem } from '@factos/shared/passwordPolicy.js';
 import { isDev } from '../../config/env.js';
 
 /**
@@ -63,7 +63,7 @@ const signupSchema = {
     account: z.object({
       fullName: text(2, 120),
       email: z.string().trim().toLowerCase().email('Correo inválido').max(120),
-      password: passwordSchema,
+      password: z.string().max(MAX_PASSWORD_LENGTH, `La contraseña no puede pasar de ${MAX_PASSWORD_LENGTH} caracteres`),
     }),
     company: z.object({
       name: text(2, 120),
@@ -85,6 +85,10 @@ const signupSchema = {
       terminalName: text(1, 60).default('Caja 1'),
     }),
     website: z.string().max(200).optional(),
+  }).superRefine((body, ctx) => {
+    // Quien se registra queda como ADMINISTRADOR: 12 caracteres mínimo y sin su correo, su empresa ni «factos»
+    const problem = passwordProblem(body.account.password, { role: 'ADMINISTRADOR', email: body.account.email, companyName: body.company.name });
+    if (problem) ctx.addIssue({ code: 'custom', path: ['account', 'password'], message: `La contraseña no sirve: ${problem.charAt(0).toLowerCase()}${problem.slice(1)}` });
   }),
 };
 

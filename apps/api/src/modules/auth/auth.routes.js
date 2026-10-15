@@ -5,7 +5,6 @@ import { validate } from '../../shared/middleware/validate.js';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { forgotPasswordSchema, resetPasswordSchema, loginSchema, changePasswordSchema, createUserSchema, updateUserSchema, userIdParamSchema } from './validators.js';
 import { auditLog } from '../../shared/middleware/audit.js';
-import { loginAccountLimiter, loginIpLimiter } from '../../shared/middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -27,7 +26,7 @@ router.post('/reset-password', recoveryLimiter, validate(resetPasswordSchema), a
  * @description Login with username and password
  * @access Public
  */
-router.post('/login', loginIpLimiter, loginAccountLimiter, validate(loginSchema), auditLog('LOGIN', 'auth'), authController.login);
+router.post('/login', validate(loginSchema), auditLog('LOGIN', 'auth'), authController.login);
 
 /**
  * @route POST /api/auth/refresh
@@ -90,6 +89,7 @@ router.put('/users/:id', authenticate, authorize('ADMINISTRADOR'), validate(upda
  * @description Deactivate user (admin only)
  * @access Private (Admin)
  */
+router.post('/users/:id/reset-password', authenticate, authorize('ADMINISTRADOR'), validate(userIdParamSchema), auditLog('RESET_USER_PASSWORD', 'user'), authController.resetUserPassword);
 router.delete('/users/:id', authenticate, authorize('ADMINISTRADOR'), validate(userIdParamSchema), auditLog('DELETE_USER', 'user'), authController.deleteUser);
 
 export default router;

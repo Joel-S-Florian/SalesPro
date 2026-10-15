@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Wand2 } from 'lucide-react';
-import { generatePassword, passwordProblem, passwordStrength, MIN_PASSWORD_LENGTH } from '../../utils/passwordPolicy';
+import { generatePassword, minLengthFor, passwordProblem, passwordStrength } from '../../utils/passwordPolicy';
 
 const LEVELS = [
   { label: '', bar: 'bg-slate-200 dark:bg-slate-700' },
@@ -12,7 +12,7 @@ const LEVELS = [
 
 /**
  * Campo de contraseña nueva: mostrar/ocultar, medidor de fuerza y el motivo si no cumple la política.
- * `context` = { username, email } para avisar si la clave los contiene; `generate` agrega el botón de clave aleatoria.
+ * `context` = { role, username, email, companyName } para avisar si la clave los contiene; `generate` agrega el botón de clave aleatoria.
  * Con `generate`, la clave generada se muestra a la vista para poder copiarla.
  */
 export default function PasswordField({ id, value, onChange, context, className = '', required = true, generate = false, autoFocus = false, placeholder }) {
@@ -68,7 +68,7 @@ export default function PasswordField({ id, value, onChange, context, className 
           ))}
         </div>
         <span className={`text-[11px] ${problem ? 'text-rose-500' : 'text-slate-500'}`} aria-live="polite">
-          {!value ? `Mínimo ${MIN_PASSWORD_LENGTH} caracteres, con letras y números` : problem || level.label}
+          {!value ? `Mínimo ${minLengthFor(context?.role)} caracteres. Mejor una frase larga que algo corto y complicado` : problem || level.label}
         </span>
       </div>
     </div>

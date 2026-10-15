@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
+import TempPasswordModal from '../components/auth/TempPasswordModal';
 import { Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
 import Modal from '../components/Modal';
 import PlatformInsights from '../components/PlatformInsights';
@@ -60,6 +61,7 @@ export default function Companies() {
   const [editError, setEditError] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
+  const [tempPassword, setTempPassword] = useState(null); // clave temporal recién generada (se muestra una sola vez)
   const [newPassword, setNewPassword] = useState('');
   const [resetMessage, setResetMessage] = useState('');
 
@@ -90,17 +92,19 @@ export default function Companies() {
     try {
       setSaving(true);
       setFormError('');
-      await api.platform.createCompany({
+      const created = await api.platform.createCompany({
         name: form.name,
         rnc: form.rnc,
         email: form.email,
         phone: form.phone,
         address: form.address,
-        admin: { fullName: form.adminFullName, username: form.adminUsername, password: form.adminPassword },
+        admin: { fullName: form.adminFullName, username: form.adminUsername },
       });
       setIsFormOpen(false);
       setForm(EMPTY_FORM);
       notify.success('Empresa creada');
+      // La clave del primer administrador la genera el servidor: se muestra una sola vez
+      if (created.adminTemporaryPassword) setTempPassword({ username: created.adminUsername, password: created.adminTemporaryPassword, expiresAt: created.adminTemporaryPasswordExpiresAt });
       loadData();
     } catch (err) {
       setFormError(err.message || 'No se pudo crear la empresa');
@@ -167,12 +171,12 @@ export default function Companies() {
   const handleReset = async e => {
     e.preventDefault();
     try {
-      await api.platform.resetUserPassword(detail.id, resetTarget.id, newPassword);
-      setResetMessage(`Contraseña de ${resetTarget.username} actualizada. Sus sesiones se cerraron.`);
+      const result = await api.platform.resetUserPassword(detail.id, resetTarget.id);
+      setResetMessage(`Se generó una clave temporal para ${resetTarget.username}. Sus sesiones se cerraron.`);
+      setTempPassword({ username: result.username, password: result.temporaryPassword, expiresAt: result.temporaryPasswordExpiresAt });
       setResetTarget(null);
-      setNewPassword('');
     } catch (err) {
-      setResetMessage(err.message || 'No se pudo cambiar la contraseña');
+      setResetMessage(err.message || 'No se pudo generar la clave temporal');
     }
   };
 
@@ -316,7 +320,7 @@ export default function Companies() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {field('adminFullName', 'Nombre completo *', { required: true, span: true })}
               {field('adminUsername', 'Usuario *', { required: true, minLength: 3 })}
-              {field('adminPassword', 'Contraseña inicial * (mín. 10)', { type: 'password', required: true, minLength: 10, autoComplete: 'new-password' })}
+              <p className="md:col-span-2 text-[11px] text-slate-400">La contraseña inicial la genera el sistema: al crear la empresa verás una clave temporal (una sola vez).</p>
             </div>
           </div>
           {formError && <p className="text-xs text-rose-500">{formError}</p>}
@@ -411,11 +415,8 @@ export default function Companies() {
             </table>
             {resetTarget && (
               <form onSubmit={handleReset} className="flex items-end gap-2 bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
-                <div className="flex-1 space-y-1.5">
-                  <label htmlFor="reset-pass" className={labelClass}>Nueva contraseña para {resetTarget.username}</label>
-                  <input id="reset-pass" type="password" required minLength={10} autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className={inputClass} />
-                </div>
-                <button type="submit" className="px-3 py-2 text-xs rounded-lg bg-indigo-600 text-white cursor-pointer">Cambiar</button>
+                <p className="flex-1 text-xs text-slate-600 dark:text-slate-300">¿Generar una clave temporal nueva para <strong>{resetTarget.username}</strong>? La actual dejará de servir y se cerrarán sus sesiones.</p>
+                <button type="submit" className="px-3 py-2 text-xs rounded-lg bg-indigo-600 text-white cursor-pointer">Generar clave</button>
                 <button type="button" onClick={() => setResetTarget(null)} className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">Cancelar</button>
               </form>
             )}
@@ -423,6 +424,7 @@ export default function Companies() {
           </div>
         )}
       </Modal>
+      <TempPasswordModal data={tempPassword} onClose={() => setTempPassword(null)} title="Clave temporal" />
     </div>
   );
 }

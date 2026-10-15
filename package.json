@@ -21,7 +21,8 @@
     "db:seed": "node prisma/seed.js",
     "lint": "eslint apps --ext .js,.jsx",
     "format": "prettier --write \"apps/**/*.{js,jsx,css,md}\" \"packages/**/*.{js,jsx,css,md}\"",
-    "test": "vitest run",
+    "test": "node scripts/check-tenant-safety.mjs && vitest run",
+    "check:tenant": "node scripts/check-tenant-safety.mjs",
     "test:ui": "vitest --ui"
   },
   "devDependencies": {
