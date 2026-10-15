@@ -59,7 +59,7 @@ router.post(
 
 const signupSchema = {
   body: z.object({
-    plan: z.enum(['FREE', 'STARTER', 'BUSINESS', 'PRO', 'ENTERPRISE']),
+    plan: z.enum(['FREE', 'STARTER', 'BUSINESS']),
     account: z.object({
       fullName: text(2, 120),
       email: z.string().trim().toLowerCase().email('Correo inválido').max(120),

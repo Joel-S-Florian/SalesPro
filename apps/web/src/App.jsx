@@ -2,7 +2,11 @@ import React, { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { api } from './services/api';
 import { notify } from './utils/notify';
 import { useAuthStore } from './stores/authStore';
-import { useAuthMe } from './hooks/queries';
+import { useAuthMe, usePlanUsage } from './hooks/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import PlanBanner from './components/plan/PlanBanner';
+import PlanLocked from './components/plan/PlanLocked';
+import { planName } from '@factos/shared/plans.js';
 import { useConfigStore } from './stores/configStore';
 import { Skeleton } from './components/Skeleton';
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -114,6 +118,8 @@ function PageFallback() {
 export default function App() {
   const { user, isAuthenticated, accessToken, refreshToken, login, logout, setUser } = useAuthStore();
   const { data: authData, isLoading: authLoading, error: authError } = useAuthMe();
+  const { data: planUsage } = usePlanUsage();
+  const queryClient = useQueryClient();
   const loadConfig = useConfigStore(state => state.load);
   // Con la pantalla de acceso a la vista, el navegador descarga en segundo plano el código de las pantallas de inicio
   useEffect(() => {
@@ -157,6 +163,25 @@ export default function App() {
   const [password, setPassword] = useState('');
 
   const [activeTab, setActiveTab] = useState('DASHBOARD');
+  const openPlans = useCallback(() => {
+    try {
+      sessionStorage.setItem('factos-settings-tab', 'PLAN');
+    } catch {
+      // sin almacenamiento
+    }
+    setActiveTab('SETTINGS');
+    // Si Configuración ya está abierta, cambia su pestaña
+    window.dispatchEvent(new CustomEvent('factos:settings-tab', { detail: 'PLAN' }));
+  }, []);
+  // Un tope o una función del plan se encontró en alguna pantalla: ofrece «Ver planes» y refresca el uso
+  useEffect(() => {
+    const onPlanError = event => {
+      notify.warning(event.detail?.message || event.detail?.error || 'Esto no está incluido en tu plan', { label: 'Ver planes', onClick: openPlans });
+      queryClient.invalidateQueries({ queryKey: ['company', 'plan-usage'] });
+    };
+    window.addEventListener('factos:plan-error', onPlanError);
+    return () => window.removeEventListener('factos:plan-error', onPlanError);
+  }, [openPlans, queryClient]);
 
   // «Reabastecer» en el Dashboard lleva al módulo Inventario con el registro de compra ya preparado
   const restockProduct = productId => {
@@ -481,7 +506,7 @@ export default function App() {
     { id: 'CATEGORIES', label: 'Categorías', icon: Tag, roles: ['ADMINISTRADOR'] },
     { id: 'CUSTOMERS', label: 'Clientes', icon: Users, roles: ['ADMINISTRADOR'] },
     { id: 'IMPORT_INVENTORY', label: 'Importar Inventario', icon: FileUp, roles: ['ADMINISTRADOR'] },
-    { id: 'BARCODE_LABELS', label: 'Etiquetas / Códigos', icon: Barcode, roles: ['ADMINISTRADOR'] },
+    { id: 'BARCODE_LABELS', label: 'Etiquetas / Códigos', icon: Barcode, roles: ['ADMINISTRADOR'], planTag: planUsage && !planUsage.features.labels.allowed ? planName(planUsage.features.labels.requiredPlan) : null },
     { id: 'SUPPLIERS', label: 'Proveedores', icon: Truck, roles: ['ADMINISTRADOR'] },
     { id: 'INVENTORY', label: 'Inventario / Kárdex', icon: Archive, roles: ['ADMINISTRADOR'] },
     { id: 'USERS', label: 'Personal / Roles', icon: UserCheck, roles: ['ADMINISTRADOR'] },
@@ -531,7 +556,7 @@ export default function App() {
       case 'IMPORT_INVENTORY':
         return <ImportInventory />;
       case 'BARCODE_LABELS':
-        return <BarcodeLabels />;
+        return planUsage && !planUsage.features.labels.allowed ? <PlanLocked feature="labels" requiredPlan={planUsage.features.labels.requiredPlan} onViewPlans={openPlans} /> : <BarcodeLabels />;
       case 'SUPPLIERS':
         return <Suppliers />;
       case 'INVENTORY':
@@ -652,6 +677,7 @@ export default function App() {
                 )}
                 <Icon className="relative w-4 h-4 shrink-0" />
                 <span className="relative">{item.label}</span>
+                {item.planTag && <span className="relative ml-auto rounded-full bg-indigo-50 px-1.5 py-0.5 text-[9px] font-semibold text-indigo-600 dark:bg-indigo-950/40">{item.planTag}</span>}
                 {item.badge > 0 && (
                   <span className="relative ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[11px] font-semibold text-white">
                     {item.badge}
@@ -817,7 +843,7 @@ export default function App() {
 
         {/* Scrollable Work Container */}
         <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-6 lg:p-8 focus:outline-none">
-          <TrialBanner company={authData?.user?.company} />
+          <PlanBanner usage={planUsage} onViewPlans={openPlans} />
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

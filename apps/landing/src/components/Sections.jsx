@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { SIGNUP_URL } from '../config';
+import { PLANS as SHARED_PLANS, PLAN_IDS, planFeatureLines } from '@factos/shared/plans.js';
 import { BarChart3, Building2, Calculator, Check, ChevronDown, FileUp, Printer, ScanLine, Truck } from 'lucide-react';
 
 const reveal = {
@@ -140,12 +141,14 @@ export function Fiscal() {
 }
 
 /* ---------- Planes ---------- */
-const PLANS = [
-  { name: 'Gratis', price: 'RD$ 0', note: 'durante la beta', features: ['Punto de venta, inventario, cajas y reportes', 'Sin tarjeta de crédito', 'Sin fecha de vencimiento por ahora'], featured: true },
-  { name: 'Starter', price: 'RD$ 1,500', note: 'por mes', features: ['Hasta 500 ventas al mes', 'Soporte por correo'] },
-  { name: 'Business', price: 'RD$ 3,500', note: 'por mes', features: ['Hasta 5,000 ventas al mes', 'Soporte por correo y WhatsApp'] },
-  { name: 'Pro', price: 'RD$ 6,500', note: 'por mes', features: ['Ventas ilimitadas', 'Soporte prioritario'] },
-];
+// Los números salen de la fuente única de planes (packages/shared/plans.js): para cambiarlos se edita solo ese archivo
+const PLANS = PLAN_IDS.map(id => ({
+  name: SHARED_PLANS[id].name,
+  price: `RD$ ${SHARED_PLANS[id].priceMonthlyDop.toLocaleString('es-DO')}`,
+  note: SHARED_PLANS[id].priceMonthlyDop === 0 ? 'sin tarjeta de crédito' : 'por mes · precio provisional',
+  features: planFeatureLines(id),
+  featured: SHARED_PLANS[id].selfService,
+}));
 
 export function Pricing() {
   return (
@@ -155,7 +158,7 @@ export function Pricing() {
           Eliges tu plan, creas tu cuenta, configuras tu negocio y entras. Los planes de pago se activarán más adelante, sin cobro por usuario.
         </Heading>
 
-        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-4 md:grid-cols-3">
           {PLANS.map(plan => (
             <article
               key={plan.name}
@@ -190,8 +193,8 @@ export function Pricing() {
 
         <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-ink/10 bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold">¿Varias sucursales o necesidades especiales?</h3>
-            <p className="mt-1 text-ink/65">Armamos un plan a tu medida, con acuerdo de nivel de servicio.</p>
+            <h3 className="text-lg font-semibold">¿Necesitas más? Escríbenos</h3>
+            <p className="mt-1 text-ink/65">Más cajas, usuarios o sucursales: armamos un plan a tu medida, sin precio de lista.</p>
           </div>
           <a href="#acceso" className="btn btn-ghost press shrink-0">
             Hablar con nosotros
@@ -209,7 +212,7 @@ const FAQ = [
   ['¿Puedo pasar mi inventario actual?', 'Sí. Importas tu lista en CSV, Excel o JSON, revisas lo que se va a cargar y recién entonces se aplica. Si una fila viene con un error, se omite y te explicamos el motivo.'],
   ['¿Mis datos se mezclan con los de otras empresas?', 'No. Cada empresa tiene sus productos, clientes, ventas y usuarios separados, y lo verificamos con pruebas automáticas en cada versión.'],
   ['¿Y la factura electrónica (e-CF)?', 'Está en desarrollo y aún no está disponible. Hoy emites comprobantes con ITBIS y secuencia propia; cuando el e-CF esté listo, lo habilitaremos primero a las empresas de la beta.'],
-  ['¿Cuánto cuesta?', 'Hoy puedes usar FACTOS gratis, sin tarjeta de crédito. Los planes de pago (desde RD$ 1,500 al mes por empresa, sin cobro por usuario) se activarán más adelante, y te avisaremos antes de cualquier cambio.'],
+  ['¿Cuánto cuesta?', 'Hoy puedes usar FACTOS gratis, sin tarjeta de crédito. Los planes de pago (precios provisionales, desde RD$ 1,500 al mes por empresa, sin cobro por usuario) se activarán más adelante, y te avisaremos antes de cualquier cambio.'],
 ];
 
 export function Faq() {

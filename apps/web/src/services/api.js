@@ -31,7 +31,12 @@ async function handleResponse(res) {
       (data?.error || 'Ha ocurrido un error inesperado') + (detail ? ` (${detail})` : '')
     );
     error.status = res.status;
-    error.code = data?.error;
+    error.code = data?.code;
+    error.data = data;
+    // Tope o función del plan: avisa a la aplicación para ofrecer «Ver planes» y refrescar el uso
+    if (data?.code === 'PLAN_LIMIT' || data?.code === 'PLAN_FEATURE') {
+      window.dispatchEvent(new CustomEvent('factos:plan-error', { detail: data }));
+    }
     throw error;
   }
   return res.json();
@@ -287,6 +292,10 @@ export const api = {
     update: (id, payload) => request(`/terminals/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
     setDefault: (terminalId) =>
       request('/terminals/my/default', { method: 'PUT', body: JSON.stringify({ terminalId }) }),
+  },
+
+  company: {
+    planUsage: () => request('/company/plan-usage'),
   },
 
   exports: {

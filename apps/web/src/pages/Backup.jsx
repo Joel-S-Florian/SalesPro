@@ -3,9 +3,10 @@ import { Archive, Download, FileSpreadsheet, Loader2, Lock, ShieldCheck, Trash2,
 import { api } from '../services/api';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
+import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
 
 const cardClass = 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-4 shadow-sm';
-const PLAN_NAMES = { FREE: 'Gratis', STARTER: 'Starter', BUSINESS: 'Business', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+const PLAN_NAMES = Object.fromEntries(PLAN_IDS.map(id => [id, PLANS[id].name]));
 const ACTIVE = ['PENDING', 'RUNNING'];
 
 const DESCRIPTIONS = {

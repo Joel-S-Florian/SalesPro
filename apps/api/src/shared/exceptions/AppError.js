@@ -7,6 +7,7 @@ export class AppError extends Error {
     this.statusCode = statusCode;
     this.code = code;
     this.details = details;
+    this.extra = null; // campos adicionales que van en la raíz de la respuesta (p. ej. PLAN_LIMIT)
     this.isOperational = true;
 
     Error.captureStackTrace(this, this.constructor);
@@ -38,6 +39,20 @@ export class AppError extends Error {
 
   static internal(message = 'Error interno del servidor') {
     return new AppError(message, 500, 'INTERNAL_ERROR');
+  }
+
+  /** 403 PLAN_LIMIT: se llegó al tope de un recurso del plan. Cuerpo: { code, resource, plan, limit, current, message }. */
+  static planLimit(message, { resource, plan, limit, current }) {
+    const error = new AppError(message, 403, 'PLAN_LIMIT');
+    error.extra = { resource, plan, limit, current, message };
+    return error;
+  }
+
+  /** 403 PLAN_FEATURE: la función no está incluida en el plan. Cuerpo: { code, feature, plan, requiredPlan, message }. */
+  static planFeature(message, { feature, plan, requiredPlan }) {
+    const error = new AppError(message, 403, 'PLAN_FEATURE');
+    error.extra = { feature, plan, requiredPlan, message };
+    return error;
   }
 
   static tooManyRequests(message = 'Demasiadas solicitudes') {

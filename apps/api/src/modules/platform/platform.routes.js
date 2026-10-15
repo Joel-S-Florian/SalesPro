@@ -21,7 +21,7 @@ const companyFields = {
   address: optionalText(250),
 };
 const idParams = z.object({ id: z.string().min(1).max(64) });
-const planEnum = z.enum(['STARTER', 'BUSINESS', 'PRO', 'ENTERPRISE']);
+const planEnum = z.enum(['FREE', 'STARTER', 'BUSINESS']);
 
 const createSchema = {
   body: z.object({

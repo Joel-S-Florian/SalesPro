@@ -1,3 +1,4 @@
+import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
 import { basePrisma } from '../../config/db.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { hashPassword } from '../../shared/utils/crypto.js';
@@ -7,7 +8,7 @@ import { sendMail } from '../../shared/utils/mailer.js';
 import { env } from '../../config/env.js';
 
 /** Planes que se pueden contratar solos hoy. Los de pago llegarán con la pasarela de cobro. */
-const SELF_SERVICE_PLANS = ['FREE'];
+const SELF_SERVICE_PLANS = PLAN_IDS.filter(id => PLANS[id].selfService);
 
 /**
  * Registro autónomo: crea la empresa, su administrador y su configuración inicial (datos del negocio,

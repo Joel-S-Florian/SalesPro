@@ -6,6 +6,7 @@ import { daysUntil, parsePkcs12 } from './ecf.certificate.js';
 import { ECF_TYPES, ECF_TYPE_CODES, ENVIRONMENT_PATH, RECEIVER_PATHS } from './ecf.constants.js';
 import { DgiiHttpError } from './ecf.dgii.client.js';
 import { forgetCredentials, tokenManager } from './ecf.token.service.js';
+import { assertFeature } from '../../shared/plans.js';
 
 const MAX_CERTIFICATE_BYTES = 200 * 1024;
 const FISCAL_FIELDS = ['legalName', 'tradeName', 'address', 'municipalityCode', 'provinceCode', 'economicActivity'];
@@ -88,6 +89,9 @@ export async function updateConfig(data) {
   }
 
   if (data.mode !== undefined && data.mode !== (current?.mode || 'OFF')) {
+    // Activar o cambiar de modo exige un plan con e-CF. Apagarlo siempre se puede y NO se corta la emisión de quien ya la tiene operando
+    // (TODO de producto: decidir con el dueño qué pasa con el e-CF si el plan efectivo baja; ver Doc/Planes_y_Limites.md)
+    if (data.mode !== 'OFF') await assertFeature('ecf');
     if (data.mode !== 'OFF') {
       if (!current?.certificateEnc) throw AppError.badRequest('Cargue primero el certificado digital de la empresa');
       if (current.certNotAfter && current.certNotAfter < new Date()) throw AppError.badRequest('El certificado digital está vencido');

@@ -7,15 +7,19 @@ import { MIN_PASSWORD_LENGTH, passwordProblem } from '../../utils/passwordPolicy
 import { Field, inputClass } from '../ui/form';
 import SmartSelect from '../ui/SmartSelect';
 import Logo from '../ui/Logo';
+import { PLANS as SHARED_PLANS, PLAN_IDS, planFeatureLines } from '@factos/shared/plans.js';
 
 const STEPS = ['Plan', 'Tu cuenta', 'Tu negocio', 'Configuración', 'Confirmar'];
 
-const PLANS = [
-  { id: 'FREE', name: 'Gratis', price: 'RD$ 0', note: 'Durante la beta', available: true, features: ['Todas las funciones', 'Sin tarjeta de crédito', 'Sin fecha de vencimiento por ahora'] },
-  { id: 'STARTER', name: 'Starter', price: 'RD$ 1,500', note: 'por mes', features: ['Hasta 500 ventas al mes'] },
-  { id: 'BUSINESS', name: 'Business', price: 'RD$ 3,500', note: 'por mes', features: ['Hasta 5,000 ventas al mes'] },
-  { id: 'PRO', name: 'Pro', price: 'RD$ 6,500', note: 'por mes', features: ['Ventas ilimitadas'] },
-];
+// Los planes salen de la fuente única (packages/shared/plans.js): límites y precios provisionales
+const PLANS = PLAN_IDS.map(id => ({
+  id,
+  name: SHARED_PLANS[id].name,
+  price: `RD$ ${SHARED_PLANS[id].priceMonthlyDop.toLocaleString('es-DO')}`,
+  note: SHARED_PLANS[id].priceMonthlyDop === 0 ? 'Sin tarjeta de crédito' : 'por mes (provisional)',
+  available: SHARED_PLANS[id].selfService,
+  features: planFeatureLines(id),
+}));
 
 const BUSINESS_TYPES = ['Colmado o minimarket', 'Ferretería', 'Tienda de ropa o calzado', 'Farmacia o perfumería', 'Supermercado', 'Otro'];
 const RECEIPT_OPTIONS = [

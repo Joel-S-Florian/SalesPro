@@ -2,6 +2,8 @@ import { addBatchStock, addUnbatchedStock } from '../inventory/batches.service.j
 import { parseExpiration } from '../inventory/batches.logic.js';
 import { getConfig } from '../config/config.service.js';
 import { getDefaultSupplier } from '../suppliers/suppliers.service.js';
+import { countResource, getCompanyPlanState } from '../../shared/plans.js';
+import { limitOf, planHasFeature, planName } from '@factos/shared/plans.js';
 import { Readable } from 'node:stream';
 import ExcelJS from 'exceljs';
 import { prisma } from '../../config/db.js';
@@ -292,6 +294,14 @@ export async function applyImport(importId, requester) {
     : await getDefaultSupplier();
   const { defaultCategoryId, updatePrices } = batch.options;
 
+  // Tope del plan: se importa hasta donde alcance y el resto se devuelve como rechazado con su motivo (nunca falla todo el archivo)
+  const planState = await getCompanyPlanState();
+  const productLimit = limitOf(planState.effectivePlan, 'products');
+  let productRoom = productLimit === null ? Infinity : Math.max(0, productLimit - (await countResource('products')));
+  const perishablesAllowed = planHasFeature(planState.effectivePlan, 'perishables');
+  const rejected = [];
+  const reject = (row, reason) => rejected.push({ rowNumber: row.rowNumber, code: row.data.code, name: row.data.name, reason });
+
   const result = await prisma.$transaction(
     async tx => {
       // Categorías nuevas
@@ -316,6 +326,20 @@ export async function applyImport(importId, requester) {
       for (const row of rows) {
         const { code, name, cost, stock, price, category, unit, minStock, isPerishable, lot, expiration, presentations } = row.data;
         let product = existing.get(code);
+        if (!product) {
+          if (productRoom <= 0) {
+            reject(row, `Tope de ${productLimit.toLocaleString('es-DO')} productos del plan ${planName(planState.effectivePlan)}`);
+            continue;
+          }
+          if (isPerishable && !perishablesAllowed) {
+            reject(row, `Los perecederos están disponibles desde el plan Starter`);
+            continue;
+          }
+          productRoom -= 1;
+        } else if (product.isPerishable && stock > 0 && !perishablesAllowed) {
+          reject(row, `Sumar existencias a un perecedero (lotes) está disponible desde el plan Starter`);
+          continue;
+        }
         let productId;
         let productName;
         const perishable = product ? product.isPerishable : Boolean(isPerishable);
@@ -407,9 +431,9 @@ export async function applyImport(importId, requester) {
 
       await tx.inventoryImport.update({
         where: { id: importId },
-        data: { status: 'APPLIED', appliedAt: new Date(), summary: { ...batch.summary, applied: counts } },
+        data: { status: 'APPLIED', appliedAt: new Date(), summary: { ...batch.summary, applied: counts, rejectedByPlan: rejected.length } },
       });
-      return counts;
+      return { ...counts, rejected: rejected.length, rejectedRows: rejected.slice(0, 200) };
     },
     { timeout: 120000, maxWait: 10000 }
   );

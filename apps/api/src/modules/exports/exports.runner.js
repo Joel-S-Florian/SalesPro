@@ -83,7 +83,7 @@ export async function runExport(job) {
   const counts = {};
   for (const table of spec.tables) counts[table] = await countRows(table, companyId);
   const rowsTotal = Object.values(counts).reduce((a, b) => a + b, 0);
-  await basePrisma.exportJob.update({ where: { id }, data: { rowsTotal, rowsDone: 0, progress: 0 } });
+  await basePrisma.exportJob.updateMany({ where: { id }, data: { rowsTotal, rowsDone: 0, progress: 0 } });
 
   const output = fs.createWriteStream(filePath);
   const archive = archiver('zip', { zlib: { level: 6 } });

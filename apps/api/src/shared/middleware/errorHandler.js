@@ -76,6 +76,7 @@ export function errorHandler(err, req, res, next) {
       error: err.message,
       code: err.code,
       details: err.details,
+      ...(err.extra || {}),
     });
   }
 

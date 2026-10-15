@@ -6,6 +6,9 @@ import { useConfigStore, formatTaxPercent } from '../stores/configStore';
 import { notify } from '../utils/notify';
 import SmartSelect from '../components/ui/SmartSelect';
 import CardPaymentsSettings from '../components/payments/CardPaymentsSettings';
+import PlanUsageCard from '../components/plan/PlanUsageCard';
+import { usePlanUsage } from '../hooks/queries';
+import { planName } from '@factos/shared/plans.js';
 
 const EcfSettings = lazy(() => import('../components/ecf/EcfSettings'));
 
@@ -107,6 +110,8 @@ function ContactActionsCard({ value, onChange, businessName }) {
 /** Gestión de perecederos y lotes: umbrales de alerta y reglas de descuento por vencimiento. */
 function PerishableCard({ value, onChange }) {
   const set = patch => onChange({ ...value, ...patch });
+  const { data: planUsage } = usePlanUsage();
+  const locked = planUsage && !planUsage.features.perishables.allowed;
   const rules = value.discountRules || [];
   const setRule = (index, patch) => set({ discountRules: rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)) });
   const num = raw => (raw === '' ? '' : Number(raw));
@@ -120,9 +125,9 @@ function PerishableCard({ value, onChange }) {
       <Switch
         id="perishable-enabled"
         checked={value.enabled}
-        onToggle={enabled => set({ enabled })}
+        onToggle={enabled => !locked && set({ enabled })}
         label="Activar perecederos y lotes"
-        hint="Permite marcar productos como perecederos y registrar lotes al recibir mercancía."
+        hint={locked ? `Disponible en el plan ${planName(planUsage.features.perishables.requiredPlan)}.` : 'Permite marcar productos como perecederos y registrar lotes al recibir mercancía.'}
       />
 
       <fieldset disabled={!value.enabled} className={`space-y-4 border-t border-slate-100 pt-4 dark:border-slate-700 ${value.enabled ? '' : 'opacity-50'}`}>
@@ -508,15 +513,21 @@ export default function Settings() {
     try {
       const requested = sessionStorage.getItem('factos-settings-tab');
       sessionStorage.removeItem('factos-settings-tab');
-      return requested === 'ECF' ? 'ECF' : 'GENERAL';
+      return ['ECF', 'PLAN'].includes(requested) ? requested : 'GENERAL';
     } catch {
       return 'GENERAL';
     }
   });
+  useEffect(() => {
+    const onTab = event => setTab(event.detail);
+    window.addEventListener('factos:settings-tab', onTab);
+    return () => window.removeEventListener('factos:settings-tab', onTab);
+  }, []);
   const tabs = [
     { id: 'GENERAL', label: 'General' },
     { id: 'TERMINALS', label: 'Cajas' },
     { id: 'ECF', label: 'Facturación electrónica' },
+    { id: 'PLAN', label: 'Plan y uso' },
   ];
 
   return (
@@ -536,6 +547,7 @@ export default function Settings() {
       </div>
       {tab === 'GENERAL' && <GeneralWithPayments />}
       {tab === 'TERMINALS' && <TerminalsSettings />}
+      {tab === 'PLAN' && <PlanUsageCard />}
       {tab === 'ECF' && (
         <Suspense fallback={<div className="h-40 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800/50" />}>
           <EcfSettings />

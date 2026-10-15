@@ -2,8 +2,8 @@ import { useToastStore } from '../stores/toastStore';
 
 /** API simple para mostrar notificaciones desde cualquier lugar (componentes, utilidades, handlers). */
 export const notify = {
-  success: message => useToastStore.getState().push('success', message),
-  error: message => useToastStore.getState().push('error', message),
-  warning: message => useToastStore.getState().push('warning', message),
-  info: message => useToastStore.getState().push('info', message),
+  success: (message, action) => useToastStore.getState().push('success', message, action),
+  error: (message, action) => useToastStore.getState().push('error', message, action),
+  warning: (message, action) => useToastStore.getState().push('warning', message, action),
+  info: (message, action) => useToastStore.getState().push('info', message, action),
 };

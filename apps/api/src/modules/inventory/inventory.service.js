@@ -3,6 +3,7 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { quantityError, roundQty } from '../../shared/utils/units.js';
 import { getConfig } from '../config/config.service.js';
+import { assertFeature } from '../../shared/plans.js';
 import { getDefaultSupplier } from '../suppliers/suppliers.service.js';
 import { addBatchStock, consumeBatch, consumeFefo, requireBatchFields } from './batches.service.js';
 import { buildPaginationQuery, getPaginationMeta, applyCreatedAtRange, cleanFilterString } from '../../shared/utils/helpers.js';
@@ -120,6 +121,7 @@ export async function adjustStock(data, userId, userName) {
   const { perishable } = await getConfig();
   // Perecederos: la entrada pide lote y vencimiento; la salida descuenta por FEFO (se permiten lotes vencidos: es una baja)
   const delta = roundQty(type === 'AJUSTE' ? quantity - product.stock : isOut ? -quantity : quantity);
+  if (product.isPerishable && delta > 0) await assertFeature('perishables'); // crear o sumar a un lote
   const entryBatch = product.isPerishable && delta > 0 ? requireBatchFields(data) : null;
 
   return prisma.$transaction(async (tx) => {
@@ -187,6 +189,7 @@ export async function registerPurchase(data, userId, userName) {
   if (purchaseQtyError) throw AppError.badRequest(purchaseQtyError);
 
   // Perecederos: cada compra entra como lote con su vencimiento
+  if (product.isPerishable) await assertFeature('perishables'); // cada compra de un perecedero crea o suma a un lote
   const batchFields = product.isPerishable ? requireBatchFields(data) : null;
   const totalCost = Math.round(quantity * Number(unitCost) * 100) / 100;
 

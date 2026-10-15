@@ -3,6 +3,7 @@ import { AppError } from '../../shared/exceptions/AppError.js';
 import { ERROR_CODES } from '../../shared/exceptions/AppError.js';
 import { getTenantId } from '../../config/tenant.js';
 import { getConfig } from '../config/config.service.js';
+import { assertFeature, assertWithinPlan } from '../../shared/plans.js';
 import { adjustStock as adjustInventoryStock } from '../inventory/inventory.service.js';
 import { addBatchStock, addUnbatchedStock, attachNearestBatch, requireBatchFields } from '../inventory/batches.service.js';
 import { DEFAULT_UNIT, isFractional, isValidUnit, quantityError, roundQty } from '../../shared/utils/units.js';
@@ -151,7 +152,8 @@ export async function createProduct(data, userId, userName) {
     if (stockError) throw AppError.badRequest(`Stock inicial: ${stockError}`);
   }
   const presentations = normalizePresentations(data.presentations);
-  if (isPerishable) await assertPerishableEnabled();
+  if (isPerishable) await assertPerishableEnabled(); // primero la función (más informativo que el tope)
+  if (active !== false) await assertWithinPlan('products');
   // Perecedero con stock inicial: lote y vencimiento; sin ellos entra como stock sin lote
   const initialBatch = isPerishable && stock > 0 && (data.batchNumber || data.expirationDate) ? requireBatchFields(data) : null;
 
@@ -227,6 +229,9 @@ export async function updateProduct(id, data, userId, userName) {
   if (!product) {
     throw AppError.notFound('Producto no encontrado');
   }
+
+  // Reactivar un producto cuenta contra el tope del plan
+  if (active === true && !product.active) await assertWithinPlan('products');
 
   const updateData = {};
   if (name) updateData.name = name;
@@ -310,6 +315,7 @@ export function adjustStock(data, userId, userName) {
 }
 
 async function assertPerishableEnabled() {
+  await assertFeature('perishables');
   const { perishable } = await getConfig();
   if (!perishable.enabled) throw AppError.badRequest('Active la gestión de perecederos en Configuración para marcar productos como perecederos');
 }

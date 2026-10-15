@@ -345,10 +345,24 @@ export default function ImportInventory() {
       {step === 4 && result && (
         <div className={cardClass + ' text-center items-center'}>
           <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-          <p className="text-sm font-semibold">Importación completada</p>
+          <p className="text-sm font-semibold">{result.rejected > 0 ? 'Importación parcial' : 'Importación completada'}</p>
           <p className="text-xs text-slate-500">
             {result.created} productos creados · {result.updated} actualizados · {result.entries} entradas de inventario
           </p>
+          {result.rejected > 0 && (
+            <div className="w-full max-w-xl rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+              <p className="font-semibold">{result.rejected} filas no se importaron por el plan</p>
+              <ul className="mt-1.5 max-h-40 space-y-0.5 overflow-y-auto">
+                {result.rejectedRows.map(row => (
+                  <li key={row.rowNumber}>
+                    Fila {row.rowNumber} · {row.code}: {row.reason}
+                  </li>
+                ))}
+              </ul>
+              {result.rejected > result.rejectedRows.length && <p className="mt-1 text-[11px]">Se muestran las primeras {result.rejectedRows.length}.</p>}
+              <p className="mt-1.5 text-[11px]">El resto del archivo sí se importó. Puedes liberar espacio o cambiar de plan y volver a cargar esas filas.</p>
+            </div>
+          )}
           <button onClick={reset} className="px-4 py-2 text-xs rounded-lg bg-indigo-600 text-white font-semibold cursor-pointer">Importar otro archivo</button>
         </div>
       )}

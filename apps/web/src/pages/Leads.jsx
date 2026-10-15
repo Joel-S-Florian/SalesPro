@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, Copy, Inbox, Loader2, X } from 'lucide-react';
 import { api } from '../services/api';
+import { PLANS as SHARED_PLANS, PLAN_IDS } from '@factos/shared/plans.js';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
 import { TableSkeleton } from '../components/Skeleton';
@@ -15,13 +16,7 @@ const STATUS = {
   APPROVED: { label: 'Aprobada', style: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
   REJECTED: { label: 'Rechazada', style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
 };
-const PLANS = [
-  ['FREE', 'Gratis'],
-  ['STARTER', 'Starter'],
-  ['BUSINESS', 'Business'],
-  ['PRO', 'Pro'],
-  ['ENTERPRISE', 'Enterprise'],
-];
+const PLANS = PLAN_IDS.map(id => [id, SHARED_PLANS[id].name]);
 
 /** Bandeja de solicitudes de acceso que llegan desde la página de promoción (solo SUPERADMIN). */
 export default function Leads() {

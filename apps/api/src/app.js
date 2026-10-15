@@ -26,6 +26,7 @@ import platformRoutes from './modules/platform/platform.routes.js';
 import paymentsRoutes from './modules/payments/payments.routes.js';
 import ecfRoutes from './modules/ecf/ecf.routes.js';
 import exportsRoutes from './modules/exports/exports.routes.js';
+import companyRoutes from './modules/company/company.routes.js';
 import ecfReceiverRoutes from './modules/ecf/ecf.receiver.routes.js';
 import financeRoutes from './modules/finance/finance.routes.js';
 
@@ -90,6 +91,7 @@ app.use('/platform', platformRoutes);
 app.use('/payments', paymentsRoutes);
 app.use('/ecf', ecfRoutes);
 app.use('/exports', exportsRoutes);
+app.use('/company', companyRoutes);
 app.use('/ecf-receptor', ecfReceiverRoutes); // servicios públicos de recepción (sin sesión)
 app.use('/public', publicRoutes);
 

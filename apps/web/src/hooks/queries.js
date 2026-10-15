@@ -52,6 +52,18 @@ export const useAuthMe = () => {
   });
 };
 
+/** Plan, estado de la prueba y uso contra los límites de la empresa (no aplica al SUPERADMIN, que no tiene empresa). */
+export const usePlanUsage = () => {
+  const enabled = useAuthStore(state => !!state.accessToken && state.user?.role !== 'SUPERADMIN');
+  return useQuery({
+    queryKey: ['company', 'plan-usage'],
+    queryFn: api.company.planUsage,
+    staleTime: 60 * 1000,
+    enabled,
+    retry: false,
+  });
+};
+
 export const useAuthUsers = (params) => useQuery({
   queryKey: queryKeys.auth.users(params),
   queryFn: () => api.auth.getUsers(params),

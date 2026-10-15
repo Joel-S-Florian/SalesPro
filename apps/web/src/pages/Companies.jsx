@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
+import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
 import { Plus, Search, Power, Eye, KeyRound, Pencil, Building2, Users, Receipt, Package } from 'lucide-react';
 import Modal from '../components/Modal';
 import PlatformInsights from '../components/PlatformInsights';
@@ -31,7 +32,7 @@ const money = value =>
 /**
  * Panel de plataforma (solo SUPERADMIN): alta, suspensión y consulta de empresas.
  */
-const PLAN_LABELS = { FREE: 'Gratis', STARTER: 'Starter', BUSINESS: 'Business', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+const PLAN_LABELS = Object.fromEntries(PLAN_IDS.map(id => [id, PLANS[id].name]));
 
 /** "Prueba: 9 días" / "Prueba vencida" / "Sin prueba". */
 function trialLabel(trialEndsAt) {

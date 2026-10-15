@@ -32,10 +32,10 @@ export const TABLES = {
 };
 
 export const EXPORT_TYPES = {
-  SALES: { label: 'Ventas', feature: 'exportBasic', tables: ['ventas', 'detalle_ventas'] },
-  PRODUCTS: { label: 'Productos e inventario', feature: 'exportBasic', tables: ['categorias', 'proveedores', 'productos', 'presentaciones', 'lotes', 'movimientos_inventario'] },
-  CUSTOMERS: { label: 'Clientes', feature: 'exportBasic', tables: ['clientes'] },
-  FULL: { label: 'Respaldo completo', feature: 'exportFull', tables: Object.keys(TABLES) },
+  SALES: { label: 'Ventas', feature: null, tables: ['ventas', 'detalle_ventas'] },
+  PRODUCTS: { label: 'Productos e inventario', feature: null, tables: ['categorias', 'proveedores', 'productos', 'presentaciones', 'lotes', 'movimientos_inventario'] },
+  CUSTOMERS: { label: 'Clientes', feature: null, tables: ['clientes'] },
+  FULL: { label: 'Respaldo completo', feature: 'fullBackup', tables: Object.keys(TABLES) },
 };
 
 const modelFields = Object.fromEntries(Prisma.dmmf.datamodel.models.map(m => [m.name, m.fields.filter(f => f.kind !== 'object').map(f => f.name)]));

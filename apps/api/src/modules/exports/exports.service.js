@@ -4,7 +4,8 @@ import { getTenantId } from '../../config/tenant.js';
 import { AppError } from '../../shared/exceptions/AppError.js';
 import { env } from '../../config/env.js';
 import { logger } from '../../shared/utils/logger.js';
-import { planAllows, minPlanFor } from '../../shared/plans.js';
+import { assertFeature, getCompanyPlanState } from '../../shared/plans.js';
+import { minPlanForFeature, planHasFeature } from '@factos/shared/plans.js';
 import { EXPORT_TYPES } from './exports.tables.js';
 import { CancelledError, EXPORT_TTL_HOURS, removeFile, requestCancel, runExport } from './exports.runner.js';
 
@@ -31,17 +32,18 @@ const publicJob = job => ({
 
 /** Qué puede pedir la empresa: tipos, formatos y a qué plan pertenece cada función. */
 export async function getOptions() {
-  const company = await basePrisma.company.findUnique({ where: { id: getTenantId() }, select: { plan: true } });
+  const { effectivePlan } = await getCompanyPlanState();
   return {
     ttlHours: EXPORT_TTL_HOURS,
     types: Object.entries(EXPORT_TYPES).map(([type, spec]) => ({
       type,
       label: spec.label,
       tables: spec.tables.length,
-      minPlan: minPlanFor(spec.feature),
-      allowed: planAllows(company?.plan, spec.feature),
+      // El CSV básico (ventas, productos, clientes) está siempre disponible, en cualquier estado del plan
+      minPlan: spec.feature ? minPlanForFeature(spec.feature) : 'FREE',
+      allowed: spec.feature ? planHasFeature(effectivePlan, spec.feature) : true,
     })),
-    jsonAllowed: planAllows(company?.plan, 'exportFull'),
+    jsonAllowed: planHasFeature(effectivePlan, 'fullBackup'),
   };
 }
 
@@ -59,9 +61,9 @@ export async function getJob(id) {
 export async function createJob(requester, { type, format }) {
   const spec = EXPORT_TYPES[type];
   if (!spec) throw AppError.badRequest('Tipo de exportación no válido');
-  const company = await basePrisma.company.findUnique({ where: { id: getTenantId() }, select: { plan: true } });
-  const needed = !planAllows(company?.plan, spec.feature) ? spec.feature : format === 'JSON' && !planAllows(company?.plan, 'exportFull') ? 'exportFull' : null;
-  if (needed) throw AppError.forbidden(`Esta exportación está disponible desde el plan ${minPlanFor(needed)}`);
+  // Respaldo completo y formato JSON: desde el plan que incluye el respaldo completo. El CSV básico siempre se puede.
+  if (spec.feature) await assertFeature(spec.feature);
+  else if (format === 'JSON') await assertFeature('fullBackup');
 
   if (await prisma.exportJob.findFirst({ where: { status: { in: ACTIVE } } })) {
     throw AppError.conflict('Ya hay una exportación en curso. Espera a que termine o cancélala');
@@ -126,7 +128,7 @@ async function processQueue() {
     for (;;) {
       const job = await basePrisma.exportJob.findFirst({ where: { status: 'PENDING' }, orderBy: { createdAt: 'asc' } });
       if (!job) break;
-      await basePrisma.exportJob.update({ where: { id: job.id }, data: { status: 'RUNNING', startedAt: new Date() } });
+      await basePrisma.exportJob.updateMany({ where: { id: job.id, status: 'PENDING' }, data: { status: 'RUNNING', startedAt: new Date() } });
       try {
         const result = await runExport(job);
         const still = await basePrisma.exportJob.findUnique({ where: { id: job.id }, select: { status: true } });
@@ -134,8 +136,9 @@ async function processQueue() {
           removeFile(result.filePath);
           continue;
         }
-        await basePrisma.exportJob.update({
-          where: { id: job.id },
+        // updateMany: si el registro ya no existe (alguien lo borró) no es un error; el archivo huérfano se descarta
+        const saved = await basePrisma.exportJob.updateMany({
+          where: { id: job.id, status: 'RUNNING' },
           data: {
             status: 'DONE',
             progress: 100,
@@ -147,11 +150,12 @@ async function processQueue() {
             expiresAt: new Date(Date.now() + EXPORT_TTL_HOURS * 3600 * 1000),
           },
         });
+        if (saved.count === 0) removeFile(result.filePath);
       } catch (err) {
         const wasCancelled = err instanceof CancelledError || (await basePrisma.exportJob.findUnique({ where: { id: job.id }, select: { status: true } }))?.status === 'CANCELLED';
         if (!wasCancelled) {
           logger.error(`Exportación ${job.id} falló: ${err.message}`);
-          await basePrisma.exportJob.update({ where: { id: job.id }, data: { status: 'FAILED', error: 'No se pudo generar el archivo. Intenta de nuevo', finishedAt: new Date() } });
+          await basePrisma.exportJob.updateMany({ where: { id: job.id }, data: { status: 'FAILED', error: 'No se pudo generar el archivo. Intenta de nuevo', finishedAt: new Date() } });
         }
       }
     }

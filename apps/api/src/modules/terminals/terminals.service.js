@@ -1,6 +1,7 @@
 import { prisma } from '../../config/db.js';
 import { getTenantId } from '../../config/tenant.js';
 import { AppError, ERROR_CODES } from '../../shared/exceptions/AppError.js';
+import { assertWithinPlan } from '../../shared/plans.js';
 
 const withUsers = {
   users: { select: { id: true, username: true, fullName: true } },
@@ -19,6 +20,7 @@ export function listTerminals() {
 }
 
 export async function createTerminal({ name, userIds = [] }) {
+  await assertWithinPlan('terminals');
   await assertNameAvailable(name);
   return prisma.terminal.create({
     data: {
@@ -34,6 +36,8 @@ export async function updateTerminal(id, { name, active, userIds }) {
   const terminal = await prisma.terminal.findUnique({ where: { id } });
   if (!terminal) throw AppError.notFound('Caja no encontrada');
   if (name) await assertNameAvailable(name, id);
+  // Reactivar una caja cuenta contra el tope del plan
+  if (active === true && !terminal.active) await assertWithinPlan('terminals');
 
   return prisma.terminal.update({
     where: { id },

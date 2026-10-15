@@ -38,7 +38,21 @@ export default function ToastHost() {
               className={`pointer-events-auto flex items-start gap-3 rounded-xl border bg-white dark:bg-slate-900 px-4 py-3 shadow-[0_8px_30px_rgba(15,23,42,0.12)] ${ring}`}
             >
               <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${accent}`} />
-              <p className="flex-1 text-[13px] leading-snug text-slate-700 dark:text-slate-200">{toast.message}</p>
+              <div className="flex-1">
+                <p className="text-[13px] leading-snug text-slate-700 dark:text-slate-200">{toast.message}</p>
+                {toast.action && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast.action.onClick();
+                      dismiss(toast.id);
+                    }}
+                    className="mt-1.5 rounded-md bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white cursor-pointer"
+                  >
+                    {toast.action.label}
+                  </button>
+                )}
+              </div>
               <button
                 onClick={() => dismiss(toast.id)}
                 aria-label="Cerrar notificación"

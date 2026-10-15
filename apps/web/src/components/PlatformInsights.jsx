@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ChevronDown, Funnel, Hourglass, Rocket, Store, UserX } from 'lucide-react';
+import { PLANS, PLAN_IDS } from '@factos/shared/plans.js';
 import { api } from '../services/api';
 import { BarList, Kpi, Panel, ReportState, ReportTable, TrendChart, num, pctText, periodLabel, useReport } from '../pages/reports/shared';
 
-const PLAN_LABELS = { FREE: 'Gratis', STARTER: 'Starter', BUSINESS: 'Business', PRO: 'Pro', ENTERPRISE: 'Enterprise' };
+const PLAN_LABELS = Object.fromEntries(PLAN_IDS.map(id => [id, PLANS[id].name]));
 
 function Insights() {
   const report = useReport(() => api.platform.analytics(), {});

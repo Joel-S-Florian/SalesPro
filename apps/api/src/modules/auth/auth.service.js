@@ -9,6 +9,7 @@ import { sendMail, mailConfigured } from '../../shared/utils/mailer.js';
 import { logger } from '../../shared/utils/logger.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { assertPasswordAllowed } from '../../shared/utils/passwordPolicy.js';
+import { assertWithinPlan } from '../../shared/plans.js';
 
 /** Minutos de inactividad por defecto antes de cerrar la sesión (configurable por empresa en `security`). */
 export const DEFAULT_IDLE_MINUTES = 30;
@@ -325,6 +326,8 @@ export async function createUser(data) {
   const { username, fullName, role, password, active } = data;
   const email = normalizeEmail(data.email);
   const documentId = digitsOrNull(data.documentId);
+  // Un usuario nuevo nace activo salvo que se indique lo contrario: solo los activos cuentan contra el tope
+  if (active ?? true) await assertWithinPlan('users');
   await assertEmailAvailable(email);
   await assertDocumentAvailable(documentId);
   assertPasswordAllowed(password, { username, email });
@@ -438,6 +441,9 @@ export async function updateUser(id, data, actorId) {
   if (!user) {
     throw AppError.notFound('Usuario no encontrado');
   }
+
+  // Reactivar un usuario cuenta contra el tope del plan
+  if (active === true && !user.active) await assertWithinPlan('users');
 
   const updateData = {};
   if (fullName) updateData.fullName = fullName;

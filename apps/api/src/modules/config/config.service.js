@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { prisma, basePrisma } from '../../config/db.js';
 import { getTenantId } from '../../config/tenant.js';
+import { assertFeature } from '../../shared/plans.js';
 
 const text = max => z.string().trim().max(max);
 
@@ -128,7 +129,10 @@ export async function getConfig() {
  * Actualiza una o varias claves. Se valida el resultado completo (config actual + cambios).
  */
 export async function updateConfig(changes) {
-  const merged = configSchema.parse({ ...(await getConfig()), ...changes });
+  const current = await getConfig();
+  const merged = configSchema.parse({ ...current, ...changes });
+  // Activar la gestión de perecederos exige un plan que la incluya (apagarla siempre se puede)
+  if (merged.perishable?.enabled && !current.perishable?.enabled) await assertFeature('perishables');
   const companyId = getTenantId();
   const keys = Object.keys(changes).filter(key => key in merged);
 

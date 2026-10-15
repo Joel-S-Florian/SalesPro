@@ -74,8 +74,6 @@ enum PlanType {
   FREE
   STARTER
   BUSINESS
-  PRO
-  ENTERPRISE
 }
 
 model User {
